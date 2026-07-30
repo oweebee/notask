@@ -33,6 +33,7 @@ async function api(path, options = {}) {
   const res = await fetch('/api' + path, {
     ...options,
     headers,
+    cache: 'no-store',
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
@@ -72,7 +73,7 @@ function show(id) {
 function showLogin() { show('screen-login'); }
 
 async function boot() {
-  const status = await fetch('/api/auth/status').then((r) => r.json());
+  const status = await fetch('/api/auth/status', { cache: 'no-store' }).then((r) => r.json());
   if (status.needs_setup) { show('screen-setup'); return; }
 
   if (!token()) { showLogin(); return; }

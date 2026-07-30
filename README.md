@@ -123,17 +123,27 @@ python -m pytest tests/ -q
 
 ## Déploiement Coolify
 
-Build Pack **Docker Compose** : le volume `notask_data` est déclaré dans le
-compose, Coolify le crée automatiquement au déploiement et le conserve entre
-les redéploiements. Aucun réglage manuel de stockage.
+Déployé en **Service** (New → Docker Compose). Un Service ne clone aucun dépôt :
+c'est Docker qui récupère le code, via l'URL Git indiquée dans `build:`.
+
+Le volume `notask_data` est déclaré dans le compose : Coolify le crée
+automatiquement et le conserve entre les redéploiements. Aucun réglage manuel
+de stockage.
 
 1. DNS : enregistrement A `notask.mondomaine.tld` → IP du serveur.
-2. New Resource → **Docker Compose**, source = ce repo GitHub, branche `main`,
-   chemin du compose `/docker-compose.yaml`.
+2. New → **Docker Compose**, coller le contenu de `docker-compose.yaml`.
 3. Champ **Domains for notask** : `https://notask.mondomaine.tld:8111`
    Le `:8111` désigne le port du conteneur ; rien n'est publié sur l'hôte,
    Traefik sert le site en 443 et gère le certificat.
 4. Deploy.
+
+Conséquences de ce mode, à connaître :
+
+- Le dépôt **doit rester public** — Docker clone sans identifiants.
+- **Pas de déploiement automatique** au push : après `push.bat`, cliquer
+  *Redeploy* dans Coolify.
+- Modifier `docker-compose.yaml` dans le dépôt ne suffit pas : le compose vit
+  dans Coolify, il faut l'y recopier.
 
 Le compose ne contient volontairement **aucun label Traefik** : Coolify les
 génère lui-même, lui seul connaissant le nom de son réseau proxy. Des labels

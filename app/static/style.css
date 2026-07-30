@@ -1,263 +1,388 @@
+/* notask — Material Design 3, thème sombre.
+   Palette dérivée du violet de référence MD3 ; niveaux de surface obtenus
+   par superposition tonale, comme le prescrit la spécification. */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
 :root {
-  --bg: #16181d;
-  --surface: #1f2229;
-  --surface-2: #262a33;
-  --border: #343945;
-  --text: #e6e8ec;
-  --muted: #9aa1ad;
-  --accent: #7aa2f7;
-  --danger: #f7768e;
-  --ok: #9ece6a;
-  --radius: 10px;
+  /* Couleurs principales */
+  --md-primary: #d0bcff;
+  --md-on-primary: #381e72;
+  --md-primary-container: #4f378b;
+  --md-on-primary-container: #eaddff;
+
+  --md-secondary: #ccc2dc;
+  --md-secondary-container: #4a4458;
+  --md-on-secondary-container: #e8def8;
+
+  --md-error: #f2b8b5;
+  --md-on-error: #601410;
+  --md-error-container: #8c1d18;
+
+  /* Surfaces : du plus sombre au plus clair (élévation croissante) */
+  --md-surface: #141218;
+  --md-surface-1: #1d1b20;
+  --md-surface-2: #211f26;
+  --md-surface-3: #2b2930;
+  --md-surface-4: #322f37;
+  --md-surface-5: #36343b;
+
+  --md-on-surface: #e6e0e9;
+  --md-on-surface-variant: #cac4d0;
+  --md-outline: #938f99;
+  --md-outline-variant: #49454f;
+
+  --md-success: #b5ccba;
+
+  /* Formes — MD3 privilégie des rayons généreux */
+  --shape-xs: 8px;
+  --shape-sm: 12px;
+  --shape-md: 16px;
+  --shape-lg: 28px;
+  --shape-full: 999px;
+
+  /* Élévations */
+  --elev-1: 0 1px 3px 1px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.30);
+  --elev-2: 0 2px 6px 2px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.30);
+  --elev-3: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.30);
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
   line-height: 1.5;
+  letter-spacing: .01em;
 }
 
 button { font: inherit; cursor: pointer; }
 input, textarea, select { font: inherit; }
 
-/* ---------- Écrans pleine page (setup / login) ---------- */
+/* ============================ Composants ============================ */
 
-.gate {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
+/* Boutons — pilule pleine, conforme MD3 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 40px;
+  padding: 0 1.5rem;
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+  border: none;
+  border-radius: var(--shape-full);
+  font-size: .875rem;
+  font-weight: 500;
+  letter-spacing: .1px;
+  transition: box-shadow .15s, filter .15s, background .15s;
 }
+.btn:hover { box-shadow: var(--elev-1); filter: brightness(1.06); }
+.btn:active { filter: brightness(.96); }
+.btn.wide { width: 100%; }
+
+/* Bouton "outlined" */
+.btn.ghost {
+  background: transparent;
+  color: var(--md-primary);
+  border: 1px solid var(--md-outline);
+}
+.btn.ghost:hover { background: rgba(208,188,255,.08); box-shadow: none; }
+
+.btn.danger { background: var(--md-error); color: var(--md-on-error); }
+
+.btn.sm { min-height: 32px; padding: 0 1rem; font-size: .8125rem; }
+
+/* Champs texte — style "filled" MD3 */
+.field { margin-bottom: 1.25rem; }
+.field label {
+  display: block;
+  margin-bottom: .375rem;
+  font-size: .75rem;
+  font-weight: 500;
+  letter-spacing: .4px;
+  color: var(--md-on-surface-variant);
+}
+.field input, .field textarea, .field select {
+  width: 100%;
+  padding: .875rem 1rem;
+  background: var(--md-surface-3);
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--md-outline);
+  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
+  color: var(--md-on-surface);
+  transition: border-color .15s, background .15s;
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none;
+  border-bottom: 2px solid var(--md-primary);
+  background: var(--md-surface-4);
+}
+
+.hint { font-size: .75rem; color: var(--md-on-surface-variant); margin: .375rem 0 0 1rem; }
+
+/* Bandeaux de message */
+.msg {
+  margin-top: 1rem;
+  padding: .75rem 1rem;
+  border-radius: var(--shape-xs);
+  font-size: .875rem;
+}
+.msg.error { background: var(--md-error-container); color: #f9dedc; }
+.msg.ok { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+/* ====================== Écrans de garde ====================== */
+
+.gate { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
 
 .card {
   width: 100%;
   max-width: 420px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--md-surface-2);
+  border-radius: var(--shape-lg);
   padding: 2rem;
+  box-shadow: var(--elev-2);
+}
+.card h1 { margin: 0 0 .5rem; font-size: 1.5rem; font-weight: 400; }
+.card .sub {
+  margin: 0 0 2rem;
+  color: var(--md-on-surface-variant);
+  font-size: .875rem;
 }
 
-.card h1 { margin: 0 0 .3rem; font-size: 1.6rem; }
-.card .sub { margin: 0 0 1.5rem; color: var(--muted); font-size: .92rem; }
-
-.field { margin-bottom: 1rem; }
-.field label { display: block; margin-bottom: .35rem; font-size: .85rem; color: var(--muted); }
-
-.field input, .field textarea, .field select {
-  width: 100%;
-  padding: .6rem .75rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-}
-
-.field input:focus, .field textarea:focus, .field select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.btn {
-  padding: .6rem 1rem;
-  background: var(--accent);
-  color: #10121a;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-}
-.btn:hover { filter: brightness(1.08); }
-.btn.wide { width: 100%; }
-.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-.btn.danger { background: var(--danger); color: #1a0f13; }
-.btn.sm { padding: .35rem .6rem; font-size: .85rem; }
-
-.msg { margin-top: 1rem; padding: .6rem .75rem; border-radius: 8px; font-size: .9rem; }
-.msg.error { background: rgba(247,118,142,.12); color: var(--danger); }
-.msg.ok { background: rgba(158,206,106,.12); color: var(--ok); }
-
-.hint { font-size: .82rem; color: var(--muted); margin-top: .4rem; }
-
-/* ---------- Structure de l'app ---------- */
+/* ============================ Ossature ============================ */
 
 header.topbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: .75rem 1.25rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: .75rem;
+  height: 64px;
+  padding: 0 1rem;
+  background: var(--md-surface-2);
   position: sticky;
   top: 0;
   z-index: 10;
 }
+header.topbar .brand { font-size: 1.375rem; font-weight: 400; margin-right: .5rem; }
+header.topbar .spacer { flex: 1; }
+header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 
-header.topbar .brand { font-weight: 700; font-size: 1.15rem; }
-
-nav.tabs { display: flex; gap: .25rem; margin-left: 1rem; }
-
+/* Onglets MD3 : soulignement du libellé actif */
+nav.tabs { display: flex; height: 100%; }
 nav.tabs button {
-  padding: .45rem .9rem;
+  position: relative;
+  padding: 0 1.25rem;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: var(--muted);
+  color: var(--md-on-surface-variant);
+  font-size: .875rem;
+  font-weight: 500;
+  letter-spacing: .1px;
+  transition: color .15s;
 }
-nav.tabs button.active { background: var(--surface-2); color: var(--text); }
-
-header.topbar .spacer { flex: 1; }
-header.topbar .who { color: var(--muted); font-size: .9rem; }
-
-main { padding: 1.25rem; max-width: 1100px; margin: 0 auto; }
-
-.toolbar { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
-.toolbar input[type=search] {
-  flex: 1;
-  min-width: 200px;
-  padding: .55rem .75rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
+nav.tabs button:hover { color: var(--md-on-surface); }
+nav.tabs button.active { color: var(--md-primary); }
+nav.tabs button.active::after {
+  content: '';
+  position: absolute;
+  left: 1rem; right: 1rem; bottom: 0;
+  height: 3px;
+  background: var(--md-primary);
+  border-radius: 3px 3px 0 0;
 }
 
-.empty { color: var(--muted); text-align: center; padding: 3rem 1rem; }
+main { padding: 1.5rem 1rem; max-width: 1100px; margin: 0 auto; }
 
-/* ---------- Notes (Keep) ---------- */
+.toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.toolbar input[type=search], .toolbar input[type=text], .toolbar input[type=date] {
+  padding: .75rem 1rem;
+  background: var(--md-surface-3);
+  border: none;
+  border-radius: var(--shape-full);
+  color: var(--md-on-surface);
+}
+.toolbar input[type=search] { flex: 1; min-width: 200px; }
+.toolbar input:focus { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+
+.empty { color: var(--md-on-surface-variant); text-align: center; padding: 4rem 1rem; font-size: .875rem; }
+
+/* ============================== Notes ============================== */
 
 .note-composer {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem;
-  margin-bottom: 1.25rem;
+  background: var(--md-surface-2);
+  border-radius: var(--shape-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--elev-1);
 }
 .note-composer input, .note-composer textarea {
   width: 100%;
   background: transparent;
   border: none;
-  color: var(--text);
+  color: var(--md-on-surface);
   resize: vertical;
+  padding: .25rem 0;
 }
+.note-composer input::placeholder, .note-composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .note-composer input:focus, .note-composer textarea:focus { outline: none; }
-.note-composer .title-in { font-weight: 600; font-size: 1.05rem; margin-bottom: .4rem; }
+.note-composer .title-in { font-size: 1rem; font-weight: 500; }
 
 .notes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: .9rem;
+  gap: 1rem;
   align-items: start;
 }
 
 .note {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: .85rem;
-  background: var(--surface);
+  border-radius: var(--shape-md);
+  padding: 1rem;
+  background: var(--md-surface-2);
   position: relative;
+  transition: box-shadow .15s;
 }
-.note h3 { margin: 0 0 .35rem; font-size: 1rem; }
-.note .body { white-space: pre-wrap; word-break: break-word; font-size: .92rem; }
-.note .actions { display: flex; gap: .3rem; margin-top: .7rem; flex-wrap: wrap; }
+.note:hover { box-shadow: var(--elev-2); }
+.note h3 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 500; }
+.note .body { white-space: pre-wrap; word-break: break-word; font-size: .875rem; color: var(--md-on-surface-variant); }
+.note .actions { display: flex; gap: .25rem; margin-top: .875rem; flex-wrap: wrap; }
 .note .actions button {
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  padding: .2rem .45rem;
-  font-size: .8rem;
+  border: none;
+  border-radius: var(--shape-full);
+  color: var(--md-on-surface-variant);
+  padding: .3rem .7rem;
+  font-size: .75rem;
+  font-weight: 500;
 }
-.note .actions button:hover { color: var(--text); }
-.note .pin-mark { position: absolute; top: .5rem; right: .6rem; font-size: .75rem; color: var(--muted); }
+.note .actions button:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
+.note .pin-mark {
+  position: absolute; top: .75rem; right: .875rem;
+  font-size: .6875rem; letter-spacing: .5px;
+  color: var(--md-primary);
+}
 
-.note ul.check { list-style: none; padding: 0; margin: .3rem 0 0; }
-.note ul.check li { display: flex; gap: .45rem; align-items: flex-start; font-size: .92rem; }
-.note ul.check li.done span { text-decoration: line-through; opacity: .55; }
+.note ul.check { list-style: none; padding: 0; margin: .5rem 0 0; }
+.note ul.check li { display: flex; gap: .625rem; align-items: flex-start; font-size: .875rem; padding: .15rem 0; }
+.note ul.check li.done span { text-decoration: line-through; opacity: .5; }
 
-.swatches { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .5rem; }
-.swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); }
-.swatch.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.swatches { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+.swatch {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--md-outline-variant);
+  cursor: pointer;
+}
+.swatch.active { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 
-/* Couleurs de note, assombries pour rester lisibles sur fond sombre */
-.c-default { background: var(--surface); }
-.c-red     { background: #4a2b30; }
-.c-orange  { background: #4d3524; }
-.c-yellow  { background: #4a4526; }
-.c-green   { background: #2c4230; }
-.c-teal    { background: #24423f; }
-.c-blue    { background: #29394f; }
-.c-purple  { background: #3a2f4d; }
-.c-pink    { background: #4a2b3e; }
-.c-brown   { background: #3d332b; }
-.c-grey    { background: #33363d; }
+/* Conteneurs tonaux de couleur, calibrés pour un fond sombre */
+.c-default { background: var(--md-surface-2); }
+.c-red     { background: #4e3436; }
+.c-orange  { background: #4d3a2c; }
+.c-yellow  { background: #4a452e; }
+.c-green   { background: #334736; }
+.c-teal    { background: #2d4744; }
+.c-blue    { background: #313f54; }
+.c-purple  { background: #3f3550; }
+.c-pink    { background: #4c3342; }
+.c-brown   { background: #3f3733; }
+.c-grey    { background: #35343a; }
 
-/* ---------- Tâches ---------- */
+/* ============================== Tâches ============================== */
 
-.tasks-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1.25rem; }
+.tasks-layout { display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; }
 @media (max-width: 720px) { .tasks-layout { grid-template-columns: 1fr; } }
 
-.lists { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem; }
+.lists { background: var(--md-surface-1); border-radius: var(--shape-md); padding: .75rem; }
 .lists button.list-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: .5rem .6rem;
+  padding: .75rem 1rem;
+  margin-bottom: .25rem;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: var(--muted);
+  border-radius: var(--shape-full);
+  color: var(--md-on-surface-variant);
+  font-size: .875rem;
+  font-weight: 500;
 }
-.lists button.list-item.active { background: var(--surface-2); color: var(--text); }
+.lists button.list-item:hover { background: rgba(230,224,233,.08); }
+.lists button.list-item.active {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
 
-.task-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.task-panel { background: var(--md-surface-1); border-radius: var(--shape-md); padding: 1.25rem; }
 
 ul.tasks { list-style: none; padding: 0; margin: 0; }
 ul.tasks li.task {
   display: flex;
-  gap: .6rem;
+  gap: .875rem;
   align-items: flex-start;
-  padding: .55rem 0;
-  border-bottom: 1px solid var(--border);
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--md-outline-variant);
 }
-ul.tasks li.task.sub { padding-left: 1.75rem; }
-ul.tasks li.task.done .t-title { text-decoration: line-through; opacity: .5; }
+ul.tasks li.task.sub { padding-left: 2.25rem; }
+ul.tasks li.task.done .t-title { text-decoration: line-through; color: var(--md-on-surface-variant); }
 .t-main { flex: 1; min-width: 0; }
-.t-title { word-break: break-word; }
-.t-meta { font-size: .8rem; color: var(--muted); display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .15rem; }
-.t-meta .late { color: var(--danger); }
+.t-title { word-break: break-word; font-size: .9375rem; }
+.t-meta { font-size: .75rem; color: var(--md-on-surface-variant); display: flex; gap: .875rem; flex-wrap: wrap; margin-top: .25rem; }
+.t-meta .late { color: var(--md-error); }
 .t-actions { display: flex; gap: .25rem; }
 .t-actions button {
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  padding: .15rem .4rem;
-  font-size: .78rem;
+  border: none;
+  border-radius: var(--shape-full);
+  color: var(--md-on-surface-variant);
+  padding: .25rem .6rem;
+  font-size: .75rem;
+  font-weight: 500;
+}
+.t-actions button:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
+
+/* Cases à cocher aux couleurs du thème */
+input[type=checkbox] {
+  accent-color: var(--md-primary);
+  width: 18px; height: 18px;
+  margin-top: .15rem;
+  cursor: pointer;
 }
 
-/* ---------- Comptes ---------- */
+/* ============================= Comptes ============================= */
 
 table.users { width: 100%; border-collapse: collapse; }
-table.users th, table.users td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); font-size: .92rem; }
-table.users th { color: var(--muted); font-weight: 500; }
-.badge { font-size: .75rem; padding: .1rem .4rem; border-radius: 5px; background: var(--surface-2); color: var(--muted); }
-.badge.admin { color: var(--accent); }
-.badge.off { color: var(--danger); }
+table.users th, table.users td {
+  text-align: left;
+  padding: .875rem .75rem;
+  border-bottom: 1px solid var(--md-outline-variant);
+  font-size: .875rem;
+}
+table.users th { color: var(--md-on-surface-variant); font-weight: 500; font-size: .75rem; letter-spacing: .5px; }
+.badge {
+  font-size: .6875rem;
+  font-weight: 500;
+  padding: .2rem .625rem;
+  border-radius: var(--shape-full);
+  background: var(--md-surface-4);
+  color: var(--md-on-surface-variant);
+}
+.badge.admin { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.badge.off { background: var(--md-error-container); color: #f9dedc; }
 
-/* ---------- Boîte de dialogue ---------- */
+/* ============================ Dialogues ============================ */
 
 dialog {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--md-surface-3);
+  color: var(--md-on-surface);
+  border: none;
+  border-radius: var(--shape-lg);
   padding: 1.5rem;
   width: min(460px, 92vw);
+  box-shadow: var(--elev-3);
 }
-dialog::backdrop { background: rgba(0,0,0,.6); }
-dialog h2 { margin: 0 0 1rem; font-size: 1.15rem; }
-.dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.25rem; }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
+.dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }

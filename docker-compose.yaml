@@ -1,6 +1,14 @@
 services:
   notask:
-    build: .
+    # Nom et tag explicites de l'image construite localement.
+    image: 'notask:latest'
+    # Sans cette ligne, Coolify tenterait de tirer notask:latest depuis
+    # Docker Hub, où elle n'existe pas. On force la construction.
+    pull_policy: build
+    # Déploiement en Service Coolify : aucun dépôt n'est cloné localement,
+    # c'est Docker qui va chercher le code sur GitHub au moment du build.
+    # Nécessite un dépôt public.
+    build: 'https://github.com/oweebee/notask.git#main'
     restart: unless-stopped
     expose:
       - '8111'
