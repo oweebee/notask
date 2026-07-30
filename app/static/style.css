@@ -129,6 +129,17 @@ input, textarea, select { font: inherit; }
 
 .hint { font-size: .75rem; color: var(--md-on-surface-variant); margin: .375rem 0 0 1rem; }
 
+/* Le champ description doit rester transparent/italique même à l'intérieur
+   d'un .field (dialogue d'édition complet), qui impose sinon un fond plein
+   à tous ses <input> — cette règle, plus spécifique, l'emporte. */
+.field input.description-in {
+  background: transparent;
+  border: none;
+  padding: .3rem 0;
+  margin: 0 0 .75rem;
+}
+.field input.description-in:focus { background: transparent; border-bottom: none; }
+
 /* Bandeaux de message */
 .msg {
   margin-top: 1rem;
@@ -244,11 +255,19 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
   text-align: left;
   transition: background .15s, color .15s;
 }
-.drawer-item:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
+.drawer-item:hover { color: var(--md-on-surface); }
+/* :not([style]) : un libellé avec une couleur propre (posée en style inline,
+   voir app.js) garde cette couleur en toutes circonstances — le survol ne
+   doit remplacer le fond gris que pour les entrées sans couleur propre. */
+.drawer-item:not([style]):hover { background: rgba(230,224,233,.08); }
 .drawer-item.active {
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
 }
+/* Un libellé coloré + actif (filtre en cours) : l'outline reste visible même
+   si le style inline l'emporte sur le fond de .active. */
+.drawer-item.label-item[style].active { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+.drawer-item.label-item[style] { color: var(--md-on-surface); }
 .drawer-item svg { width: 22px; height: 22px; flex: none; }
 .drawer-item .spoon-pair { height: 22px; }
 .drawer-item .spoon-pair svg { width: auto; height: 100%; }
@@ -280,7 +299,20 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
   }
 }
 
-main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
+/* La zone centrale (hors menu latéral) n'occupe que 3/4 de l'espace qui lui
+   est laissé par le menu, et reste centrée dans cet espace. */
+main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
+
+/* Le composeur et la recherche restent volontairement plus étroits que
+   l'affichage des notes en dessous : la moitié de la largeur disponible
+   dans la zone centrale, elle-même déjà réduite à 75%. */
+.note-composer { width: 50%; margin-left: auto; margin-right: auto; }
+.search-toolbar { width: 50%; margin: 0 auto 1.25rem; }
+
+@media (max-width: 860px) {
+  main { width: 100%; }
+  .note-composer, .search-toolbar { width: 100%; }
+}
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .toolbar input[type=search], .toolbar input[type=text], .toolbar input[type=date] {
@@ -317,7 +349,30 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 }
 .note-composer input::placeholder, .note-composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .note-composer input:focus, .note-composer textarea:focus { outline: none; }
-.note-composer .title-in { font-size: 1rem; font-weight: 500; }
+/* Titre nettement plus grand que la description et le contenu, pour que
+   les trois niveaux se distinguent d'un coup d'œil. */
+.title-in { font-size: 1.25rem; font-weight: 600; }
+
+/* Description : en italique, plus discrète, entre le titre et le contenu —
+   masquée entièrement sur la carte si vide (voir app.js). */
+.description-in {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--md-on-surface-variant);
+  font-style: italic;
+  font-size: .8125rem;
+  padding: .3rem 0;
+  margin: .25rem 0 .5rem;
+}
+.description-in::placeholder { color: var(--md-on-surface-variant); opacity: .7; }
+.description-in:focus { outline: none; }
+
+/* Espace un peu plus marqué entre titre, description et contenu dans le
+   composeur (les trois se suivaient trop serrés). */
+.composer-head { margin-bottom: .2rem; }
+#nc-content { margin-top: .375rem; }
 
 /* Bascule "Liste à cocher" : état enfoncé une fois activée */
 #nc-toggle-checklist.active-toggle {
@@ -365,19 +420,41 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   transition: box-shadow .18s ease;
 }
 .note:hover, .note:focus-within { box-shadow: var(--elev-2); }
+.note.dragging { opacity: .4; }
 
 .note h3 {
-  margin: 0 1.75rem .5rem 0;   /* place réservée à l'épingle */
-  font-size: 1rem;
-  font-weight: 500;
+  margin: 0 1.75rem .375rem 0;   /* place réservée à l'épingle */
+  font-size: 1.0625rem;
+  font-weight: 600;
 }
+/* Description : en italique, discrète — entièrement absente du DOM si vide
+   (voir app.js), donc pas de règle "masquer si vide" nécessaire ici. */
+.note .description {
+  font-style: italic;
+  font-size: .8125rem;
+  color: var(--md-on-surface-variant);
+  margin: 0 1.75rem .5rem 0;
+  word-break: break-word;
+}
+
 .note .body {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: .875rem;
+  line-height: 1.4;
   color: var(--md-on-surface-variant);
   min-height: 1.2em;
+  /* La carte s'adapte au texte jusqu'à 10 lignes, puis tronque. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10;
+  line-clamp: 10;
+  overflow: hidden;
 }
+
+/* Même plafond pour une liste à cocher : au-delà de 10 lignes, le reste
+   est simplement masqué (la carte ne s'étire pas indéfiniment). */
+.note ul.check { max-height: 16em; overflow: hidden; }
 
 /* Épingle : visible seulement au survol, sauf si la note est épinglée */
 .note .pin-btn {
@@ -523,7 +600,16 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 .task-card.done .task-text { text-decoration: line-through; }
 
 .task-main { flex: 1; min-width: 0; }
-.task-text { font-size: .9375rem; word-break: break-word; }
+.task-text {
+  font-size: .9375rem;
+  line-height: 1.4;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10;
+  line-clamp: 10;
+  overflow: hidden;
+}
 
 .task-meta {
   display: flex;
@@ -645,32 +731,33 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 }
 
 /* Case à cocher Material : carré à coins doux, coche dessinée en CSS.
-   Remplace le rendu par défaut du navigateur sur toutes les cases de l'app. */
+   Remplace le rendu par défaut du navigateur sur toutes les cases de
+   l'app — même taille partout (édition comme affichage), pour ne laisser
+   aucune ambiguïté entre ce qu'on édite et ce qu'on voit sur la carte. */
 input[type=checkbox] {
   appearance: none;
   -webkit-appearance: none;
-  /* Encore un tiers de moins que la taille précédente (16px). */
-  width: 11px;
-  height: 11px;
+  width: 16.5px;
+  height: 16.5px;
   flex: none;
   margin: 0;
-  border: 1.5px solid var(--md-outline);
-  border-radius: 3px;
+  border: 2px solid var(--md-outline);
+  border-radius: 4px;
   background: transparent;
   display: inline-grid;
   place-content: center;
   cursor: pointer;
   transition: background .15s ease, border-color .15s ease, outline-color .15s ease;
 }
-/* Grosse coche en V, bords arrondis — pas un simple angle de bordure. */
+/* Coche en V, bords arrondis. */
 input[type=checkbox]::after {
   content: '';
-  width: 4px;
-  height: 7.5px;
-  margin-top: -1px;
+  width: 6px;
+  height: 11px;
+  margin-top: -1.5px;
   border: solid #1b1300;
-  border-width: 0 2.4px 2.4px 0;
-  border-radius: 0 2px 2px 2px;
+  border-width: 0 3.5px 3.5px 0;
+  border-radius: 0 3px 3px 3px;
   transform: rotate(45deg) scale(0);
   transition: transform .12s ease;
 }
@@ -803,22 +890,23 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .title-row input { flex: 1; }
 
 /* Bouton de zone icône : taille d'une cuillère du bandeau du haut (28px).
-   Pointillé tant qu'aucune icône n'est associée, plein une fois choisie. */
+   Fond visible même sans icône choisie (plus facile à repérer qu'un simple
+   pointillé transparent), plein une fois une icône choisie. */
 .icon-pick-btn {
   flex: none;
   width: 28px;
   height: 28px;
   display: grid;
   place-items: center;
-  background: transparent;
-  border: 1px dashed var(--md-outline-variant);
+  background: rgba(230,224,233,.08);
+  border: 1px dashed var(--md-outline);
   border-radius: 50%;
   color: var(--md-on-surface-variant);
   transition: background .15s, border-color .15s, color .15s;
 }
-.icon-pick-btn svg { width: 16px; height: 16px; }
-.icon-pick-btn:hover { background: rgba(230,224,233,.10); }
-.icon-pick-btn.has-icon { border-style: solid; border-color: var(--md-outline); color: var(--md-on-surface); }
+.icon-pick-btn svg { width: 17px; height: 17px; }
+.icon-pick-btn:hover { background: rgba(230,224,233,.16); border-color: var(--md-primary); }
+.icon-pick-btn.has-icon { border-style: solid; border-color: var(--md-outline); background: transparent; }
 
 .icon-popup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .375rem; }
 .icon-opt {
@@ -842,11 +930,12 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   background: transparent;
   border: none;
   color: var(--md-on-surface);
-  font-size: 1.125rem;
-  font-weight: 500;
-  padding: 0 0 .75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding: 0 0 .5rem;
 }
 #dlg-note-simple .dns-title-in:focus { outline: none; }
+#dlg-note-simple .description-in { margin: 0 0 .75rem; }
 #dlg-note-simple .field { margin-bottom: 0; }
 #dlg-note-simple textarea {
   width: 100%;

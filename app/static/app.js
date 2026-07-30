@@ -7,6 +7,16 @@ const COLORS = [
   'purple', 'magenta', 'pink', 'rose', 'brown', 'slate', 'grey',
 ];
 
+// Mêmes teintes que les classes .c-* de style.css, dupliquées ici pour
+// pouvoir les poser en style inline sur un libellé (voir renderLabelsDrawer).
+const LABEL_COLOR_HEX = {
+  red: '#7a2e33', coral: '#8a3a2a', orange: '#8a541c', amber: '#856614',
+  yellow: '#7a6f12', lime: '#55771c', green: '#2f7a3c', emerald: '#16785b',
+  teal: '#146b6a', cyan: '#12607a', blue: '#1d548f', indigo: '#364196',
+  violet: '#5138a3', purple: '#68318f', magenta: '#7d2c7d', pink: '#8a2c61',
+  rose: '#8a2c44', brown: '#664a37', slate: '#3f4b5a', grey: '#4b4b52',
+};
+
 let state = {
   user: null,
   view: 'notes',
@@ -113,15 +123,24 @@ const ICONS = {
 
 /* Icônes facultatives associables à une note, à la création comme à
    l'édition — jeu fixe, synchronisé avec ICON_KEYS côté serveur
-   (app/routers/notes.py). */
+   (app/routers/notes.py). En couleur (plutôt qu'en simple trait) pour
+   qu'elles se distinguent d'un coup d'œil sur la carte. */
 const ICON_CHOICES = {
-  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.65l5.9-.85z"/></svg>',
-  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>',
-  work: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="17" height="12" rx="1.6"/><path d="M8.5 7.5V5.8a1.6 1.6 0 0 1 1.6-1.6h3.8a1.6 1.6 0 0 1 1.6 1.6v1.7"/><path d="M3.5 13h17"/></svg>',
-  shopping: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.5 10.5a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7z"/><path d="M8 7V5.5a4 4 0 0 1 8 0V7"/></svg>',
-  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.8-9.5-9.3C1.2 7.4 3 4.5 6.2 4.5c2 0 3.4 1.1 4 2.3.6-1.2 2-2.3 4-2.3 3.2 0 5 2.9 3.7 6.2C19.5 15.2 12 20 12 20z"/></svg>',
-  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5v17"/><path d="M5 4.5h11l-2.5 4L16 12.5H5"/></svg>',
-  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 4h5v16H6a2 2 0 0 0-2 2z"/><path d="M20 5.5A2 2 0 0 0 18 4h-5v16h5a2 2 0 0 1 2 2z"/></svg>',
+  star: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.65l5.9-.85z" fill="#ffd54f"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5v8.5a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" fill="#ef9a6d"/></svg>',
+  work: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="1.6" fill="#a1887f"/><path d="M8.5 7.5V5.8a1.6 1.6 0 0 1 1.6-1.6h3.8a1.6 1.6 0 0 1 1.6 1.6v1.7" fill="none" stroke="#a1887f" stroke-width="1.6"/></svg>',
+  shopping: '<svg viewBox="0 0 24 24"><path d="M4 7h16l-1.5 10.5a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7z" fill="#81c784"/><path d="M8 7V5.5a4 4 0 0 1 8 0V7" fill="none" stroke="#81c784" stroke-width="1.6"/></svg>',
+  /* Cœur reconstruit : les deux lobes sont désormais des miroirs exacts
+     l'un de l'autre de part et d'autre de x=12 (l'ancien tracé était
+     dissymétrique, d'où l'aspect « pas droit »). */
+  heart: '<svg viewBox="0 0 24 24"><path d="M12 21s-6.7-4.35-9.3-8.2C1 10.5 1.6 6.9 4.6 5.2 7 3.9 9.8 4.7 12 7.3 14.2 4.7 17 3.9 19.4 5.2c3 1.7 3.6 5.3 1.9 7.6C18.7 16.65 12 21 12 21z" fill="#e57373"/></svg>',
+  flag: '<svg viewBox="0 0 24 24"><rect x="4.3" y="3.5" width="1.4" height="17" rx="0.7" fill="#64b5f6"/><path d="M5.7 4.5h11l-2.5 4 2.5 4h-11z" fill="#64b5f6"/></svg>',
+  book: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2 2 0 0 1 6 4h5v16H6a2 2 0 0 0-2 2z" fill="#ba68c8"/><path d="M20 5.5A2 2 0 0 0 18 4h-5v16h5a2 2 0 0 1 2 2z" fill="#ce93d8"/></svg>',
+  idea: '<svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-3.2 11.1c.5.35.7.9.7 1.4v.5h5v-.5c0-.5.2-1.05.7-1.4A6 6 0 0 0 12 3z" fill="#fff176"/><rect x="9.5" y="17.5" width="5" height="1.6" rx="0.8" fill="#fbc02d"/><rect x="10" y="19.5" width="4" height="1.4" rx="0.7" fill="#fbc02d"/></svg>',
+  travel: '<svg viewBox="0 0 24 24"><path d="M21 3 3 10.5l6.5 2.3L12 21l2.4-6.8L21 3z" fill="#4fc3f7"/></svg>',
+  gift: '<svg viewBox="0 0 24 24"><rect x="4" y="9.5" width="16" height="10.5" rx="1" fill="#f06292"/><rect x="4" y="6.5" width="16" height="3.5" rx="1" fill="#f48fb1"/><rect x="11" y="6.5" width="2" height="13.5" fill="#fff"/></svg>',
+  money: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#66bb6a"/><path d="M14.5 8.7a4.3 4.3 0 1 0 0 6.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M8.3 10.8h5M8.3 13.2h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  music: '<svg viewBox="0 0 24 24"><circle cx="7" cy="17.5" r="2.6" fill="#9575cd"/><circle cx="16" cy="15.5" r="2.6" fill="#9575cd"/><path d="M9.6 17.5V5.5L18.6 4v11" fill="none" stroke="#9575cd" stroke-width="1.6"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -429,9 +448,12 @@ function renderLabelsDrawer() {
     row.className = 'label-row';
 
     const btn = document.createElement('button');
-    btn.className = 'drawer-item label-item'
-      + (state.labelFilter === l.id ? ' active' : '')
-      + (l.color ? ' c-' + l.color : '');
+    btn.className = 'drawer-item label-item' + (state.labelFilter === l.id ? ' active' : '');
+    // Couleur en style inline plutôt qu'en classe .c-* : une classe a la même
+    // spécificité CSS que .drawer-item:hover, qui l'écrasait donc au survol
+    // (la couleur ne restait visible qu'en dehors du survol). Un style inline
+    // gagne toujours, la couleur reste affichée en toutes circonstances.
+    if (l.color && LABEL_COLOR_HEX[l.color]) btn.style.background = LABEL_COLOR_HEX[l.color];
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
       state.labelFilter = state.labelFilter === l.id ? null : l.id;
@@ -540,14 +562,24 @@ $('#label-new-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); $('#label-new-btn').click(); }
 });
 
+// Le glisser-déposer ne réordonne que la vue par défaut (pas de recherche,
+// pas de filtre par libellé, pas les archives) : ailleurs, ne recalculer les
+// positions que du sous-ensemble visible mélangerait l'ordre des notes
+// masquées par le filtre.
+function notesReorderable() {
+  return !state.showArchived && !state.search && !state.labelFilter;
+}
+
 function renderNotes() {
   const grid = $('#notes-grid');
   grid.innerHTML = '';
   $('#notes-empty').hidden = state.notes.length > 0;
+  const dragOk = notesReorderable();
 
   for (const n of state.notes) {
     const el = document.createElement('article');
     el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
+    el.dataset.id = n.id;
 
     let inner = `<button class="pin-btn" data-act="pin"
       title="${n.pinned ? 'Désépingler' : 'Épingler'}"
@@ -558,6 +590,7 @@ function renderNotes() {
     }
 
     if (n.title) inner += `<h3>${escapeHtml(n.title)}</h3>`;
+    if (n.description) inner += `<div class="description">${escapeHtml(n.description)}</div>`;
 
     if (n.is_checklist) {
       inner += '<ul class="check">';
@@ -660,8 +693,82 @@ function renderNotes() {
       openNoteSimpleDialog(n);
     });
 
+    // Glisser-déposer pour réorganiser la mosaïque (vue par défaut seulement,
+    // voir notesReorderable). Le geste ne doit pas partir d'un bouton ou
+    // d'une case, sous peine de gêner leurs propres clics.
+    if (dragOk) {
+      el.draggable = true;
+      el.addEventListener('dragstart', (e) => {
+        if (e.target.closest('.pin-btn, .actions, .palette, input, .label-chips')) {
+          e.preventDefault();
+          return;
+        }
+        el.classList.add('dragging');
+      });
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        commitNoteOrder();
+      });
+    }
+
     grid.appendChild(el);
   }
+}
+
+/* Pendant le survol, on déplace en direct la carte glissée juste avant ou
+   après la carte la plus proche du pointeur — retour visuel immédiat,
+   comme les autres interfaces à glisser-déposer. */
+$('#notes-grid').addEventListener('dragover', (e) => {
+  const dragging = $('#notes-grid').querySelector('.note.dragging');
+  if (!dragging) return;
+  e.preventDefault();
+  const target = getDropTarget($('#notes-grid'), e.clientX, e.clientY);
+  if (!target || target.el === dragging) return;
+  if (target.before) target.el.before(dragging);
+  else target.el.after(dragging);
+});
+
+function getDropTarget(container, x, y) {
+  const els = [...container.querySelectorAll('.note:not(.dragging)')];
+  let best = null;
+  let bestDist = Infinity;
+  let before = true;
+  for (const el of els) {
+    const box = el.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const dist = (x - cx) ** 2 + (y - cy) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = el;
+      before = y < cy || (Math.abs(y - cy) < box.height / 2 && x < cx);
+    }
+  }
+  return best ? { el: best, before } : null;
+}
+
+/* Une fois le geste terminé, l'ordre visuel du DOM fait foi : on réattribue
+   à chaque note visible une position décroissante correspondant à sa place,
+   et on ne PATCH que celles dont la position a réellement changé. */
+async function commitNoteOrder() {
+  const ids = [...$('#notes-grid').querySelectorAll('.note')].map((el) => Number(el.dataset.id));
+  const total = ids.length;
+  const updates = [];
+  ids.forEach((id, idx) => {
+    const note = state.notes.find((x) => x.id === id);
+    if (!note) return;
+    const newPos = (total - idx) * 1000;
+    if (Math.round(note.position || 0) !== newPos) {
+      updates.push(api('/notes/' + id, { method: 'PATCH', body: { position: newPos } }));
+    }
+  });
+  if (!updates.length) return;
+  try {
+    await Promise.all(updates);
+  } catch (err) {
+    alert(err.message);
+  }
+  loadNotes();
 }
 
 /* Composeur — bascule entre texte libre et liste à cocher en direct : dès
@@ -671,6 +778,7 @@ let composerItems = [{ text: '', checked: false }];
 
 function resetComposer() {
   $('#nc-title').value = '';
+  $('#nc-description').value = '';
   $('#nc-content').value = '';
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
@@ -756,6 +864,7 @@ $('#nc-add').addEventListener('click', async () => {
 
   const body = {
     title,
+    description: $('#nc-description').value.trim(),
     content: composerChecklist ? '' : content,
     is_checklist: composerChecklist,
     items: composerChecklist ? items : [],
@@ -797,6 +906,7 @@ function openNoteDialog(note) {
   renderIconBtn($('#dn-icon-btn'), state.editingIcon);
 
   $('#dn-title').value = note.title;
+  $('#dn-description').value = note.description || '';
   $('#dn-content').value = note.content;
   $('#dn-due').value = note.due_at || '';
   renderDialogMode();
@@ -824,18 +934,32 @@ function openNoteDialog(note) {
 }
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
-function renderNoteDueBtn() {
-  const iso = $('#dn-due').value || null;
-  const btn = $('#dn-due-btn');
+function renderDueBtn(btnSel, labelSel, iso) {
+  const btn = $(btnSel);
   if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
   btn.classList.toggle('has-due', !!iso);
-  $('#dn-due-label').textContent = iso ? formatDue(iso) : 'Aucune échéance';
+  $(labelSel).textContent = iso ? formatDue(iso) : 'Aucune échéance';
+}
+
+function renderNoteDueBtn() {
+  renderDueBtn('#dn-due-btn', '#dn-due-label', $('#dn-due').value || null);
 }
 
 $('#dn-due-btn').addEventListener('click', () => {
   openCalPopup($('#dn-due-btn'), $('#dn-due').value || null, (iso) => {
     $('#dn-due').value = iso || '';
     renderNoteDueBtn();
+  });
+});
+
+function renderNoteDueBtnSimple() {
+  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null);
+}
+
+$('#dns-due-btn').addEventListener('click', () => {
+  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso) => {
+    $('#dns-due').value = iso || '';
+    renderNoteDueBtnSimple();
   });
 });
 
@@ -934,6 +1058,7 @@ async function saveNoteDialog() {
   const n = state.editingNote;
   const body = {
     title: $('#dn-title').value,
+    description: $('#dn-description').value,
     color: n.color,
     due_at: $('#dn-due').value || null,
     is_checklist: state.editingIsChecklist,
@@ -981,9 +1106,12 @@ function openNoteSimpleDialog(note) {
   }));
 
   $('#dns-title').value = note.title;
+  $('#dns-description').value = note.description || '';
   $('#dns-content').value = note.content;
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
+  $('#dns-due').value = note.due_at || '';
+  renderNoteDueBtnSimple();
   renderNoteItemsSimple();
   applyDialogColor($('#dlg-note-simple'), note.color);
   $('#dlg-note-simple').showModal();
@@ -997,10 +1125,18 @@ function renderNoteItemsSimple() {
     row.className = 'dn-item-row';
     row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
       <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
+      <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
+              title="${item.due_at ? formatDue(item.due_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
       <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
-    const [cb, txt, del] = row.children;
+    const [cb, txt, cal, del] = row.children;
     cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
     txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
+    cal.onclick = () => {
+      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso) => {
+        state.editingNoteItems[idx].due_at = iso;
+        renderNoteItemsSimple();
+      });
+    };
     del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
     box.appendChild(row);
   });
@@ -1014,7 +1150,11 @@ $('#dns-add-item').addEventListener('click', () => {
 async function saveNoteSimpleDialog() {
   const n = state.editingNote;
   if (!n) return;
-  const body = { title: $('#dns-title').value };
+  const body = {
+    title: $('#dns-title').value,
+    description: $('#dns-description').value,
+    due_at: $('#dns-due').value || null,
+  };
   if (state.editingIsChecklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());
   } else {

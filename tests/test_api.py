@@ -270,6 +270,31 @@ def test_icone_note_et_couleur_libelle():
     assert r.json()["color"] is None
 
 
+def test_description_et_ordre_manuel():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    # Description : facultative, en plus du titre et du contenu
+    n = client.post("/api/notes", json={"title": "Titre", "description": "Un sous-titre", "content": "corps"},
+                     headers=auth(t)).json()
+    assert n["description"] == "Un sous-titre"
+    r = client.patch(f"/api/notes/{n['id']}", json={"description": ""}, headers=auth(t))
+    assert r.json()["description"] == ""
+
+    # Note sans description explicite : chaîne vide, jamais null
+    sans = client.post("/api/notes", json={"title": "x"}, headers=auth(t)).json()
+    assert sans["description"] == ""
+
+    # Position manuelle (glisser-déposer) : modifiable via PATCH, reflétée
+    # dans l'ordre de GET /api/notes.
+    a = client.post("/api/notes", json={"title": "A"}, headers=auth(t)).json()
+    b = client.post("/api/notes", json={"title": "B"}, headers=auth(t)).json()
+    client.patch(f"/api/notes/{a['id']}", json={"position": 99999}, headers=auth(t))
+    client.patch(f"/api/notes/{b['id']}", json={"position": 1}, headers=auth(t))
+    notes = client.get("/api/notes", headers=auth(t)).json()
+    ids_in_order = [x["id"] for x in notes]
+    assert ids_in_order.index(a["id"]) < ids_in_order.index(b["id"])
+
+
 def test_reglages():
     t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 

@@ -1,7 +1,8 @@
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, String
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -80,6 +81,9 @@ class UserSettings(SQLModel, table=True):
 
 class NoteBase(SQLModel):
     title: str = Field(default="", max_length=300)
+    # Sous-titre facultatif, affiché en italique entre le titre et le
+    # contenu — masqué entièrement s'il est vide (voir NoteOut côté clients).
+    description: str = Field(default="", max_length=300)
     content: str = ""
     color: str = Field(default="default", max_length=20)
     pinned: bool = False
@@ -97,6 +101,16 @@ class Note(NoteBase, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     done: bool = False
     done_at: Optional[datetime] = None
+    # Redéclaré ici avec NOT NULL + server_default '' (contrairement à la
+    # version héritée de NoteBase, nullable par défaut) : sans quoi la
+    # migration ajoutant cette colonne à une table `note` déjà peuplée
+    # laisse les anciennes notes à NULL, et NoteOut (description: str, non
+    # optionnel) refuse alors de les sérialiser — même piège que label_ids.
+    description: str = Field(
+        default="",
+        max_length=300,
+        sa_column=Column(String(300), nullable=False, server_default=""),
+    )
     # Identifiants des libellés (catégories) attachés à la note.
     # Stocké en JSON plutôt qu'en table de liaison : une note appartenant à
     # un seul utilisateur, une petite liste d'entiers suffit.
@@ -108,6 +122,12 @@ class Note(NoteBase, table=True):
         default_factory=list,
         sa_column=Column(JSON, nullable=False, server_default="[]"),
     )
+    # Ordre manuel (glisser-déposer dans la mosaïque). Plus grand = plus haut
+    # dans la liste. Initialisé à l'horloge de création, comme le tri par
+    # date précédent ; les notes déjà en base avant cette colonne reçoivent 0
+    # via la migration et retombent alors sur le tri par updated_at (tri
+    # secondaire dans notes.py), donc aucune note existante ne "saute".
+    position: float = Field(default_factory=time.time)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -157,6 +177,7 @@ class NoteCreate(NoteBase):
 
 class NoteUpdate(SQLModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     content: Optional[str] = None
     color: Optional[str] = None
     pinned: Optional[bool] = None
@@ -167,6 +188,8 @@ class NoteUpdate(SQLModel):
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
     icon: Optional[str] = None
+    # Nouvelle position manuelle (glisser-déposer) ; voir Note.position.
+    position: Optional[float] = None
 
 
 class NoteOut(NoteBase):
@@ -174,6 +197,7 @@ class NoteOut(NoteBase):
     done: bool
     done_at: Optional[datetime] = None
     label_ids: List[int] = []
+    position: float = 0.0
     created_at: datetime
     updated_at: datetime
     items: List[NoteItemOut] = []

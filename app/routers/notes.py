@@ -35,7 +35,10 @@ COLORS = {
 
 # Jeu fixe d'icônes proposées à gauche du titre, à la création comme à
 # l'édition. Doit rester synchronisé avec l'objet ICON_CHOICES d'app.js.
-ICON_KEYS = {"star", "home", "work", "shopping", "heart", "flag", "book"}
+ICON_KEYS = {
+    "star", "home", "work", "shopping", "heart", "flag", "book",
+    "idea", "travel", "gift", "money", "music",
+}
 
 
 def _owned_note(note_id: int, user: User, session: Session) -> Note:
@@ -92,9 +95,15 @@ def list_notes(
 ):
     stmt = select(Note).where(Note.user_id == user.id, Note.archived == archived)
     if q:
-        stmt = stmt.where(Note.title.contains(q) | Note.content.contains(q))
-    # Épinglées d'abord, puis les plus récemment modifiées.
-    notes = session.exec(stmt.order_by(Note.pinned.desc(), Note.updated_at.desc())).all()
+        stmt = stmt.where(
+            Note.title.contains(q) | Note.description.contains(q) | Note.content.contains(q)
+        )
+    # Épinglées d'abord, puis par ordre manuel (glisser-déposer) ; les notes
+    # antérieures à l'ajout de `position` partagent toutes la valeur 0 et
+    # retombent alors sur la date de modification, pour ne pas se mélanger.
+    notes = session.exec(
+        stmt.order_by(Note.pinned.desc(), Note.position.desc(), Note.updated_at.desc())
+    ).all()
     if label is not None:
         notes = [n for n in notes if label in (n.label_ids or [])]
     return notes

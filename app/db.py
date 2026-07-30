@@ -24,7 +24,16 @@ def _sqlite_default_literal(col) -> str:
     neutre selon le type ; sans correspondance connue, la contrainte NOT NULL
     est abandonnée plutôt que de faire échouer le démarrage.
     """
-    python_type = getattr(col.type, "python_type", None)
+    try:
+        # `python_type` est une propriété qui peut lever NotImplementedError
+        # (pas seulement AttributeError) pour certains types SQLAlchemy —
+        # getattr(..., default) n'intercepte que l'absence d'attribut, pas
+        # une exception levée par le getter. Sans ce try/except, une colonne
+        # NOT NULL de type Float (ex. Note.position) fait planter la
+        # migration au démarrage au lieu de simplement perdre sa contrainte.
+        python_type = col.type.python_type
+    except (NotImplementedError, AttributeError):
+        python_type = None
     if python_type is bool:
         return "0"
     if python_type in (int,):

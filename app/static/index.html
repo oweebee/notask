@@ -98,6 +98,7 @@
           <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
           <input class="title-in" id="nc-title" placeholder="Titre">
         </div>
+        <input class="description-in" id="nc-description" placeholder="Description">
         <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
         <div id="nc-items" hidden></div>
         <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
@@ -110,7 +111,7 @@
         <div id="composer-msg"></div>
       </div>
 
-      <div class="toolbar">
+      <div class="toolbar search-toolbar">
         <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
       </div>
 
@@ -154,8 +155,11 @@
     <label for="dn-title">Titre</label>
     <div class="title-row">
       <button type="button" class="icon-pick-btn" id="dn-icon-btn" aria-label="Choisir une icône"></button>
-      <input id="dn-title">
+      <input id="dn-title" class="title-in">
     </div>
+  </div>
+  <div class="field">
+    <input id="dn-description" class="description-in" placeholder="Description">
   </div>
 
   <button class="btn ghost sm" id="dn-toggle-checklist" type="button" style="margin-bottom:1rem">
@@ -198,12 +202,18 @@
      d'échéance. Toute fermeture (clic à côté, Échap) enregistre. -->
 <dialog id="dlg-note-simple">
   <input id="dns-title" class="dns-title-in" placeholder="Titre">
+  <input id="dns-description" class="description-in" placeholder="Description">
   <div class="field" id="dns-content-field">
     <textarea id="dns-content" rows="8"></textarea>
   </div>
   <div class="field" id="dns-items-field" hidden>
     <div id="dns-items"></div>
     <button class="btn ghost sm" id="dns-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
+  </div>
+  <div class="due-row">
+    <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
+    <span id="dns-due-label" class="due-label">Aucune échéance</span>
+    <input type="hidden" id="dns-due">
   </div>
 </dialog>
 
