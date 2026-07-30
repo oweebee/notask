@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.db
+*.sqlite3
+data/
+.env
+.env.*
+push.bat
+README.md
+.idea/
+.vscode/

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>notask</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { margin-bottom: .2rem; }
+  .muted { opacity: .6; font-size: .9rem; }
+  section { margin-top: 2rem; }
+  form { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  input[type=text] { flex: 1; padding: .5rem; }
+  button { padding: .5rem .9rem; cursor: pointer; }
+  ul { list-style: none; padding: 0; }
+  li { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid rgba(128,128,128,.25); }
+  li .grow { flex: 1; }
+  li.done .grow { text-decoration: line-through; opacity: .5; }
+  .del { background: none; border: none; opacity: .5; }
+</style>
+</head>
+<body>
+  <h1>notask</h1>
+  <p class="muted">Tâches &amp; notes — <a href="/docs">API docs</a></p>
+
+  <section>
+    <h2>Tâches</h2>
+    <form id="task-form">
+      <input type="text" id="task-title" placeholder="Nouvelle tâche…" required>
+      <button type="submit">Ajouter</button>
+    </form>
+    <ul id="tasks"></ul>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <form id="note-form">
+      <input type="text" id="note-title" placeholder="Titre de la note…" required>
+      <button type="submit">Ajouter</button>
+    </form>
+    <ul id="notes"></ul>
+  </section>
+
+<script>
+const api = (p, o) => fetch('/api' + p, o).then(r => r.status === 204 ? null : r.json());
+
+async function loadTasks() {
+  const tasks = await api('/tasks');
+  const ul = document.getElementById('tasks');
+  ul.innerHTML = '';
+  for (const t of tasks) {
+    const li = document.createElement('li');
+    if (t.done) li.className = 'done';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = t.done;
+    cb.onchange = async () => {
+      await api('/tasks/' + t.id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({done: cb.checked})});
+      loadTasks();
+    };
+    const span = document.createElement('span');
+    span.className = 'grow'; span.textContent = t.title;
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '✕';
+    del.onclick = async () => { await api('/tasks/' + t.id, {method:'DELETE'}); loadTasks(); };
+    li.append(cb, span, del);
+    ul.append(li);
+  }
+}
+
+async function loadNotes() {
+  const notes = await api('/notes');
+  const ul = document.getElementById('notes');
+  ul.innerHTML = '';
+  for (const n of notes) {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow'; span.textContent = n.title;
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '✕';
+    del.onclick = async () => { await api('/notes/' + n.id, {method:'DELETE'}); loadNotes(); };
+    li.append(span, del);
+    ul.append(li);
+  }
+}
+
+document.getElementById('task-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const input = document.getElementById('task-title');
+  await api('/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: input.value})});
+  input.value = ''; loadTasks();
+};
+
+document.getElementById('note-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const input = document.getElementById('note-title');
+  await api('/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: input.value, content: ''})});
+  input.value = ''; loadNotes();
+};
+
+loadTasks(); loadNotes();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+services:
+  notask:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Domaine renseigné dans l'UI Coolify (Environment Variables),
+      # jamais dans le repo. Ex : notask.exemple.tld (sans https://)
+      - APP_DOMAIN=${APP_DOMAIN:?}
+      - NOTASK_DATA_DIR=/data
+    # Pas de "ports:" => aucun port publié sur l'hôte.
+    # "expose" ouvre 8111 seulement sur le réseau Docker, pour Traefik.
+    expose:
+      - "8111"
+    # Routage Traefik défini ici plutôt que dans le champ Domains de l'UI Coolify.
+    labels:
+      - traefik.enable=true
+      # HTTP -> redirection vers HTTPS
+      - traefik.http.routers.notask-http.rule=Host(`${APP_DOMAIN}`)
+      - traefik.http.routers.notask-http.entryPoints=http
+      - traefik.http.routers.notask-http.middlewares=redirect-to-https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      # HTTPS + certificat Let's Encrypt
+      - traefik.http.routers.notask-https.rule=Host(`${APP_DOMAIN}`)
+      - traefik.http.routers.notask-https.entryPoints=https
+      - traefik.http.routers.notask-https.tls=true
+      - traefik.http.routers.notask-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.notask-https.service=notask
+      # Port INTERNE du conteneur vers lequel Traefik envoie le trafic
+      - traefik.http.services.notask.loadbalancer.server.port=8111
+    volumes:
+      - notask-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8111/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  notask-data:
