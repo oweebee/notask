@@ -88,6 +88,7 @@
         <input class="title-in" id="nc-title" placeholder="Titre">
         <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
         <div id="nc-items" hidden></div>
+        <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
         <div class="toolbar" style="margin: .6rem 0 0;">
           <button class="btn ghost sm" id="nc-toggle-checklist" type="button">Liste à cocher</button>
           <span class="spacer" style="flex:1"></span>
@@ -138,6 +139,11 @@
 <dialog id="dlg-note">
   <h2>Modifier la note</h2>
   <div class="field"><label for="dn-title">Titre</label><input id="dn-title"></div>
+
+  <button class="btn ghost sm" id="dn-toggle-checklist" type="button" style="margin-bottom:1rem">
+    Passer en liste à cocher
+  </button>
+
   <div class="field" id="dn-content-field">
     <label for="dn-content">Contenu</label>
     <textarea id="dn-content" rows="6"></textarea>
@@ -148,8 +154,12 @@
     <button class="btn ghost sm" id="dn-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
   </div>
   <div class="field">
-    <label for="dn-due">Échéance de la note — la transforme en tâche</label>
-    <input id="dn-due" type="datetime-local">
+    <label>Échéance de la note — la transforme en tâche</label>
+    <div class="due-row">
+      <button type="button" class="cal-btn" id="dn-due-btn" title="Régler l'échéance"></button>
+      <span id="dn-due-label" class="due-label">Aucune échéance</span>
+      <input type="hidden" id="dn-due">
+    </div>
   </div>
   <div class="field">
     <label>Couleur</label>

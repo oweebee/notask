@@ -87,6 +87,11 @@ const ICONS = {
   /* Cuillère : grosse tête ovale, manche court. Jaune, en remplacement de
      l'ampoule de Keep. */
   spoon: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
+  /* Même cuillère, en bleu — posée à côté de la jaune dans le logo. */
+  spoonBlue: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></svg>',
+
+  /* Calendrier — trait Material, recolorable via currentColor. */
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
 
   tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l2 2 3.5-3.5"/><path d="M4 17l2 2 3.5-3.5"/><path d="M13 7h7"/><path d="M13 17h7"/></svg>',
   late: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
@@ -134,6 +139,55 @@ function localInputToIso(value) {
   return value ? new Date(value).toISOString() : null;
 }
 
+/* Popup de sélection date + heure, ancré sous l'icône calendrier qui l'ouvre.
+   Une seule instance à la fois ; se ferme au clic extérieur ou sur Échap. */
+let _closeCalPopup = null;
+
+function closeCalPopup() {
+  if (_closeCalPopup) { _closeCalPopup(); _closeCalPopup = null; }
+}
+
+function openCalPopup(anchor, currentIso, onChange) {
+  closeCalPopup();
+
+  const pop = document.createElement('div');
+  pop.className = 'cal-popup';
+  pop.innerHTML = `
+    <input type="datetime-local" class="cal-popup-input">
+    <div class="cal-popup-actions">
+      <button type="button" class="btn ghost sm" data-act="clear">Effacer</button>
+      <button type="button" class="btn sm" data-act="ok">Valider</button>
+    </div>`;
+  document.body.appendChild(pop);
+
+  const input = pop.querySelector('.cal-popup-input');
+  input.value = isoToLocalInput(currentIso);
+
+  const rect = anchor.getBoundingClientRect();
+  const top = rect.bottom + window.scrollY + 6;
+  let left = rect.left + window.scrollX;
+  left = Math.min(left, window.scrollX + document.documentElement.clientWidth - 260);
+  pop.style.top = `${top}px`;
+  pop.style.left = `${Math.max(8, left)}px`;
+
+  const finish = (iso) => { onChange(iso); closeCalPopup(); };
+  pop.querySelector('[data-act=ok]').onclick = () => finish(localInputToIso(input.value));
+  pop.querySelector('[data-act=clear]').onclick = () => finish(null);
+
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) closeCalPopup(); };
+  const onKey = (e) => { if (e.key === 'Escape') closeCalPopup(); };
+  setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+  document.addEventListener('keydown', onKey);
+
+  _closeCalPopup = () => {
+    pop.remove();
+    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  };
+
+  input.focus();
+}
+
 function show(id) {
   ['screen-setup', 'screen-login', 'screen-app'].forEach((s) => { $('#' + s).hidden = s !== id; });
 }
@@ -160,7 +214,7 @@ function enterApp() {
   $('#admin-sep').hidden = !state.user.is_admin;
 
   // Icônes du menu latéral et logo
-  $('#brand-logo').innerHTML = ICONS.spoon;
+  $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
   $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notes</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
   $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes</span>';
@@ -368,6 +422,7 @@ function resetComposer() {
 function renderComposer() {
   $('#nc-content').hidden = composerChecklist;
   $('#nc-items').hidden = !composerChecklist;
+  $('#nc-add-item').hidden = !composerChecklist;
   $('#nc-toggle-checklist').classList.toggle('active-toggle', composerChecklist);
   $('#nc-cancel').hidden = !composerChecklist;
   if (!composerChecklist) return;
@@ -414,6 +469,13 @@ $('#nc-toggle-checklist').addEventListener('click', () => {
   renderComposer();
 });
 
+// Bouton explicite, indépendant du raccourci Entrée — toujours visible et fiable.
+$('#nc-add-item').addEventListener('click', () => {
+  composerItems.push({ text: '', checked: false });
+  renderComposer();
+  $('#nc-items').lastElementChild.querySelector('input[type=text]').focus();
+});
+
 $('#nc-cancel').addEventListener('click', resetComposer);
 
 $('#nc-add').addEventListener('click', async () => {
@@ -455,15 +517,16 @@ $('#notes-search').addEventListener('input', (e) => {
 
 function openNoteDialog(note) {
   state.editingNote = note;
+  state.editingIsChecklist = note.is_checklist;
   state.editingNoteItems = note.items.map((i) => ({
     text: i.text, checked: i.checked, due_at: i.due_at,
   }));
 
   $('#dn-title').value = note.title;
   $('#dn-content').value = note.content;
-  $('#dn-due').value = isoToLocalInput(note.due_at);
-  $('#dn-content-field').hidden = note.is_checklist;
-  $('#dn-items-field').hidden = !note.is_checklist;
+  $('#dn-due').value = note.due_at || '';
+  renderDialogMode();
+  renderNoteDueBtn();
 
   const colors = $('#dn-colors');
   colors.innerHTML = '';
@@ -484,23 +547,67 @@ function openNoteDialog(note) {
   $('#dlg-note').showModal();
 }
 
+/* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
+function renderNoteDueBtn() {
+  const iso = $('#dn-due').value || null;
+  const btn = $('#dn-due-btn');
+  if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
+  btn.classList.toggle('has-due', !!iso);
+  $('#dn-due-label').textContent = iso ? formatDue(iso) : 'Aucune échéance';
+}
+
+$('#dn-due-btn').addEventListener('click', () => {
+  openCalPopup($('#dn-due-btn'), $('#dn-due').value || null, (iso) => {
+    $('#dn-due').value = iso || '';
+    renderNoteDueBtn();
+  });
+});
+
+/* Bascule entre texte libre et liste à cocher, pour une note déjà existante. */
+function renderDialogMode() {
+  $('#dn-content-field').hidden = state.editingIsChecklist;
+  $('#dn-items-field').hidden = !state.editingIsChecklist;
+  $('#dn-toggle-checklist').textContent =
+    state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
+}
+
+$('#dn-toggle-checklist').addEventListener('click', () => {
+  if (!state.editingIsChecklist) {
+    // Texte libre -> liste : chaque ligne déjà écrite devient un élément.
+    const lignes = $('#dn-content').value.split('\n').filter((l) => l.trim());
+    state.editingNoteItems = lignes.length
+      ? lignes.map((l) => ({ text: l.trim(), checked: false, due_at: null }))
+      : [{ text: '', checked: false, due_at: null }];
+    renderNoteItems();
+  } else {
+    // Liste -> texte libre : les lignes deviennent des paragraphes.
+    $('#dn-content').value = state.editingNoteItems.map((i) => i.text).filter(Boolean).join('\n');
+  }
+  state.editingIsChecklist = !state.editingIsChecklist;
+  renderDialogMode();
+});
+
 function renderNoteItems() {
   const box = $('#dn-items');
   box.innerHTML = '';
   state.editingNoteItems.forEach((item, idx) => {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:.4rem;align-items:center;margin-bottom:.35rem';
+    row.className = 'dn-item-row';
     row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-      <input type="text" value="${escapeHtml(item.text)}" style="flex:1" placeholder="Texte de la ligne">
-      <input type="datetime-local" value="${isoToLocalInput(item.due_at)}"
-             title="Dater cette ligne en fait une tâche" class="item-due">
+      <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
+      <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
+              title="${item.due_at ? formatDue(item.due_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
       <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
-    row.children[0].onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
-    row.children[1].oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
-    row.children[2].onchange = (e) => {
-      state.editingNoteItems[idx].due_at = localInputToIso(e.target.value);
+    const [cb, txt, cal, del] = row.children;
+    cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
+    txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
+    cal.onclick = () => {
+      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso) => {
+        state.editingNoteItems[idx].due_at = iso;
+        renderNoteItems();
+      });
     };
-    row.children[3].onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItems(); };
+    del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItems(); };
     box.appendChild(row);
   });
 }
@@ -517,19 +624,26 @@ $('#dn-save').addEventListener('click', async () => {
   const body = {
     title: $('#dn-title').value,
     color: n.color,
-    due_at: localInputToIso($('#dn-due').value),
+    due_at: $('#dn-due').value || null,
+    is_checklist: state.editingIsChecklist,
   };
-  if (n.is_checklist) {
+  if (state.editingIsChecklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());
+    body.content = '';
   } else {
     body.content = $('#dn-content').value;
+    body.items = [];
   }
-  await api('/notes/' + n.id, { method: 'PATCH', body });
-  $('#dlg-note').close();
 
-  // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
-  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
-  else loadNotes();
+  try {
+    await api('/notes/' + n.id, { method: 'PATCH', body });
+    $('#dlg-note').close();
+    // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
+    if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
+    else loadNotes();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 /* -------------------------------- Tâches --------------------------------
