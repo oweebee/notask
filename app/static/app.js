@@ -17,6 +17,14 @@ const LABEL_COLOR_HEX = {
   rose: '#8a2c44', brown: '#664a37', slate: '#3f4b5a', grey: '#4b4b52',
 };
 
+// Même alpha que le composeur/la recherche (.55), pour une couleur de
+// libellé tout aussi atténuée plutôt qu'un aplat plein.
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 let state = {
   user: null,
   view: 'notes',
@@ -166,17 +174,47 @@ function formatDue(isoString) {
   return `${jour} ${heure}`;
 }
 
-/* Conversions entre <input type="datetime-local"> (heure locale, sans fuseau)
-   et l'ISO 8601 en UTC attendu par l'API. */
-function isoToLocalInput(isoString) {
-  if (!isoString) return '';
+/* Conversions date/heure <-> ISO 8601 en UTC attendu par l'API.
+   Le sélecteur n'utilise plus le widget natif <input type="datetime-local">
+   (comportement trop variable d'un navigateur à l'autre pour le pas de 15mn,
+   et un choix de jour dans son calendrier natif ne se comportait pas de
+   façon fiable avec la fermeture du popover) : un <input type="date"> pour
+   le jour + deux <select> pour l'heure et les minutes (uniquement 00/15/30/45)
+   sont entièrement sous notre contrôle, donc prévisibles partout. */
+function isoToParts(isoString) {
+  if (!isoString) return null;
   const d = new Date(isoString);
   const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let minute = Math.round(d.getMinutes() / 15) * 15;
+  let hour = d.getHours();
+  if (minute === 60) { minute = 0; hour = (hour + 1) % 24; }
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    hour: pad(hour),
+    minute: pad(minute),
+  };
 }
 
-function localInputToIso(value) {
-  return value ? new Date(value).toISOString() : null;
+function partsToIso(dateStr, hour, minute) {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d, Number(hour), Number(minute), 0, 0).toISOString();
+}
+
+/* Prochain quart d'heure à venir, pour une valeur de départ sensée quand
+   aucune échéance n'est encore réglée. */
+function nextQuarterHourParts() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  let minute = Math.ceil(d.getMinutes() / 15) * 15;
+  let hour = d.getHours();
+  if (minute === 60) { minute = 0; hour = (hour + 1) % 24; }
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    hour: pad(hour),
+    minute: pad(minute),
+  };
 }
 
 /* Popup de sélection date + heure, ancré sous l'icône calendrier qui l'ouvre.
@@ -190,10 +228,19 @@ function closeCalPopup() {
 function openCalPopup(anchor, currentIso, onChange) {
   closeCalPopup();
 
+  const parts = isoToParts(currentIso) || nextQuarterHourParts();
+  const hourOpts = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+  const minOpts = ['00', '15', '30', '45'];
+
   const pop = document.createElement('div');
   pop.className = 'cal-popup';
   pop.innerHTML = `
-    <input type="datetime-local" class="cal-popup-input">
+    <div class="cal-popup-row">
+      <input type="date" class="cal-popup-date">
+      <select class="cal-popup-hour">${hourOpts.map((h) => `<option value="${h}">${h}</option>`).join('')}</select>
+      <span class="cal-popup-colon">:</span>
+      <select class="cal-popup-min">${minOpts.map((m) => `<option value="${m}">${m}</option>`).join('')}</select>
+    </div>
     <div class="cal-popup-actions">
       <button type="button" class="btn ghost sm" data-act="clear">Effacer</button>
       <button type="button" class="btn sm" data-act="ok">Valider</button>
@@ -208,8 +255,12 @@ function openCalPopup(anchor, currentIso, onChange) {
   const host = hostDialog || document.body;
   host.appendChild(pop);
 
-  const input = pop.querySelector('.cal-popup-input');
-  input.value = isoToLocalInput(currentIso);
+  const dateInput = pop.querySelector('.cal-popup-date');
+  const hourSelect = pop.querySelector('.cal-popup-hour');
+  const minSelect = pop.querySelector('.cal-popup-min');
+  dateInput.value = parts.date;
+  hourSelect.value = parts.hour;
+  minSelect.value = parts.minute;
 
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
@@ -228,12 +279,17 @@ function openCalPopup(anchor, currentIso, onChange) {
     pop.style.left = `${Math.max(8, left)}px`;
   }
 
+  const currentValue = () => partsToIso(dateInput.value, hourSelect.value, minSelect.value);
   const finish = (iso) => { onChange(iso); closeCalPopup(); };
-  pop.querySelector('[data-act=ok]').onclick = () => finish(localInputToIso(input.value));
+  pop.querySelector('[data-act=ok]').onclick = () => finish(currentValue());
   pop.querySelector('[data-act=clear]').onclick = () => finish(null);
 
-  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) closeCalPopup(); };
-  const onKey = (e) => { if (e.key === 'Escape') closeCalPopup(); };
+  // Comme les autres popovers de l'app : toute façon de le quitter applique
+  // la valeur en cours (pas seulement le bouton Valider) — sans quoi choisir
+  // une date puis cliquer ailleurs (geste naturel) perdait silencieusement
+  // le choix.
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) finish(currentValue()); };
+  const onKey = (e) => { if (e.key === 'Escape') finish(currentValue()); };
   setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
   document.addEventListener('keydown', onKey);
 
@@ -243,7 +299,7 @@ function openCalPopup(anchor, currentIso, onChange) {
     document.removeEventListener('keydown', onKey);
   };
 
-  input.focus();
+  dateInput.focus();
 }
 
 /* Popover de choix d'icône, même ancrage top-layer que le calendrier :
@@ -453,7 +509,7 @@ function renderLabelsDrawer() {
     // spécificité CSS que .drawer-item:hover, qui l'écrasait donc au survol
     // (la couleur ne restait visible qu'en dehors du survol). Un style inline
     // gagne toujours, la couleur reste affichée en toutes circonstances.
-    if (l.color && LABEL_COLOR_HEX[l.color]) btn.style.background = LABEL_COLOR_HEX[l.color];
+    if (l.color && LABEL_COLOR_HEX[l.color]) btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
       state.labelFilter = state.labelFilter === l.id ? null : l.id;
