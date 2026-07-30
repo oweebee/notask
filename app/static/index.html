@@ -105,7 +105,10 @@
             <input class="title-in" id="nc-title" placeholder="Titre">
           </div>
           <input class="description-in" id="nc-description" placeholder="Description">
-          <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+          <div class="ta-wrap">
+            <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+            <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
+          </div>
           <div id="nc-items" hidden></div>
           <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
           <div class="toolbar" style="margin: .6rem 0 0;">

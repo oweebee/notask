@@ -861,6 +861,30 @@ async function commitNoteOrder() {
 let composerChecklist = false;
 let composerItems = [{ text: '', checked: false }];
 
+/* Redimensionnement vertical maison d'une zone de texte, au clic-glissé sur
+   sa poignée (voir le commentaire CSS sur .ta-resize-handle : le natif
+   ::-webkit-resizer personnalisé s'est révélé peu fiable d'un navigateur à
+   l'autre — celui-ci fonctionne partout, c'est du JS + un élément normal). */
+function initTextareaResize(handle, textarea) {
+  if (!handle || !textarea) return;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = textarea.offsetHeight;
+    const onMove = (ev) => {
+      const next = startHeight + (ev.clientY - startY);
+      textarea.style.height = Math.max(48, next) + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+initTextareaResize($('#nc-content-resize'), $('#nc-content'));
+
 function resetComposer() {
   $('#nc-title').value = '';
   $('#nc-description').value = '';

@@ -359,16 +359,24 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   background: transparent;
   border: none;
   color: var(--md-on-surface);
-  resize: vertical;
+  resize: none;
   padding: .25rem 0;
 }
 
-/* Poignée de redimensionnement des zones de texte : remplace le petit
-   triangle de lignes diagonales du navigateur par une flèche haut/bas (une
-   pointe de chaque côté), plus lisible sur un fond coloré. Pseudo-élément
-   non standard mais géré par les navigateurs Chromium/WebKit. */
-textarea::-webkit-resizer {
-  background-color: transparent;
+/* Poignée de redimensionnement maison : le pseudo-élément ::-webkit-resizer
+   (essayé précédemment) n'est pas fiable d'un navigateur/version à l'autre —
+   certains ignorent silencieusement background-image dessus. On désactive
+   donc le redimensionnement natif (resize: none ci-dessus) et on dessine
+   nous-mêmes une poignée en flèche haut/bas (une pointe de chaque côté),
+   avec le geste de glisser géré en JS (voir app.js, initTextareaResize). */
+.ta-wrap { position: relative; }
+.ta-resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: ns-resize;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M7 0L10.5 4.5H8V9.5H10.5L7 14L3.5 9.5H6V4.5H3.5Z' fill='%23aaa'/></svg>");
   background-repeat: no-repeat;
   background-position: center;
@@ -947,15 +955,37 @@ dialog {
 dialog::backdrop { background: rgba(0,0,0,.5); }
 
 /* Les deux fenêtres de note (édition complète et édition simple) s'ouvrent
-   toujours à la même taille, quel que soit le contenu — un défilement
-   interne prend le relais si ça déborde, plutôt que de faire varier la
-   hauteur de la fenêtre d'une note à l'autre. max-height protège les petits
-   écrans (la fenêtre ne dépasse jamais 90% de la hauteur visible). */
-#dlg-note, #dlg-note-simple {
-  height: 834px;
+   toujours à la même taille, quel que soit le contenu (30% plus bas que la
+   première version). Disposées en colonne flexible : la zone de contenu
+   (texte ou liste) absorbe tout l'espace restant et défile elle-même si
+   besoin, ce qui pousse naturellement échéance/couleur/libellés/boutons tout
+   en bas de la fenêtre, sans jamais faire déborder la fenêtre elle-même.
+   max-height protège les petits écrans. */
+/* [open] est indispensable ici : un <dialog> fermé n'a pas cet attribut, et
+   compte sur la feuille de style du navigateur (dialog:not([open]) {
+   display:none }) pour rester invisible. Un sélecteur par ID a une
+   spécificité plus forte que cette règle native — sans le qualifier avec
+   [open], "display:flex" s'appliquait même fermé et la fenêtre restait
+   visible en permanence derrière les autres (bug constaté à la vérification :
+   dlg-note apparaissait alors même avec open=false). */
+#dlg-note[open], #dlg-note-simple[open] {
+  height: 584px;
   max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#dn-content-field, #dn-items-field,
+#dns-content-field, #dns-items-field {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
 }
+#dn-content, #dns-content { flex: 1; resize: none; }
+#dn-items-field #dn-items, #dns-items-field #dns-items { flex: 1; overflow-y: auto; }
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
 
@@ -1017,7 +1047,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   background: transparent;
   border: none;
   color: var(--md-on-surface);
-  resize: vertical;
+  resize: none;
   padding: 0;
 }
 #dlg-note-simple textarea:focus { outline: none; }
