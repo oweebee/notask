@@ -4,101 +4,200 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>notask</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { margin-bottom: .2rem; }
-  .muted { opacity: .6; font-size: .9rem; }
-  section { margin-top: 2rem; }
-  form { display: flex; gap: .5rem; margin-bottom: 1rem; }
-  input[type=text] { flex: 1; padding: .5rem; }
-  button { padding: .5rem .9rem; cursor: pointer; }
-  ul { list-style: none; padding: 0; }
-  li { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid rgba(128,128,128,.25); }
-  li .grow { flex: 1; }
-  li.done .grow { text-decoration: line-through; opacity: .5; }
-  .del { background: none; border: none; opacity: .5; }
-</style>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <h1>notask</h1>
-  <p class="muted">Tâches &amp; notes — <a href="/docs">API docs</a></p>
 
-  <section>
-    <h2>Tâches</h2>
-    <form id="task-form">
-      <input type="text" id="task-title" placeholder="Nouvelle tâche…" required>
-      <button type="submit">Ajouter</button>
+<!-- ============ Configuration initiale ============ -->
+<section id="screen-setup" class="gate" hidden>
+  <div class="card">
+    <h1>Configuration de notask</h1>
+    <p class="sub">Aucun compte n'existe encore. Créez l'administrateur pour déverrouiller l'application.</p>
+    <form id="form-setup">
+      <div class="field">
+        <label for="setup-user">Nom d'utilisateur</label>
+        <input id="setup-user" autocomplete="username" required minlength="2" maxlength="50">
+      </div>
+      <div class="field">
+        <label for="setup-pw">Mot de passe</label>
+        <input id="setup-pw" type="password" autocomplete="new-password" required minlength="8">
+        <p class="hint">8 caractères minimum.</p>
+      </div>
+      <div class="field">
+        <label for="setup-pw2">Confirmation</label>
+        <input id="setup-pw2" type="password" autocomplete="new-password" required minlength="8">
+      </div>
+      <button class="btn wide" type="submit">Créer le compte administrateur</button>
     </form>
-    <ul id="tasks"></ul>
-  </section>
+    <div id="setup-msg"></div>
+  </div>
+</section>
 
-  <section>
-    <h2>Notes</h2>
-    <form id="note-form">
-      <input type="text" id="note-title" placeholder="Titre de la note…" required>
-      <button type="submit">Ajouter</button>
+<!-- ============ Connexion ============ -->
+<section id="screen-login" class="gate" hidden>
+  <div class="card">
+    <h1>notask</h1>
+    <p class="sub">Connectez-vous pour accéder à vos notes et à vos tâches.</p>
+    <form id="form-login">
+      <div class="field">
+        <label for="login-user">Nom d'utilisateur</label>
+        <input id="login-user" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="login-pw">Mot de passe</label>
+        <input id="login-pw" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn wide" type="submit">Se connecter</button>
     </form>
-    <ul id="notes"></ul>
-  </section>
+    <div id="login-msg"></div>
+  </div>
+</section>
 
-<script>
-const api = (p, o) => fetch('/api' + p, o).then(r => r.status === 204 ? null : r.json());
+<!-- ============ Application ============ -->
+<div id="screen-app" hidden>
+  <header class="topbar">
+    <span class="brand">notask</span>
+    <nav class="tabs">
+      <button data-view="notes" class="active">Notes</button>
+      <button data-view="tasks">Tâches</button>
+      <button data-view="admin" id="tab-admin" hidden>Comptes</button>
+    </nav>
+    <span class="spacer"></span>
+    <span class="who" id="who"></span>
+    <button class="btn ghost sm" id="btn-password">Mot de passe</button>
+    <button class="btn ghost sm" id="btn-logout">Déconnexion</button>
+  </header>
 
-async function loadTasks() {
-  const tasks = await api('/tasks');
-  const ul = document.getElementById('tasks');
-  ul.innerHTML = '';
-  for (const t of tasks) {
-    const li = document.createElement('li');
-    if (t.done) li.className = 'done';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.checked = t.done;
-    cb.onchange = async () => {
-      await api('/tasks/' + t.id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({done: cb.checked})});
-      loadTasks();
-    };
-    const span = document.createElement('span');
-    span.className = 'grow'; span.textContent = t.title;
-    const del = document.createElement('button');
-    del.className = 'del'; del.textContent = '✕';
-    del.onclick = async () => { await api('/tasks/' + t.id, {method:'DELETE'}); loadTasks(); };
-    li.append(cb, span, del);
-    ul.append(li);
-  }
-}
+  <main>
+    <!-- ---- Notes ---- -->
+    <section id="view-notes">
+      <div class="note-composer">
+        <input class="title-in" id="nc-title" placeholder="Titre">
+        <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+        <div class="toolbar" style="margin: .6rem 0 0;">
+          <label style="font-size:.85rem;color:var(--muted)">
+            <input type="checkbox" id="nc-checklist"> Liste à cocher
+          </label>
+          <span class="spacer" style="flex:1"></span>
+          <button class="btn sm" id="nc-add">Ajouter</button>
+        </div>
+      </div>
 
-async function loadNotes() {
-  const notes = await api('/notes');
-  const ul = document.getElementById('notes');
-  ul.innerHTML = '';
-  for (const n of notes) {
-    const li = document.createElement('li');
-    const span = document.createElement('span');
-    span.className = 'grow'; span.textContent = n.title;
-    const del = document.createElement('button');
-    del.className = 'del'; del.textContent = '✕';
-    del.onclick = async () => { await api('/notes/' + n.id, {method:'DELETE'}); loadNotes(); };
-    li.append(span, del);
-    ul.append(li);
-  }
-}
+      <div class="toolbar">
+        <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
+        <button class="btn ghost sm" id="btn-archived">Voir les archives</button>
+      </div>
 
-document.getElementById('task-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const input = document.getElementById('task-title');
-  await api('/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: input.value})});
-  input.value = ''; loadTasks();
-};
+      <div class="notes-grid" id="notes-grid"></div>
+      <div class="empty" id="notes-empty" hidden>Aucune note.</div>
+    </section>
 
-document.getElementById('note-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const input = document.getElementById('note-title');
-  await api('/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: input.value, content: ''})});
-  input.value = ''; loadNotes();
-};
+    <!-- ---- Tâches ---- -->
+    <section id="view-tasks" hidden>
+      <div class="tasks-layout">
+        <aside class="lists">
+          <div id="lists-container"></div>
+          <button class="btn ghost sm" id="btn-new-list" style="width:100%;margin-top:.5rem">+ Nouvelle liste</button>
+        </aside>
 
-loadTasks(); loadNotes();
-</script>
+        <div class="task-panel">
+          <div class="toolbar">
+            <strong id="list-title" style="flex:1"></strong>
+            <button class="btn ghost sm" id="btn-rename-list">Renommer</button>
+            <button class="btn ghost sm" id="btn-delete-list">Supprimer</button>
+            <button class="btn ghost sm" id="btn-clear-done">Effacer terminées</button>
+          </div>
+
+          <div class="toolbar">
+            <input type="text" id="task-input" placeholder="Nouvelle tâche…" style="flex:1;padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+            <input type="date" id="task-due" style="padding:.55rem;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+            <button class="btn sm" id="btn-add-task">Ajouter</button>
+          </div>
+
+          <ul class="tasks" id="tasks-list"></ul>
+          <div class="empty" id="tasks-empty" hidden>Aucune tâche dans cette liste.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Comptes ---- -->
+    <section id="view-admin" hidden>
+      <div class="toolbar">
+        <strong style="flex:1">Comptes utilisateurs</strong>
+        <button class="btn sm" id="btn-new-user">+ Nouvel utilisateur</button>
+      </div>
+      <table class="users">
+        <thead>
+          <tr><th>Utilisateur</th><th>Rôle</th><th>État</th><th>Créé le</th><th></th></tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<!-- ============ Boîtes de dialogue ============ -->
+<dialog id="dlg-note">
+  <h2>Modifier la note</h2>
+  <div class="field"><label for="dn-title">Titre</label><input id="dn-title"></div>
+  <div class="field" id="dn-content-field">
+    <label for="dn-content">Contenu</label>
+    <textarea id="dn-content" rows="6"></textarea>
+  </div>
+  <div class="field" id="dn-items-field" hidden>
+    <label>Éléments</label>
+    <div id="dn-items"></div>
+    <button class="btn ghost sm" id="dn-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
+  </div>
+  <div class="field">
+    <label>Couleur</label>
+    <div class="swatches" id="dn-colors"></div>
+  </div>
+  <div class="dialog-actions">
+    <button class="btn ghost" id="dn-cancel" type="button">Annuler</button>
+    <button class="btn" id="dn-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-task">
+  <h2>Modifier la tâche</h2>
+  <div class="field"><label for="dt-title">Titre</label><input id="dt-title"></div>
+  <div class="field"><label for="dt-details">Détails</label><textarea id="dt-details" rows="4"></textarea></div>
+  <div class="field"><label for="dt-due">Échéance</label><input id="dt-due" type="date"></div>
+  <div class="dialog-actions">
+    <button class="btn ghost" id="dt-cancel" type="button">Annuler</button>
+    <button class="btn" id="dt-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-user">
+  <h2>Nouvel utilisateur</h2>
+  <div class="field"><label for="du-name">Nom d'utilisateur</label><input id="du-name" autocomplete="off"></div>
+  <div class="field">
+    <label for="du-pw">Mot de passe provisoire</label>
+    <input id="du-pw" type="text" autocomplete="off">
+    <p class="hint">8 caractères minimum. L'utilisateur pourra le changer après sa première connexion.</p>
+  </div>
+  <div class="field"><label><input type="checkbox" id="du-admin"> Administrateur</label></div>
+  <div id="du-msg"></div>
+  <div class="dialog-actions">
+    <button class="btn ghost" id="du-cancel" type="button">Annuler</button>
+    <button class="btn" id="du-save" type="button">Créer</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-password">
+  <h2>Changer mon mot de passe</h2>
+  <div class="field"><label for="dp-current">Mot de passe actuel</label><input id="dp-current" type="password" autocomplete="current-password"></div>
+  <div class="field"><label for="dp-new">Nouveau mot de passe</label><input id="dp-new" type="password" autocomplete="new-password"></div>
+  <div class="field"><label for="dp-new2">Confirmation</label><input id="dp-new2" type="password" autocomplete="new-password"></div>
+  <div id="dp-msg"></div>
+  <div class="dialog-actions">
+    <button class="btn ghost" id="dp-cancel" type="button">Annuler</button>
+    <button class="btn" id="dp-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
+<script src="/static/app.js"></script>
 </body>
 </html>
