@@ -211,27 +211,31 @@
      contenu texte est modifiable — pas de couleur, pas de libellé, pas
      d'échéance. Toute fermeture (clic à côté, Échap) enregistre. -->
 <dialog id="dlg-note-simple">
-  <input id="dns-title" class="dns-title-in" placeholder="Titre">
-  <input id="dns-description" class="description-in" placeholder="Description">
-  <div class="field" id="dns-content-field">
-    <textarea id="dns-content" rows="8"></textarea>
+  <div class="dns-card">
+    <input id="dns-title" class="dns-title-in" placeholder="Titre">
+    <input id="dns-description" class="description-in" placeholder="Description">
+    <div class="field" id="dns-content-field">
+      <textarea id="dns-content" rows="8"></textarea>
+    </div>
+    <div class="field" id="dns-items-field" hidden>
+      <div id="dns-items"></div>
+    </div>
   </div>
-  <div class="fmt-toolbar" id="dns-fmt-toolbar">
-    <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
-    <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
-    <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
-    <span class="fmt-sep"></span>
-    <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
-  </div>
-  <div class="field" id="dns-items-field" hidden>
-    <div id="dns-items"></div>
-  </div>
-  <div class="field-actions-row">
-    <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
-    <div class="due-row">
-      <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
-      <span id="dns-due-label" class="due-label">Aucune échéance</span>
-      <input type="hidden" id="dns-due">
+  <div class="dns-bottom-bar">
+    <div class="fmt-toolbar" id="dns-fmt-toolbar">
+      <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
+      <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
+      <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+      <span class="fmt-sep"></span>
+      <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+    </div>
+    <div class="field-actions-row">
+      <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
+      <div class="due-row">
+        <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
+        <span id="dns-due-label" class="due-label">Aucune échéance</span>
+        <input type="hidden" id="dns-due">
+      </div>
     </div>
   </div>
 </dialog>

@@ -590,27 +590,30 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 /* Couleurs de note — saturées, sur deux rangées.
    Assez soutenues pour se distinguer nettement, assez sombres pour que le
    texte clair reste lisible. */
-.c-default { background: var(--md-surface-2); }
-.c-red     { background: #7a2e33; }
-.c-coral   { background: #8a3a2a; }
-.c-orange  { background: #8a541c; }
-.c-amber   { background: #856614; }
-.c-yellow  { background: #7a6f12; }
-.c-lime    { background: #55771c; }
-.c-green   { background: #2f7a3c; }
-.c-emerald { background: #16785b; }
-.c-teal    { background: #146b6a; }
-.c-cyan    { background: #12607a; }
-.c-blue    { background: #1d548f; }
-.c-indigo  { background: #364196; }
-.c-violet  { background: #5138a3; }
-.c-purple  { background: #68318f; }
-.c-magenta { background: #7d2c7d; }
-.c-pink    { background: #8a2c61; }
-.c-rose    { background: #8a2c44; }
-.c-brown   { background: #664a37; }
-.c-slate   { background: #3f4b5a; }
-.c-grey    { background: #4b4b52; }
+/* --note-color dupliqué à côté de chaque background : permet à un enfant
+   (voir .dns-card / .dns-bottom-bar) d'hériter la même teinte sans avoir à
+   dupliquer les 21 couleurs ailleurs. */
+.c-default { background: var(--md-surface-2); --note-color: var(--md-surface-2); }
+.c-red     { background: #7a2e33; --note-color: #7a2e33; }
+.c-coral   { background: #8a3a2a; --note-color: #8a3a2a; }
+.c-orange  { background: #8a541c; --note-color: #8a541c; }
+.c-amber   { background: #856614; --note-color: #856614; }
+.c-yellow  { background: #7a6f12; --note-color: #7a6f12; }
+.c-lime    { background: #55771c; --note-color: #55771c; }
+.c-green   { background: #2f7a3c; --note-color: #2f7a3c; }
+.c-emerald { background: #16785b; --note-color: #16785b; }
+.c-teal    { background: #146b6a; --note-color: #146b6a; }
+.c-cyan    { background: #12607a; --note-color: #12607a; }
+.c-blue    { background: #1d548f; --note-color: #1d548f; }
+.c-indigo  { background: #364196; --note-color: #364196; }
+.c-violet  { background: #5138a3; --note-color: #5138a3; }
+.c-purple  { background: #68318f; --note-color: #68318f; }
+.c-magenta { background: #7d2c7d; --note-color: #7d2c7d; }
+.c-pink    { background: #8a2c61; --note-color: #8a2c61; }
+.c-rose    { background: #8a2c44; --note-color: #8a2c44; }
+.c-brown   { background: #664a37; --note-color: #664a37; }
+.c-slate   { background: #3f4b5a; --note-color: #3f4b5a; }
+.c-grey    { background: #4b4b52; --note-color: #4b4b52; }
 
 /* ============================== Tâches ============================== */
 
@@ -1110,7 +1113,50 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .icon-opt.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 
 /* Dialogue d'édition simple, façon Keep : le titre et le contenu se
-   fondent directement dans le fond coloré de la note, sans encadré. */
+   fondent directement dans le fond coloré de la note, sans encadré.
+
+   Le <dialog> ouvert passe dans le "top layer" du navigateur avec son
+   propre ::backdrop ; un élément vraiment placé en dehors de son arbre DOM
+   serait rendu derrière ce backdrop (assombri, non cliquable). Pour obtenir
+   visuellement une barre à part sous la note tout en gardant les boutons
+   cliquables, le <dialog> devient une coquille transparente sans fond ni
+   padding propres, et ce sont deux blocs internes qui portent chacun leur
+   propre fond arrondi : .dns-card (titre/description/contenu) et
+   .dns-bottom-bar (outils de mise en forme + échéance), séparés par un
+   espace. Les deux partagent la couleur de la note via --note-color,
+   défini sur chaque classe .c-* (voir applyDialogColor() dans app.js, qui
+   pose la classe sur le <dialog> lui-même : --note-color est hérité par
+   les enfants normalement, en CSS). */
+#dlg-note-simple[open] {
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  gap: .75rem;
+}
+.dns-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--note-color, var(--md-surface-3));
+  border-radius: var(--shape-lg);
+  padding: 1.5rem;
+  box-shadow: var(--elev-3);
+  overflow: hidden;
+}
+.dns-bottom-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  background: var(--note-color, var(--md-surface-3));
+  border-radius: var(--shape-lg);
+  padding: .625rem 1rem;
+  box-shadow: var(--elev-3);
+}
+.dns-bottom-bar .fmt-toolbar { margin: 0; }
 #dlg-note-simple .dns-title-in {
   display: block;
   width: 100%;
