@@ -87,6 +87,9 @@ class NoteBase(SQLModel):
     is_checklist: bool = False
     # Échéance de la note entière. Non nulle => c'est une tâche.
     due_at: Optional[datetime] = None
+    # Icône facultative affichée à gauche de la note (clé parmi un jeu fixe,
+    # voir ICON_KEYS dans app/routers/notes.py).
+    icon: Optional[str] = Field(default=None, max_length=40)
 
 
 class Note(NoteBase, table=True):
@@ -163,6 +166,7 @@ class NoteUpdate(SQLModel):
     done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
+    icon: Optional[str] = None
 
 
 class NoteOut(NoteBase):
@@ -181,6 +185,10 @@ class NoteOut(NoteBase):
 
 class LabelBase(SQLModel):
     name: str = Field(min_length=1, max_length=50)
+    # Couleur de fond du libellé dans le menu latéral — indépendante de la
+    # couleur d'une note quelconque ; None = pas de couleur (fond neutre,
+    # seulement mis en évidence au survol comme les autres entrées du menu).
+    color: Optional[str] = Field(default=None, max_length=20)
 
 
 class Label(LabelBase, table=True):
@@ -195,6 +203,7 @@ class LabelCreate(LabelBase):
 
 class LabelUpdate(SQLModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    color: Optional[str] = None
 
 
 class LabelOut(LabelBase):

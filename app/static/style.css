@@ -304,6 +304,9 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   margin-bottom: 1.5rem;
   box-shadow: var(--elev-1);
 }
+.composer-head { display: flex; align-items: center; gap: .625rem; }
+.composer-head .title-in { flex: 1; }
+
 .note-composer input, .note-composer textarea {
   width: 100%;
   background: transparent;
@@ -423,6 +426,11 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 .note .actions .sep { flex: 1; }
 
 .note svg { width: 18px; height: 18px; display: block; }
+
+/* Icône associée à la note, au-dessus du titre */
+.note-icon { margin: 0 0 .375rem; color: var(--md-on-surface-variant); }
+.note-icon svg { width: 20px; height: 20px; display: block; }
+.note { cursor: pointer; }
 
 /* Palette dépliable dans la carte */
 .note .palette {
@@ -641,25 +649,28 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 input[type=checkbox] {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  /* Encore un tiers de moins que la taille précédente (16px). */
+  width: 11px;
+  height: 11px;
   flex: none;
   margin: 0;
-  border: 2px solid var(--md-outline);
-  border-radius: 4px;
+  border: 1.5px solid var(--md-outline);
+  border-radius: 3px;
   background: transparent;
   display: inline-grid;
   place-content: center;
   cursor: pointer;
   transition: background .15s ease, border-color .15s ease, outline-color .15s ease;
 }
+/* Grosse coche en V, bords arrondis — pas un simple angle de bordure. */
 input[type=checkbox]::after {
   content: '';
   width: 4px;
-  height: 7px;
+  height: 7.5px;
   margin-top: -1px;
   border: solid #1b1300;
-  border-width: 0 2px 2px 0;
+  border-width: 0 2.4px 2.4px 0;
+  border-radius: 0 2px 2px 2px;
   transform: rotate(45deg) scale(0);
   transition: transform .12s ease;
 }
@@ -677,7 +688,36 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ============================= Libellés ============================= */
 
-.drawer-item.label-item { padding-left: 2.5rem; }
+.drawer-item.label-item { padding-left: 2.5rem; padding-right: 2.25rem; }
+
+/* Ligne de libellé : le crayon n'apparaît qu'au survol de la ligne, en
+   overlay à droite — le bouton lui-même reste inchangé (pilule collée à
+   gauche, arrondie à droite, couleur propre en fond permanent si réglée). */
+.label-row { position: relative; }
+.label-edit-btn {
+  position: absolute;
+  right: .5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease, color .15s ease;
+}
+.label-edit-btn svg { width: 15px; height: 15px; }
+.label-edit-btn:hover { background: rgba(230,224,233,.14); color: var(--md-on-surface); }
+.label-row:hover .label-edit-btn { opacity: 1; }
+@media (hover: none) { .label-edit-btn { opacity: 1; } }
+
+.label-color-grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .625rem 0; }
+.label-color-opt { width: 22px; height: 22px; }
+.label-color-opt[data-color=""] { background: var(--md-surface-4); }
 
 .label-new-row {
   display: flex;
@@ -757,3 +797,64 @@ dialog {
 dialog::backdrop { background: rgba(0,0,0,.5); }
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
+
+/* Ligne titre + zone icône, dans le dialogue d'édition complet */
+.title-row { display: flex; align-items: center; gap: .625rem; }
+.title-row input { flex: 1; }
+
+/* Bouton de zone icône : taille d'une cuillère du bandeau du haut (28px).
+   Pointillé tant qu'aucune icône n'est associée, plein une fois choisie. */
+.icon-pick-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px dashed var(--md-outline-variant);
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  transition: background .15s, border-color .15s, color .15s;
+}
+.icon-pick-btn svg { width: 16px; height: 16px; }
+.icon-pick-btn:hover { background: rgba(230,224,233,.10); }
+.icon-pick-btn.has-icon { border-style: solid; border-color: var(--md-outline); color: var(--md-on-surface); }
+
+.icon-popup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .375rem; }
+.icon-opt {
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+}
+.icon-opt svg { width: 18px; height: 18px; }
+.icon-opt:hover { background: rgba(230,224,233,.12); }
+.icon-opt.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+/* Dialogue d'édition simple, façon Keep : le titre et le contenu se
+   fondent directement dans le fond coloré de la note, sans encadré. */
+#dlg-note-simple .dns-title-in {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--md-on-surface);
+  font-size: 1.125rem;
+  font-weight: 500;
+  padding: 0 0 .75rem;
+}
+#dlg-note-simple .dns-title-in:focus { outline: none; }
+#dlg-note-simple .field { margin-bottom: 0; }
+#dlg-note-simple textarea {
+  width: 100%;
+  min-height: 120px;
+  background: transparent;
+  border: none;
+  color: var(--md-on-surface);
+  resize: vertical;
+  padding: 0;
+}
+#dlg-note-simple textarea:focus { outline: none; }

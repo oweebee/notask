@@ -19,6 +19,8 @@ let state = {
   labels: [],
   labelFilter: null,
   editingLabelIds: [],
+  composerIcon: null,
+  editingIcon: null,
 };
 
 const BUCKET_LABELS = {
@@ -88,10 +90,12 @@ const ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 4h4"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
 
   /* Cuillère : grosse tête ovale, manche court. Jaune, en remplacement de
-     l'ampoule de Keep. */
-  spoon: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
+     l'ampoule de Keep. Le viewBox est resserré autour de la forme (et non
+     0 0 24 24) : sans cela, la marge interne du carré de dessin s'ajoutait
+     au gap CSS et donnait un espacement visuel bien plus grand que 4px. */
+  spoon: '<svg viewBox="6 1 12 20"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
   /* Même cuillère, en bleu — posée à côté de la jaune dans le logo. */
-  spoonBlue: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></svg>',
+  spoonBlue: '<svg viewBox="6 1 12 20"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></svg>',
 
   /* Calendrier — trait Material, recolorable via currentColor. */
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
@@ -104,6 +108,20 @@ const ICONS = {
   noteRef: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 15.5h4"/></svg>',
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+};
+
+/* Icônes facultatives associables à une note, à la création comme à
+   l'édition — jeu fixe, synchronisé avec ICON_KEYS côté serveur
+   (app/routers/notes.py). */
+const ICON_CHOICES = {
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.65l5.9-.85z"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>',
+  work: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="17" height="12" rx="1.6"/><path d="M8.5 7.5V5.8a1.6 1.6 0 0 1 1.6-1.6h3.8a1.6 1.6 0 0 1 1.6 1.6v1.7"/><path d="M3.5 13h17"/></svg>',
+  shopping: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.5 10.5a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7z"/><path d="M8 7V5.5a4 4 0 0 1 8 0V7"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.8-9.5-9.3C1.2 7.4 3 4.5 6.2 4.5c2 0 3.4 1.1 4 2.3.6-1.2 2-2.3 4-2.3 3.2 0 5 2.9 3.7 6.2C19.5 15.2 12 20 12 20z"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5v17"/><path d="M5 4.5h11l-2.5 4L16 12.5H5"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 4h5v16H6a2 2 0 0 0-2 2z"/><path d="M20 5.5A2 2 0 0 0 18 4h-5v16h5a2 2 0 0 1 2 2z"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -207,6 +225,75 @@ function openCalPopup(anchor, currentIso, onChange) {
   };
 
   input.focus();
+}
+
+/* Popover de choix d'icône, même ancrage top-layer que le calendrier :
+   dans le dialog s'il y en a un d'ouvert, sinon dans document.body. */
+let _closeIconPopup = null;
+
+function closeIconPopup() {
+  if (_closeIconPopup) { _closeIconPopup(); _closeIconPopup = null; }
+}
+
+function openIconPopup(anchor, currentIcon, onChange) {
+  closeIconPopup();
+
+  const pop = document.createElement('div');
+  pop.className = 'cal-popup icon-popup';
+  pop.innerHTML = `
+    <div class="icon-popup-grid">
+      <button type="button" class="icon-opt" data-icon="" title="Aucune icône">${ICONS.plus}</button>
+      ${Object.entries(ICON_CHOICES).map(([key, svg]) =>
+        `<button type="button" class="icon-opt${key === currentIcon ? ' active' : ''}" data-icon="${key}">${svg}</button>`
+      ).join('')}
+    </div>`;
+
+  const hostDialog = anchor.closest('dialog');
+  const host = hostDialog || document.body;
+  host.appendChild(pop);
+
+  if (hostDialog) {
+    const dialogRect = hostDialog.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    let top = anchorRect.bottom - dialogRect.top + 6;
+    let left = anchorRect.left - dialogRect.left;
+    left = Math.min(left, dialogRect.width - 220);
+    pop.style.top = `${top}px`;
+    pop.style.left = `${Math.max(8, left)}px`;
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    pop.style.left = `${Math.max(8, rect.left + window.scrollX)}px`;
+  }
+
+  pop.querySelectorAll('.icon-opt').forEach((btn) => {
+    btn.onclick = () => { onChange(btn.dataset.icon || null); closeIconPopup(); };
+  });
+
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) closeIconPopup(); };
+  const onKey = (e) => { if (e.key === 'Escape') closeIconPopup(); };
+  setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+  document.addEventListener('keydown', onKey);
+
+  _closeIconPopup = () => {
+    pop.remove();
+    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  };
+}
+
+/* Bouton de zone icône : affiche l'icône choisie, ou un simple "+" tant
+   qu'aucune n'est associée à la note. */
+function renderIconBtn(btn, iconKey) {
+  btn.innerHTML = iconKey && ICON_CHOICES[iconKey] ? ICON_CHOICES[iconKey] : ICONS.plus;
+  btn.classList.toggle('has-icon', !!iconKey);
+}
+
+/* Applique la couleur de la note comme fond du dialogue (éditer ou éditer
+   simple), pour qu'il se fonde dans la carte qu'on est en train d'ouvrir. */
+function applyDialogColor(dialogEl, color) {
+  for (const c of COLORS) dialogEl.classList.remove('c-' + c);
+  dialogEl.classList.add('c-' + (color || 'default'));
 }
 
 function show(id) {
@@ -338,8 +425,13 @@ function renderLabelsDrawer() {
   const box = $('#labels-list');
   box.innerHTML = '';
   for (const l of state.labels) {
+    const row = document.createElement('div');
+    row.className = 'label-row';
+
     const btn = document.createElement('button');
-    btn.className = 'drawer-item label-item' + (state.labelFilter === l.id ? ' active' : '');
+    btn.className = 'drawer-item label-item'
+      + (state.labelFilter === l.id ? ' active' : '')
+      + (l.color ? ' c-' + l.color : '');
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
       state.labelFilter = state.labelFilter === l.id ? null : l.id;
@@ -354,8 +446,85 @@ function renderLabelsDrawer() {
       loadLabels();
       loadNotes();
     };
-    box.appendChild(btn);
+
+    // Crayon visible au survol de la ligne : renommer et choisir une
+    // couleur de fond propre au libellé, indépendante des couleurs de note.
+    const edit = document.createElement('button');
+    edit.className = 'label-edit-btn';
+    edit.type = 'button';
+    edit.setAttribute('aria-label', 'Modifier le libellé');
+    edit.innerHTML = ICONS.pencil;
+    edit.onclick = (e) => { e.stopPropagation(); openLabelEditPopup(edit, l); };
+
+    row.append(btn, edit);
+    box.appendChild(row);
   }
+}
+
+/* Popover de renommage + couleur d'un libellé, ancré sous le crayon. */
+function openLabelEditPopup(anchor, label) {
+  closeCalPopup();
+  closeIconPopup();
+
+  const pop = document.createElement('div');
+  pop.className = 'cal-popup label-edit-popup';
+  pop.innerHTML = `
+    <input type="text" class="cal-popup-input" maxlength="50">
+    <div class="label-color-grid">
+      <button type="button" class="swatch label-color-opt" data-color="" title="Aucune couleur"></button>
+      ${COLORS.filter((c) => c !== 'default').map((c) =>
+        `<button type="button" class="swatch c-${c} label-color-opt${c === label.color ? ' active' : ''}"
+                 data-color="${c}" title="${c}"></button>`
+      ).join('')}
+    </div>
+    <div class="cal-popup-actions">
+      <button type="button" class="btn ghost sm" data-act="close">Fermer</button>
+      <button type="button" class="btn sm" data-act="save">Enregistrer</button>
+    </div>`;
+  document.body.appendChild(pop);
+
+  const rect = anchor.getBoundingClientRect();
+  pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  pop.style.left = `${Math.max(8, rect.left + window.scrollX - 150)}px`;
+
+  const input = pop.querySelector('.cal-popup-input');
+  input.value = label.name;
+  let chosenColor = label.color || null;
+
+  pop.querySelectorAll('.label-color-opt').forEach((btn) => {
+    btn.onclick = () => {
+      chosenColor = btn.dataset.color || null;
+      pop.querySelectorAll('.label-color-opt').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+  });
+
+  const finish = () => {
+    pop.remove();
+    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  };
+
+  pop.querySelector('[data-act=close]').onclick = finish;
+  pop.querySelector('[data-act=save]').onclick = async () => {
+    try {
+      await api('/labels/' + label.id, {
+        method: 'PATCH',
+        body: { name: input.value.trim() || label.name, color: chosenColor },
+      });
+      finish();
+      loadLabels();
+      loadNotes();
+    } catch (err) { alert(err.message); }
+  };
+
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) finish(); };
+  const onKey = (e) => { if (e.key === 'Escape') finish(); };
+  setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+  document.addEventListener('keydown', onKey);
+
+  input.focus();
+  input.select();
 }
 
 $('#label-new-btn').addEventListener('click', async () => {
@@ -383,6 +552,10 @@ function renderNotes() {
     let inner = `<button class="pin-btn" data-act="pin"
       title="${n.pinned ? 'Désépingler' : 'Épingler'}"
       aria-label="${n.pinned ? 'Désépingler' : 'Épingler'}">${n.pinned ? ICONS.pinFilled : ICONS.pin}</button>`;
+
+    if (n.icon && ICON_CHOICES[n.icon]) {
+      inner += `<div class="note-icon">${ICON_CHOICES[n.icon]}</div>`;
+    }
 
     if (n.title) inner += `<h3>${escapeHtml(n.title)}</h3>`;
 
@@ -480,6 +653,13 @@ function renderNotes() {
       };
     });
 
+    // Clic sur la carte (hors boutons, cases à cocher, palette) : édition
+    // simple façon Keep — juste le texte, sans les réglages de la carte.
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.pin-btn, .actions, .palette, input, .label-chips')) return;
+      openNoteSimpleDialog(n);
+    });
+
     grid.appendChild(el);
   }
 }
@@ -494,9 +674,19 @@ function resetComposer() {
   $('#nc-content').value = '';
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
+  state.composerIcon = null;
+  renderIconBtn($('#nc-icon-btn'), null);
   renderComposer();
   msg($('#composer-msg'), '');
 }
+
+renderIconBtn($('#nc-icon-btn'), null);
+$('#nc-icon-btn').addEventListener('click', () => {
+  openIconPopup($('#nc-icon-btn'), state.composerIcon, (icon) => {
+    state.composerIcon = icon;
+    renderIconBtn($('#nc-icon-btn'), icon);
+  });
+});
 
 function renderComposer() {
   $('#nc-content').hidden = composerChecklist;
@@ -569,6 +759,7 @@ $('#nc-add').addEventListener('click', async () => {
     content: composerChecklist ? '' : content,
     is_checklist: composerChecklist,
     items: composerChecklist ? items : [],
+    icon: state.composerIcon,
   };
 
   try {
@@ -602,12 +793,15 @@ function openNoteDialog(note) {
   }));
   state.editingLabelIds = [...(note.label_ids || [])];
   renderNoteLabelChips();
+  state.editingIcon = note.icon || null;
+  renderIconBtn($('#dn-icon-btn'), state.editingIcon);
 
   $('#dn-title').value = note.title;
   $('#dn-content').value = note.content;
   $('#dn-due').value = note.due_at || '';
   renderDialogMode();
   renderNoteDueBtn();
+  applyDialogColor($('#dlg-note'), note.color);
 
   const colors = $('#dn-colors');
   colors.innerHTML = '';
@@ -620,6 +814,7 @@ function openNoteDialog(note) {
       state.editingNote.color = c;
       colors.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
       s.classList.add('active');
+      applyDialogColor($('#dlg-note'), c);
     };
     colors.appendChild(s);
   }
@@ -641,6 +836,13 @@ $('#dn-due-btn').addEventListener('click', () => {
   openCalPopup($('#dn-due-btn'), $('#dn-due').value || null, (iso) => {
     $('#dn-due').value = iso || '';
     renderNoteDueBtn();
+  });
+});
+
+$('#dn-icon-btn').addEventListener('click', () => {
+  openIconPopup($('#dn-icon-btn'), state.editingIcon, (icon) => {
+    state.editingIcon = icon;
+    renderIconBtn($('#dn-icon-btn'), icon);
   });
 });
 
@@ -725,7 +927,10 @@ $('#dn-add-item').addEventListener('click', () => {
 
 $('#dn-cancel').addEventListener('click', () => $('#dlg-note').close());
 
-$('#dn-save').addEventListener('click', async () => {
+/* Sauvegarde du dialogue d'édition complet — utilisée par le bouton
+   Enregistrer, et par le clic en dehors de la fenêtre (qui enregistre puis
+   ferme, comme demandé, au lieu de simplement fermer). */
+async function saveNoteDialog() {
   const n = state.editingNote;
   const body = {
     title: $('#dn-title').value,
@@ -733,6 +938,7 @@ $('#dn-save').addEventListener('click', async () => {
     due_at: $('#dn-due').value || null,
     is_checklist: state.editingIsChecklist,
     label_ids: state.editingLabelIds,
+    icon: state.editingIcon,
   };
   if (state.editingIsChecklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());
@@ -751,6 +957,83 @@ $('#dn-save').addEventListener('click', async () => {
   } catch (err) {
     alert(err.message);
   }
+}
+
+$('#dn-save').addEventListener('click', saveNoteDialog);
+
+// Cliquer en dehors du contenu (sur le fond du dialogue ou le backdrop, qui
+// ne sont couverts par aucun élément enfant) enregistre puis ferme, plutôt
+// que de fermer sans rien faire.
+$('#dlg-note').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-note')) saveNoteDialog();
+});
+
+/* --- Dialogue d'édition simple, façon Keep ---
+   Ouvert au clic sur le corps d'une note : seul le texte se modifie
+   (titre, contenu ou cases à cocher) — pas de couleur, pas de libellé, pas
+   d'échéance, pas de bascule de mode. Toute fermeture enregistre. */
+
+function openNoteSimpleDialog(note) {
+  state.editingNote = note;
+  state.editingIsChecklist = note.is_checklist;
+  state.editingNoteItems = note.items.map((i) => ({
+    text: i.text, checked: i.checked, due_at: i.due_at,
+  }));
+
+  $('#dns-title').value = note.title;
+  $('#dns-content').value = note.content;
+  $('#dns-content-field').hidden = state.editingIsChecklist;
+  $('#dns-items-field').hidden = !state.editingIsChecklist;
+  renderNoteItemsSimple();
+  applyDialogColor($('#dlg-note-simple'), note.color);
+  $('#dlg-note-simple').showModal();
+}
+
+function renderNoteItemsSimple() {
+  const box = $('#dns-items');
+  box.innerHTML = '';
+  state.editingNoteItems.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'dn-item-row';
+    row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
+      <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
+      <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
+    const [cb, txt, del] = row.children;
+    cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
+    txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
+    del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
+    box.appendChild(row);
+  });
+}
+
+$('#dns-add-item').addEventListener('click', () => {
+  state.editingNoteItems.push({ text: '', checked: false, due_at: null });
+  renderNoteItemsSimple();
+});
+
+async function saveNoteSimpleDialog() {
+  const n = state.editingNote;
+  if (!n) return;
+  const body = { title: $('#dns-title').value };
+  if (state.editingIsChecklist) {
+    body.items = state.editingNoteItems.filter((i) => i.text.trim());
+  } else {
+    body.content = $('#dns-content').value;
+  }
+  try {
+    await api('/notes/' + n.id, { method: 'PATCH', body });
+  } catch (err) {
+    alert(err.message);
+  }
+  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
+  else loadNotes();
+}
+
+// Pas de bouton Enregistrer/Annuler ici : toute fermeture (clic à côté,
+// Échap) déclenche l'événement natif "close", seul point d'enregistrement.
+$('#dlg-note-simple').addEventListener('close', saveNoteSimpleDialog);
+$('#dlg-note-simple').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-note-simple')) $('#dlg-note-simple').close();
 });
 
 /* -------------------------------- Tâches --------------------------------

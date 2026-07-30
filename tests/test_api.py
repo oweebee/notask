@@ -242,6 +242,34 @@ def test_libelles():
     assert client.delete(f"/api/labels/{travail['id']}", headers=auth(bob)).status_code == 404
 
 
+def test_icone_note_et_couleur_libelle():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    # Icône sur une note, à la création puis à l'édition
+    n = client.post("/api/notes", json={"title": "Courses", "icon": "shopping"}, headers=auth(t)).json()
+    assert n["icon"] == "shopping"
+    r = client.patch(f"/api/notes/{n['id']}", json={"icon": "star"}, headers=auth(t))
+    assert r.json()["icon"] == "star"
+    assert client.patch(f"/api/notes/{n['id']}", json={"icon": "inexistant"}, headers=auth(t)).status_code == 400
+    assert client.post("/api/notes", json={"title": "x", "icon": "pasunicone"}, headers=auth(t)).status_code == 400
+
+    # Une note sans icône explicite n'en porte aucune
+    sans = client.post("/api/notes", json={"title": "Neutre"}, headers=auth(t)).json()
+    assert sans["icon"] is None
+
+    # Couleur propre à un libellé, indépendante des couleurs de note
+    lbl = client.post("/api/labels", json={"name": "Perso", "color": "teal"}, headers=auth(t)).json()
+    assert lbl["color"] == "teal"
+    r = client.patch(f"/api/labels/{lbl['id']}", json={"color": "rose"}, headers=auth(t))
+    assert r.json()["color"] == "rose"
+    assert client.patch(f"/api/labels/{lbl['id']}", json={"color": "fuchsia"}, headers=auth(t)).status_code == 400
+    assert client.post("/api/labels", json={"name": "Bidon", "color": "fuchsia"}, headers=auth(t)).status_code == 400
+
+    # Effacer la couleur (revenir à "aucune")
+    r = client.patch(f"/api/labels/{lbl['id']}", json={"color": None}, headers=auth(t))
+    assert r.json()["color"] is None
+
+
 def test_reglages():
     t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 

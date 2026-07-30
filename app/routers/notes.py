@@ -33,6 +33,10 @@ COLORS = {
     "purple", "magenta", "pink", "rose", "brown", "slate", "grey",
 }
 
+# Jeu fixe d'icônes proposées à gauche du titre, à la création comme à
+# l'édition. Doit rester synchronisé avec l'objet ICON_CHOICES d'app.js.
+ICON_KEYS = {"star", "home", "work", "shopping", "heart", "flag", "book"}
+
 
 def _owned_note(note_id: int, user: User, session: Session) -> Note:
     note = session.get(Note, note_id)
@@ -44,6 +48,11 @@ def _owned_note(note_id: int, user: User, session: Session) -> Note:
 def _check_color(color: Optional[str]) -> None:
     if color is not None and color not in COLORS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couleur inconnue : {color}")
+
+
+def _check_icon(icon: Optional[str]) -> None:
+    if icon is not None and icon not in ICON_KEYS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Icône inconnue : {icon}")
 
 
 def _check_labels(label_ids: Optional[List[int]], user: User, session: Session) -> None:
@@ -98,6 +107,7 @@ def create_note(
     session: Session = Depends(get_session),
 ):
     _check_color(payload.color)
+    _check_icon(payload.icon)
     _check_labels(payload.label_ids, user, session)
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
     session.add(note)
@@ -127,6 +137,7 @@ def update_note(
     note = _owned_note(note_id, user, session)
     data = payload.model_dump(exclude_unset=True)
     _check_color(data.get("color"))
+    _check_icon(data.get("icon"))
     _check_labels(data.get("label_ids"), user, session)
 
     # Sans échéance, une note n'est pas une tâche : rien à terminer.

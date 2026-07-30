@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import Label, LabelCreate, LabelOut, LabelUpdate, Note, User
+from app.routers.notes import COLORS
 
 router = APIRouter(prefix="/api/labels", tags=["labels"])
 
@@ -17,6 +18,11 @@ def _owned_label(label_id: int, user: User, session: Session) -> Label:
     if label is None or label.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Libellé introuvable")
     return label
+
+
+def _check_color(color) -> None:
+    if color is not None and color not in COLORS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couleur inconnue : {color}")
 
 
 @router.get("", response_model=List[LabelOut])
@@ -38,13 +44,14 @@ def create_label(
     name = payload.name.strip()
     if not name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nom de libellé vide")
+    _check_color(payload.color)
     existing = session.exec(
         select(Label).where(Label.user_id == user.id, Label.name == name)
     ).first()
     if existing:
         raise HTTPException(status.HTTP_409_CONFLICT, "Ce libellé existe déjà")
 
-    label = Label(user_id=user.id, name=name)
+    label = Label(user_id=user.id, name=name, color=payload.color)
     session.add(label)
     session.commit()
     session.refresh(label)
@@ -70,6 +77,9 @@ def update_label(
         if dup:
             raise HTTPException(status.HTTP_409_CONFLICT, "Ce libellé existe déjà")
         label.name = name
+    if "color" in data:
+        _check_color(data["color"])
+        label.color = data["color"]
 
     session.add(label)
     session.commit()

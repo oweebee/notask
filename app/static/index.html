@@ -94,7 +94,10 @@
     <!-- ---- Notes ---- -->
     <section id="view-notes">
       <div class="note-composer">
-        <input class="title-in" id="nc-title" placeholder="Titre">
+        <div class="composer-head">
+          <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
+          <input class="title-in" id="nc-title" placeholder="Titre">
+        </div>
         <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
         <div id="nc-items" hidden></div>
         <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
@@ -147,7 +150,13 @@
 <!-- ============ Boîtes de dialogue ============ -->
 <dialog id="dlg-note">
   <h2>Modifier la note</h2>
-  <div class="field"><label for="dn-title">Titre</label><input id="dn-title"></div>
+  <div class="field">
+    <label for="dn-title">Titre</label>
+    <div class="title-row">
+      <button type="button" class="icon-pick-btn" id="dn-icon-btn" aria-label="Choisir une icône"></button>
+      <input id="dn-title">
+    </div>
+  </div>
 
   <button class="btn ghost sm" id="dn-toggle-checklist" type="button" style="margin-bottom:1rem">
     Passer en liste à cocher
@@ -158,12 +167,12 @@
     <textarea id="dn-content" rows="6"></textarea>
   </div>
   <div class="field" id="dn-items-field" hidden>
-    <label>Éléments — une date transforme la ligne en tâche</label>
+    <label>Éléments</label>
     <div id="dn-items"></div>
     <button class="btn ghost sm" id="dn-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
   </div>
   <div class="field">
-    <label>Échéance de la note — la transforme en tâche</label>
+    <label>Échéance de la note</label>
     <div class="due-row">
       <button type="button" class="cal-btn" id="dn-due-btn" title="Régler l'échéance"></button>
       <span id="dn-due-label" class="due-label">Aucune échéance</span>
@@ -181,6 +190,20 @@
   <div class="dialog-actions">
     <button class="btn ghost" id="dn-cancel" type="button">Annuler</button>
     <button class="btn" id="dn-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
+<!-- Édition simple, façon Keep : ouverte au clic sur une note, seulement le
+     contenu texte est modifiable — pas de couleur, pas de libellé, pas
+     d'échéance. Toute fermeture (clic à côté, Échap) enregistre. -->
+<dialog id="dlg-note-simple">
+  <input id="dns-title" class="dns-title-in" placeholder="Titre">
+  <div class="field" id="dns-content-field">
+    <textarea id="dns-content" rows="8"></textarea>
+  </div>
+  <div class="field" id="dns-items-field" hidden>
+    <div id="dns-items"></div>
+    <button class="btn ghost sm" id="dns-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
   </div>
 </dialog>
 
