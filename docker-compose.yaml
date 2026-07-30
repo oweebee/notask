@@ -4,47 +4,22 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-
-    environment:
-      - NOTASK_DATA_DIR=/data
-      # APP_DOMAIN se définit dans Coolify > Environment Variables.
-      # Valeur attendue : le nom d'hôte SEUL.
-      #   OK   -> notask.exemple.tld
-      #   FAUX -> https://notask.exemple.tld/   (pas de schéma, pas de slash)
-      - APP_DOMAIN=${APP_DOMAIN}
-
-    # Aucun "ports:" => rien n'est publié sur l'hôte.
-    # 8111 n'est joignable que depuis le réseau Docker, par Traefik.
     expose:
-      - "8111"
-
-    # Routage Traefik décrit ici, donc indépendant du champ "Domains" de l'UI.
-    labels:
-      - traefik.enable=true
-      # --- HTTP (port 80) : redirige vers HTTPS ---
-      - traefik.http.routers.notask-http.rule=Host(`${APP_DOMAIN}`)
-      - traefik.http.routers.notask-http.entrypoints=http
-      - traefik.http.routers.notask-http.middlewares=notask-https-redirect
-      - traefik.http.middlewares.notask-https-redirect.redirectscheme.scheme=https
-      - traefik.http.middlewares.notask-https-redirect.redirectscheme.permanent=true
-      # --- HTTPS (port 443) : certificat Let's Encrypt ---
-      - traefik.http.routers.notask-https.rule=Host(`${APP_DOMAIN}`)
-      - traefik.http.routers.notask-https.entrypoints=https
-      - traefik.http.routers.notask-https.tls=true
-      - traefik.http.routers.notask-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.notask-https.service=notask
-      # --- Port du conteneur visé par Traefik ---
-      - traefik.http.services.notask.loadbalancer.server.port=8111
-
+      - '8111'
+    environment:
+      NOTASK_DATA_DIR: /data
     volumes:
-      - notask-data:/data
-
+      - 'notask_data:/data'
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8111/health"]
+      test:
+        - CMD
+        - curl
+        - '-fsS'
+        - 'http://127.0.0.1:8111/health'
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
 
 volumes:
-  notask-data:
+  notask_data: null

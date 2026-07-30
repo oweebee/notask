@@ -61,16 +61,20 @@ chemin du compose : `docker-compose.yaml`.
 
 ### 3. Domaine
 
-Dans Coolify, service `notask`, champ **Domains for notask**, remplacer le domaine
-`.sslip.io` généré automatiquement par :
+Le compose ne contient **aucun label Traefik** : c'est Coolify qui les génère,
+lui seul connaissant le nom de son réseau proxy. Des labels écrits à la main
+produisent un `no available server` (le routeur capte la requête mais Traefik
+ne sait pas joindre le conteneur).
+
+Dans Coolify, service `notask`, champ **Domains for notask** :
 
 ```
 https://notask.mondomaine.tld:8111
 ```
 
-Format exact : schéma `https://`, nom d'hôte, puis `:8111`. Ce port désigne le
-**port du conteneur** vers lequel router — rien n'est publié sur l'hôte, Traefik
-sert le site en 443 et gère le certificat.
+Format exact : `https://`, le nom d'hôte, puis `:8111`. Ce port désigne le
+**port du conteneur** vers lequel router — rien n'est publié sur l'hôte,
+Traefik sert le site en 443 et gère le certificat.
 
 Le domaine n'apparaît nulle part dans le repo : il ne vit que dans Coolify.
 
