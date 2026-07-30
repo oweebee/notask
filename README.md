@@ -61,20 +61,18 @@ chemin du compose : `docker-compose.yaml`.
 
 ### 3. Domaine
 
-Le routage Traefik est défini par les `labels` du compose, qui lisent la variable
-`APP_DOMAIN`. Le domaine n'est **jamais écrit dans le repo**.
-
-Dans Coolify → **Environment Variables**, ajouter :
+Dans Coolify, service `notask`, champ **Domains for notask**, remplacer le domaine
+`.sslip.io` généré automatiquement par :
 
 ```
-APP_DOMAIN=notask.mondomaine.tld
+https://notask.mondomaine.tld:8111
 ```
 
-Nom d'hôte seul : pas de `https://`, pas de port. Le port du conteneur (8111) est
-déjà fixé dans les labels ; Traefik sert le site en 443 et gère le certificat.
+Format exact : schéma `https://`, nom d'hôte, puis `:8111`. Ce port désigne le
+**port du conteneur** vers lequel router — rien n'est publié sur l'hôte, Traefik
+sert le site en 443 et gère le certificat.
 
-La variable est déclarée `${APP_DOMAIN:?}` : si elle est absente, le déploiement
-échoue explicitement au lieu de démarrer sans routage.
+Le domaine n'apparaît nulle part dans le repo : il ne vit que dans Coolify.
 
 ### 4. Déployer
 

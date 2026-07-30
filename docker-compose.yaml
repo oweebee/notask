@@ -4,39 +4,47 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+
     environment:
-      # Domaine renseigné dans l'UI Coolify (Environment Variables),
-      # jamais dans le repo. Ex : notask.exemple.tld (sans https://)
-      - APP_DOMAIN=${APP_DOMAIN:?}
       - NOTASK_DATA_DIR=/data
-    # Pas de "ports:" => aucun port publié sur l'hôte.
-    # "expose" ouvre 8111 seulement sur le réseau Docker, pour Traefik.
+      # APP_DOMAIN se définit dans Coolify > Environment Variables.
+      # Valeur attendue : le nom d'hôte SEUL.
+      #   OK   -> notask.exemple.tld
+      #   FAUX -> https://notask.exemple.tld/   (pas de schéma, pas de slash)
+      - APP_DOMAIN=${APP_DOMAIN}
+
+    # Aucun "ports:" => rien n'est publié sur l'hôte.
+    # 8111 n'est joignable que depuis le réseau Docker, par Traefik.
     expose:
       - "8111"
-    # Routage Traefik défini ici plutôt que dans le champ Domains de l'UI Coolify.
+
+    # Routage Traefik décrit ici, donc indépendant du champ "Domains" de l'UI.
     labels:
       - traefik.enable=true
-      # HTTP -> redirection vers HTTPS
+      # --- HTTP (port 80) : redirige vers HTTPS ---
       - traefik.http.routers.notask-http.rule=Host(`${APP_DOMAIN}`)
-      - traefik.http.routers.notask-http.entryPoints=http
-      - traefik.http.routers.notask-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
-      # HTTPS + certificat Let's Encrypt
+      - traefik.http.routers.notask-http.entrypoints=http
+      - traefik.http.routers.notask-http.middlewares=notask-https-redirect
+      - traefik.http.middlewares.notask-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.notask-https-redirect.redirectscheme.permanent=true
+      # --- HTTPS (port 443) : certificat Let's Encrypt ---
       - traefik.http.routers.notask-https.rule=Host(`${APP_DOMAIN}`)
-      - traefik.http.routers.notask-https.entryPoints=https
+      - traefik.http.routers.notask-https.entrypoints=https
       - traefik.http.routers.notask-https.tls=true
       - traefik.http.routers.notask-https.tls.certresolver=letsencrypt
       - traefik.http.routers.notask-https.service=notask
-      # Port INTERNE du conteneur vers lequel Traefik envoie le trafic
+      # --- Port du conteneur visé par Traefik ---
       - traefik.http.services.notask.loadbalancer.server.port=8111
+
     volumes:
       - notask-data:/data
+
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8111/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 volumes:
   notask-data:
