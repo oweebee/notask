@@ -945,6 +945,17 @@ dialog {
   box-shadow: var(--elev-3);
 }
 dialog::backdrop { background: rgba(0,0,0,.5); }
+
+/* Les deux fenêtres de note (édition complète et édition simple) s'ouvrent
+   toujours à la même taille, quel que soit le contenu — un défilement
+   interne prend le relais si ça déborde, plutôt que de faire varier la
+   hauteur de la fenêtre d'une note à l'autre. max-height protège les petits
+   écrans (la fenêtre ne dépasse jamais 90% de la hauteur visible). */
+#dlg-note, #dlg-note-simple {
+  height: 834px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
 
