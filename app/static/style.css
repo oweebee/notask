@@ -336,16 +336,16 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .toolbar input[type=search] { flex: 1; min-width: 200px; }
 .toolbar input:focus { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 
-/* Écho de la cuillère bleue du logo sur la barre de recherche. */
-.search-toolbar input[type=search] { background: #1d548f; }
+/* Écho de la cuillère bleue du logo sur la barre de recherche, atténué. */
+.search-toolbar input[type=search] { background: rgba(29, 84, 143, .55); }
 
 .empty { color: var(--md-on-surface-variant); text-align: center; padding: 4rem 1rem; font-size: .875rem; }
 
 /* ============================== Notes ============================== */
 
 .note-composer {
-  /* Écho de la cuillère jaune du logo. */
-  background: #856614;
+  /* Écho de la cuillère jaune du logo, atténué (alpha) pour rester discret. */
+  background: rgba(133, 102, 20, .55);
   border-radius: var(--shape-md);
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
@@ -361,6 +361,18 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   color: var(--md-on-surface);
   resize: vertical;
   padding: .25rem 0;
+}
+
+/* Poignée de redimensionnement des zones de texte : remplace le petit
+   triangle de lignes diagonales du navigateur par une flèche haut/bas (une
+   pointe de chaque côté), plus lisible sur un fond coloré. Pseudo-élément
+   non standard mais géré par les navigateurs Chromium/WebKit. */
+textarea::-webkit-resizer {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M7 0L10.5 4.5H8V9.5H10.5L7 14L3.5 9.5H6V4.5H3.5Z' fill='%23aaa'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 10px 10px;
 }
 .note-composer input::placeholder, .note-composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .note-composer input:focus, .note-composer textarea:focus { outline: none; }
@@ -484,7 +496,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   max-height: 16em;
   overflow: hidden;
   padding: 3px;
-  margin: .5rem -3px 0 -3px;
+  margin: .375rem -3px 0 -3px;
 }
 
 /* Épingle : visible seulement au survol, sauf si la note est épinglée */
@@ -549,7 +561,9 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 }
 
 .note ul.check { list-style: none; }
-.note ul.check li { display: flex; gap: .625rem; align-items: flex-start; font-size: .875rem; padding: .15rem 0; }
+/* Padding minimal : une liste à cocher ne doit pas prendre plus de hauteur
+   qu'une note en texte simple pour un nombre de lignes équivalent. */
+.note ul.check li { display: flex; gap: .625rem; align-items: flex-start; font-size: .875rem; padding: 0; }
 .note ul.check li.done span { text-decoration: line-through; opacity: .5; }
 
 .swatches { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }

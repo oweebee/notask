@@ -521,27 +521,35 @@ function openLabelEditPopup(anchor, label) {
     };
   });
 
-  const finish = () => {
+  const close = () => {
     pop.remove();
     document.removeEventListener('mousedown', onOutside);
     document.removeEventListener('keydown', onKey);
   };
 
-  pop.querySelector('[data-act=close]').onclick = finish;
-  pop.querySelector('[data-act=save]').onclick = async () => {
+  // Comme les autres fenêtres de l'app : toute façon de quitter ce popover
+  // (bouton, clic à côté, Échap) enregistre — sans ça, choisir une couleur
+  // puis cliquer ailleurs (geste naturel) perdait silencieusement le choix,
+  // puisque seul le bouton "Enregistrer" appelait l'API.
+  const save = async () => {
     try {
       await api('/labels/' + label.id, {
         method: 'PATCH',
         body: { name: input.value.trim() || label.name, color: chosenColor },
       });
-      finish();
-      loadLabels();
-      loadNotes();
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert(err.message);
+    }
+    close();
+    loadLabels();
+    loadNotes();
   };
 
-  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) finish(); };
-  const onKey = (e) => { if (e.key === 'Escape') finish(); };
+  pop.querySelector('[data-act=close]').onclick = save;
+  pop.querySelector('[data-act=save]').onclick = save;
+
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) save(); };
+  const onKey = (e) => { if (e.key === 'Escape') save(); };
   setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
   document.addEventListener('keydown', onKey);
 
