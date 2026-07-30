@@ -123,18 +123,36 @@ python -m pytest tests/ -q
 
 ## Déploiement Coolify
 
-Build Pack **Dockerfile** (pas Docker Compose : sur Coolify v4.2.0, le champ
-`docker_compose_domains` ne s'enregistre pas et le domaine reste ignoré).
+Build Pack **Docker Compose** : le volume `notask_data` est déclaré dans le
+compose, Coolify le crée automatiquement au déploiement et le conserve entre
+les redéploiements. Aucun réglage manuel de stockage.
 
 1. DNS : enregistrement A `notask.mondomaine.tld` → IP du serveur.
-2. New Resource → **Dockerfile**, source = ce repo GitHub, branche `main`.
-3. **Domains** : `https://notask.mondomaine.tld`
-4. **Ports Exposes** : `8111`
-5. **Persistent Storage** : montage vers `/data`
-   — indispensable, sinon la base et la clé JWT sont perdues à chaque déploiement.
+2. New Resource → **Docker Compose**, source = ce repo GitHub, branche `main`,
+   chemin du compose `/docker-compose.yaml`.
+3. Champ **Domains for notask** : `https://notask.mondomaine.tld:8111`
+   Le `:8111` désigne le port du conteneur ; rien n'est publié sur l'hôte,
+   Traefik sert le site en 443 et gère le certificat.
+4. Deploy.
 
-Le conteneur n'expose 8111 que sur le réseau Docker : aucun port publié sur
-l'hôte, Traefik sert le site en 443 et gère le certificat.
+Le compose ne contient volontairement **aucun label Traefik** : Coolify les
+génère lui-même, lui seul connaissant le nom de son réseau proxy. Des labels
+écrits à la main produisent un `no available server`.
+
+### Si le champ Domains refuse de s'enregistrer
+
+Sur certaines versions de Coolify, enregistrer le domaine d'une ressource
+compose échoue (erreur `sslipDomainWarning` et retour au domaine `.sslip.io`).
+Contournement, à exécuter dans le terminal Coolify puis redéployer :
+
+```bash
+docker exec coolify-db psql -U coolify -d coolify -c \
+  "update applications set docker_compose_domains =
+   '{\"notask\":{\"domain\":\"https://notask.mondomaine.tld:8111\"}}'
+   where uuid = '<uuid-de-la-ressource>';"
+```
+
+L'UUID figure dans l'URL de la ressource dans Coolify.
 
 ## Mise à jour
 
