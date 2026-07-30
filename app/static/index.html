@@ -93,29 +93,34 @@
   <main>
     <!-- ---- Notes ---- -->
     <section id="view-notes">
-      <div class="note-composer">
-        <div class="composer-head">
-          <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
-          <input class="title-in" id="nc-title" placeholder="Titre">
+      <!-- Le composeur et la recherche vivent DANS la mosaïque (mêmes pistes
+           de grille que les notes) : largeur de deux cartes, décalés d'une
+           colonne pour qu'une note puisse toujours apparaître de chaque
+           côté. app.js ne vide jamais entièrement #notes-grid — seules les
+           .note y sont retirées/ré-ajoutées à chaque rendu. -->
+      <div class="notes-grid" id="notes-grid">
+        <div class="note-composer">
+          <div class="composer-head">
+            <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
+            <input class="title-in" id="nc-title" placeholder="Titre">
+          </div>
+          <input class="description-in" id="nc-description" placeholder="Description">
+          <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+          <div id="nc-items" hidden></div>
+          <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
+          <div class="toolbar" style="margin: .6rem 0 0;">
+            <button class="btn ghost sm" id="nc-toggle-checklist" type="button">Liste à cocher</button>
+            <span class="spacer" style="flex:1"></span>
+            <button class="btn ghost sm" id="nc-cancel" type="button" hidden>Annuler</button>
+            <button class="btn sm" id="nc-add">Ajouter</button>
+          </div>
+          <div id="composer-msg"></div>
         </div>
-        <input class="description-in" id="nc-description" placeholder="Description">
-        <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
-        <div id="nc-items" hidden></div>
-        <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
-        <div class="toolbar" style="margin: .6rem 0 0;">
-          <button class="btn ghost sm" id="nc-toggle-checklist" type="button">Liste à cocher</button>
-          <span class="spacer" style="flex:1"></span>
-          <button class="btn ghost sm" id="nc-cancel" type="button" hidden>Annuler</button>
-          <button class="btn sm" id="nc-add">Ajouter</button>
+
+        <div class="toolbar search-toolbar">
+          <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
         </div>
-        <div id="composer-msg"></div>
       </div>
-
-      <div class="toolbar search-toolbar">
-        <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
-      </div>
-
-      <div class="notes-grid" id="notes-grid"></div>
       <div class="empty" id="notes-empty" hidden>Aucune note.</div>
     </section>
 
@@ -173,14 +178,16 @@
   <div class="field" id="dn-items-field" hidden>
     <label>Éléments</label>
     <div id="dn-items"></div>
-    <button class="btn ghost sm" id="dn-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
   </div>
   <div class="field">
     <label>Échéance de la note</label>
-    <div class="due-row">
-      <button type="button" class="cal-btn" id="dn-due-btn" title="Régler l'échéance"></button>
-      <span id="dn-due-label" class="due-label">Aucune échéance</span>
-      <input type="hidden" id="dn-due">
+    <div class="field-actions-row">
+      <button class="btn ghost sm" id="dn-add-item" type="button" hidden>+ Élément</button>
+      <div class="due-row">
+        <button type="button" class="cal-btn" id="dn-due-btn" title="Régler l'échéance"></button>
+        <span id="dn-due-label" class="due-label">Aucune échéance</span>
+        <input type="hidden" id="dn-due">
+      </div>
     </div>
   </div>
   <div class="field">
@@ -208,12 +215,14 @@
   </div>
   <div class="field" id="dns-items-field" hidden>
     <div id="dns-items"></div>
-    <button class="btn ghost sm" id="dns-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
   </div>
-  <div class="due-row">
-    <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
-    <span id="dns-due-label" class="due-label">Aucune échéance</span>
-    <input type="hidden" id="dns-due">
+  <div class="field-actions-row">
+    <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
+    <div class="due-row">
+      <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
+      <span id="dns-due-label" class="due-label">Aucune échéance</span>
+      <input type="hidden" id="dns-due">
+    </div>
   </div>
 </dialog>
 

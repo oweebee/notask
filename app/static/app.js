@@ -572,7 +572,10 @@ function notesReorderable() {
 
 function renderNotes() {
   const grid = $('#notes-grid');
-  grid.innerHTML = '';
+  // Le composeur et la recherche vivent en dur DANS #notes-grid (voir
+  // index.html) : on ne retire que les cartes de note d'un rendu précédent,
+  // jamais tout le conteneur, sous peine de les faire disparaître.
+  grid.querySelectorAll('.note').forEach((el) => el.remove());
   $('#notes-empty').hidden = state.notes.length > 0;
   const dragOk = notesReorderable();
 
@@ -585,11 +588,12 @@ function renderNotes() {
       title="${n.pinned ? 'Désépingler' : 'Épingler'}"
       aria-label="${n.pinned ? 'Désépingler' : 'Épingler'}">${n.pinned ? ICONS.pinFilled : ICONS.pin}</button>`;
 
-    if (n.icon && ICON_CHOICES[n.icon]) {
-      inner += `<div class="note-icon">${ICON_CHOICES[n.icon]}</div>`;
+    // Icône à gauche du titre, sur la même ligne (plutôt qu'au-dessus).
+    if ((n.icon && ICON_CHOICES[n.icon]) || n.title) {
+      const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
+      const title = n.title ? `<h3>${escapeHtml(n.title)}</h3>` : '';
+      inner += `<div class="note-title-row">${icon}${title}</div>`;
     }
-
-    if (n.title) inner += `<h3>${escapeHtml(n.title)}</h3>`;
     if (n.description) inner += `<div class="description">${escapeHtml(n.description)}</div>`;
 
     if (n.is_checklist) {
@@ -974,6 +978,7 @@ $('#dn-icon-btn').addEventListener('click', () => {
 function renderDialogMode() {
   $('#dn-content-field').hidden = state.editingIsChecklist;
   $('#dn-items-field').hidden = !state.editingIsChecklist;
+  $('#dn-add-item').hidden = !state.editingIsChecklist;
   $('#dn-toggle-checklist').textContent =
     state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
 }
@@ -1110,6 +1115,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-content').value = note.content;
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
+  $('#dns-add-item').hidden = !state.editingIsChecklist;
   $('#dns-due').value = note.due_at || '';
   renderNoteDueBtnSimple();
   renderNoteItemsSimple();
