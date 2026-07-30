@@ -570,6 +570,40 @@ function notesReorderable() {
   return !state.showArchived && !state.search && !state.labelFilter;
 }
 
+/* Largeur du composeur et de la recherche : exactement deux cartes de note
+   (+ le gap entre elles), centrés via marge automatique sur leur propre
+   ligne pleine largeur (voir le commentaire CSS sur .notes-grid .note-composer
+   pour le pourquoi — un positionnement par numéro de colonne ne se centre
+   pas de façon fiable, une largeur calculée en pixels si). On lit la largeur
+   réelle d'une carte via la première piste de la grille ; sous 860px (mode
+   mobile, grille à une seule colonne) on retire toute limite de largeur. */
+function sizeComposer() {
+  const grid = $('#notes-grid');
+  const composer = $('.note-composer');
+  const search = $('.search-toolbar');
+  if (!grid || !composer || !search) return;
+
+  if (window.innerWidth <= 860) {
+    composer.style.maxWidth = '';
+    search.style.maxWidth = '';
+    return;
+  }
+
+  const tracks = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/);
+  const cardWidth = parseFloat(tracks[0]);
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 16;
+  if (!cardWidth) return;
+  const value = `${cardWidth * 2 + gap}px`;
+  composer.style.maxWidth = value;
+  search.style.maxWidth = value;
+}
+
+let _sizeResizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_sizeResizeTimer);
+  _sizeResizeTimer = setTimeout(sizeComposer, 150);
+});
+
 function renderNotes() {
   const grid = $('#notes-grid');
   // Le composeur et la recherche vivent en dur DANS #notes-grid (voir
@@ -578,6 +612,7 @@ function renderNotes() {
   grid.querySelectorAll('.note').forEach((el) => el.remove());
   $('#notes-empty').hidden = state.notes.length > 0;
   const dragOk = notesReorderable();
+  sizeComposer();
 
   for (const n of state.notes) {
     const el = document.createElement('article');

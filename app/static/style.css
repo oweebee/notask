@@ -303,20 +303,32 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
    est laissé par le menu, et reste centrée dans cet espace. */
 main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
-/* Le composeur et la recherche sont désormais des éléments de la mosaïque
-   elle-même (voir .notes-grid) : largeur de deux cartes, décalés d'une
-   colonne pour qu'une note tombe naturellement dans la colonne 1 restée
-   libre à gauche (le placement automatique de la grille comble toujours
-   la première cellule libre en suivant l'ordre du DOM). */
+/* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),
+   chacun sur sa propre ligne pleine largeur, mais centrés et limités à la
+   largeur de deux cartes.
+   Vérifié en navigateur headless (avant ce fix) : essayer de les positionner
+   sur 2 colonnes précises d'une grille à peu de colonnes (grid-column: 2 /
+   span 2) ne les centre pas — le placement automatique de CSS Grid ne comble
+   jamais les colonnes laissées libres AVANT un élément explicitement
+   positionné (les notes suivantes atterrissent toutes après lui, jamais
+   avant), et le nombre de colonnes n'est presque jamais un multiple pair
+   compatible avec un centrage exact à 2 colonnes fixes. En les mettant
+   plutôt sur toute la largeur (grid-column: 1 / -1) et en centrant leur
+   propre boîte via marge automatique + largeur calculée (2 cartes + le gap),
+   le centrage est exact quel que soit le nombre de colonnes — app.js calcule
+   cette largeur (voir sizeComposer()) à partir de la taille réelle d'une
+   carte. Contrepartie assumée : les notes ne partagent plus littéralement la
+   ligne du composeur/de la recherche (elles suivent juste en dessous, la
+   mosaïque « montant » toujours jusqu'en haut). */
 .notes-grid .note-composer,
 .notes-grid .search-toolbar {
-  grid-column: 2 / span 2;
-  margin: 0;
+  grid-column: 1 / -1;
+  margin: 0 auto;
 }
 
 @media (max-width: 860px) {
   main { width: 100%; }
-  .notes-grid .note-composer, .notes-grid .search-toolbar { grid-column: 1 / -1; }
+  .notes-grid .note-composer, .notes-grid .search-toolbar { max-width: none !important; }
 }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
@@ -499,7 +511,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .note .actions {
   display: flex;
   gap: .125rem;
-  margin-top: .5rem;
+  margin-top: 1rem;
   opacity: 0;
   transition: opacity .18s ease;
 }
@@ -772,6 +784,14 @@ input[type=checkbox] {
   height: 16.5px;
   flex: none;
   margin: 0;
+  /* Sans ce reset, une case nichée dans un .field (ex. .dn-item-row en
+     édition complète) hérite du padding de « .field input » (règle plus
+     générique). Même quand width/height gagnent bien la cascade, Chromium
+     ajoute ce padding par-dessus la taille déclarée pour ce type de champ
+     (case à cocher) au lieu de le contenir dans la boîte — la case rendue
+     grossit alors bien au-delà de 16.5px. Vérifié en isolant le cas dans un
+     navigateur headless : suffit à lui seul à corriger la taille. */
+  padding: 0;
   border: 2px solid var(--md-outline);
   border-radius: 4px;
   background: transparent;
