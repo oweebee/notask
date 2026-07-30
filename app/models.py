@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -55,6 +56,19 @@ class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+# ============================== Réglages ==============================
+# Boîte libre : le serveur conserve un objet JSON par utilisateur sans
+# interpréter son contenu. Le web et un futur client Android y rangent ce
+# qu'ils veulent (thème, tri, dernière liste ouverte…) sans modification
+# du serveur.
+
+class UserSettings(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, unique=True)
+    data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 # ================================= Notes =================================

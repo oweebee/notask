@@ -156,3 +156,47 @@ def test_full_flow():
 
     # --- Jeton invalide ---
     assert client.get("/api/auth/me", headers=auth("n-importe-quoi")).status_code == 401
+
+
+def test_settings():
+    """Réglages : stockage libre, fusion, suppression de clé, cloisonnement."""
+    admin_token = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    # Vide au départ
+    assert client.get("/api/settings", headers=auth(admin_token)).json() == {}
+
+    # Écriture libre : le serveur n'impose aucun schéma
+    r = client.patch("/api/settings",
+                     json={"theme": "dark", "tri": "date", "widget": {"liste": 3, "compact": True}},
+                     headers=auth(admin_token))
+    assert r.status_code == 200
+    assert r.json()["widget"]["liste"] == 3
+
+    # Fusion : les clés absentes sont conservées
+    r = client.patch("/api/settings", json={"theme": "light"}, headers=auth(admin_token))
+    assert r.json() == {"theme": "light", "tri": "date", "widget": {"liste": 3, "compact": True}}
+
+    # null supprime la clé
+    r = client.patch("/api/settings", json={"tri": None}, headers=auth(admin_token))
+    assert "tri" not in r.json()
+
+    # PUT remplace tout
+    r = client.put("/api/settings", json={"theme": "auto"}, headers=auth(admin_token))
+    assert r.json() == {"theme": "auto"}
+    assert client.get("/api/settings", headers=auth(admin_token)).json() == {"theme": "auto"}
+
+    # Garde-fous
+    assert client.put("/api/settings", json={"x": "y" * 20000},
+                      headers=auth(admin_token)).status_code == 400
+    assert client.put("/api/settings", json={str(i): i for i in range(200)},
+                      headers=auth(admin_token)).status_code == 400
+
+    # Cloisonnement : un autre compte a ses propres réglages
+    client.post("/api/users", json={"username": "zoe", "password": "motdepasse9"},
+                headers=auth(admin_token))
+    zoe_token = client.post("/api/auth/login",
+                            json={"username": "zoe", "password": "motdepasse9"}).json()["access_token"]
+    assert client.get("/api/settings", headers=auth(zoe_token)).json() == {}
+
+    # Sans jeton, rien
+    assert client.get("/api/settings").status_code == 401

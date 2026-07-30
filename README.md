@@ -56,6 +56,9 @@ Documentation interactive sur `/docs`.
 | POST | `/api/auth/password` | changer son mot de passe |
 | GET/POST | `/api/users` | lister / créer un compte (admin) |
 | PATCH/DELETE | `/api/users/{id}` | modifier / supprimer (admin) |
+| GET | `/api/settings` | réglages de l'utilisateur |
+| PATCH | `/api/settings` | fusionner des clés (`null` supprime) |
+| PUT | `/api/settings` | remplacer tous les réglages |
 | GET/POST | `/api/notes` | lister / créer |
 | GET/PATCH/DELETE | `/api/notes/{id}` | détail / modifier / supprimer |
 | GET/POST | `/api/lists` | listes de tâches |
@@ -66,6 +69,21 @@ Documentation interactive sur `/docs`.
 
 Le jeton est valable 30 jours — adapté à un client Android natif dont les
 widgets d'écran d'accueil interrogent l'API en tâche de fond.
+
+### Réglages
+
+`/api/settings` est une boîte JSON libre, une par utilisateur : le serveur
+conserve le contenu sans l'interpréter. Ajouter un réglage côté client ne
+demande donc aucune modification du serveur — pratique pour que le web et le
+widget Android partagent la même configuration.
+
+```bash
+curl -X PATCH https://notask.exemple.tld/api/settings \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"theme":"dark","widget_liste":3}'
+```
+
+Limites : 100 clés par utilisateur, 10 000 caractères par valeur texte.
 
 ## Sécurité
 

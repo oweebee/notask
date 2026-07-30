@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
-from app.routers import auth, notes, tasks, users
+from app.routers import auth, notes, settings, tasks, users
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -38,6 +38,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(settings.router)
 app.include_router(notes.router)
 app.include_router(tasks.router)
 

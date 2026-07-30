@@ -7,7 +7,17 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.deps import get_current_admin
-from app.models import Note, NoteItem, Task, TaskList, User, UserCreate, UserPublic, UserUpdate
+from app.models import (
+    Note,
+    NoteItem,
+    Task,
+    TaskList,
+    User,
+    UserCreate,
+    UserPublic,
+    UserSettings,
+    UserUpdate,
+)
 from app.security import hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -107,6 +117,8 @@ def delete_user(
         session.delete(task)
     for tl in session.exec(select(TaskList).where(TaskList.user_id == user_id)).all():
         session.delete(tl)
+    for s in session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).all():
+        session.delete(s)
 
     session.delete(user)
     session.commit()
