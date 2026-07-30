@@ -304,31 +304,25 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 /* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),
-   chacun sur sa propre ligne pleine largeur, mais centrés et limités à la
-   largeur de deux cartes.
-   Vérifié en navigateur headless (avant ce fix) : essayer de les positionner
-   sur 2 colonnes précises d'une grille à peu de colonnes (grid-column: 2 /
-   span 2) ne les centre pas — le placement automatique de CSS Grid ne comble
-   jamais les colonnes laissées libres AVANT un élément explicitement
-   positionné (les notes suivantes atterrissent toutes après lui, jamais
-   avant), et le nombre de colonnes n'est presque jamais un multiple pair
-   compatible avec un centrage exact à 2 colonnes fixes. En les mettant
-   plutôt sur toute la largeur (grid-column: 1 / -1) et en centrant leur
-   propre boîte via marge automatique + largeur calculée (2 cartes + le gap),
-   le centrage est exact quel que soit le nombre de colonnes — app.js calcule
-   cette largeur (voir sizeComposer()) à partir de la taille réelle d'une
-   carte. Contrepartie assumée : les notes ne partagent plus littéralement la
-   ligne du composeur/de la recherche (elles suivent juste en dessous, la
-   mosaïque « montant » toujours jusqu'en haut). */
+   larges de deux cartes, centrés, avec des notes des deux côtés.
+   La règle ci-dessous (grid-column: 2 / span 2) n'est qu'un repli pour le
+   tout premier instant d'affichage : la vraie colonne de départ (centrée
+   selon le nombre RÉEL de colonnes) et la ligne de chaque élément sont
+   calculées et posées en style inline par app.js (voir layoutMosaic()).
+   C'est nécessaire car, vérifié en navigateur headless : le placement
+   automatique de CSS Grid ne comble jamais une colonne restée libre avant un
+   élément explicitement positionné — sans placer nous-mêmes explicitement
+   les quelques notes voisines, elles atterriraient toutes après le composeur
+   et la recherche, jamais à côté. */
 .notes-grid .note-composer,
 .notes-grid .search-toolbar {
-  grid-column: 1 / -1;
-  margin: 0 auto;
+  grid-column: 2 / span 2;
+  margin: 0;
 }
 
 @media (max-width: 860px) {
   main { width: 100%; }
-  .notes-grid .note-composer, .notes-grid .search-toolbar { max-width: none !important; }
+  .notes-grid .note-composer, .notes-grid .search-toolbar { grid-column: 1 / -1; }
 }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
@@ -342,12 +336,16 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .toolbar input[type=search] { flex: 1; min-width: 200px; }
 .toolbar input:focus { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 
+/* Écho de la cuillère bleue du logo sur la barre de recherche. */
+.search-toolbar input[type=search] { background: #1d548f; }
+
 .empty { color: var(--md-on-surface-variant); text-align: center; padding: 4rem 1rem; font-size: .875rem; }
 
 /* ============================== Notes ============================== */
 
 .note-composer {
-  background: var(--md-surface-2);
+  /* Écho de la cuillère jaune du logo. */
+  background: #856614;
   border-radius: var(--shape-md);
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;

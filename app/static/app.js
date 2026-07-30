@@ -570,38 +570,75 @@ function notesReorderable() {
   return !state.showArchived && !state.search && !state.labelFilter;
 }
 
-/* Largeur du composeur et de la recherche : exactement deux cartes de note
-   (+ le gap entre elles), centrés via marge automatique sur leur propre
-   ligne pleine largeur (voir le commentaire CSS sur .notes-grid .note-composer
-   pour le pourquoi — un positionnement par numéro de colonne ne se centre
-   pas de façon fiable, une largeur calculée en pixels si). On lit la largeur
-   réelle d'une carte via la première piste de la grille ; sous 860px (mode
-   mobile, grille à une seule colonne) on retire toute limite de largeur. */
-function sizeComposer() {
+/* Place le composeur, la recherche, ET assez de notes pour les entourer des
+   deux côtés — le tout en colonnes/lignes de grille EXPLICITES, calculées à
+   partir du nombre réel de colonnes.
+   Vérifié en navigateur headless : le placement automatique de CSS Grid ne
+   comble JAMAIS une colonne restée libre avant un élément explicitement
+   positionné (les notes suivantes, en position automatique, atterrissent
+   systématiquement après lui, jamais avant, quel que soit leur ordre dans le
+   DOM). Un simple "grid-column" sur le composeur ne suffit donc pas à faire
+   apparaître des notes à sa gauche : il faut aussi positionner soi-même,
+   explicitement, les quelques notes qui doivent occuper ces cases-là. Les
+   notes suivantes (au-delà de ce qu'il faut pour remplir les deux rangées du
+   composeur et de la recherche) retrouvent un placement 100% automatique à
+   partir de la rangée suivante — inchangé, aucune limite de nombre de notes. */
+function layoutMosaic() {
   const grid = $('#notes-grid');
   const composer = $('.note-composer');
   const search = $('.search-toolbar');
+  const noteEls = $$('#notes-grid .note');
   if (!grid || !composer || !search) return;
 
+  const reset = (el) => { el.style.gridColumn = ''; el.style.gridRow = ''; };
+
   if (window.innerWidth <= 860) {
-    composer.style.maxWidth = '';
-    search.style.maxWidth = '';
+    reset(composer); reset(search);
+    noteEls.forEach(reset);
     return;
   }
 
-  const tracks = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/);
-  const cardWidth = parseFloat(tracks[0]);
-  const gap = parseFloat(getComputedStyle(grid).columnGap) || 16;
-  if (!cardWidth) return;
-  const value = `${cardWidth * 2 + gap}px`;
-  composer.style.maxWidth = value;
-  search.style.maxWidth = value;
+  const cols = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
+  const span = Math.min(2, cols);
+  const start = Math.max(1, Math.floor((cols - span) / 2) + 1);
+  const colValue = `${start} / span ${span}`;
+
+  let row = 1;
+  const composerVisible = !composer.hidden;
+  if (composerVisible) {
+    composer.style.gridColumn = colValue;
+    composer.style.gridRow = String(row);
+    row += 1;
+  } else {
+    reset(composer);
+  }
+  const searchRow = row;
+  search.style.gridColumn = colValue;
+  search.style.gridRow = String(searchRow);
+
+  let noteIdx = 0;
+  const placeSideNotes = (rowNum) => {
+    for (let c = 1; c < start && noteIdx < noteEls.length; c++, noteIdx++) {
+      noteEls[noteIdx].style.gridColumn = String(c);
+      noteEls[noteIdx].style.gridRow = String(rowNum);
+    }
+    for (let c = start + span; c <= cols && noteIdx < noteEls.length; c++, noteIdx++) {
+      noteEls[noteIdx].style.gridColumn = String(c);
+      noteEls[noteIdx].style.gridRow = String(rowNum);
+    }
+  };
+  if (composerVisible) placeSideNotes(1);
+  placeSideNotes(searchRow);
+
+  // Le reste suit un placement automatique normal, à partir de la rangée
+  // suivante (aucune case du composeur/de la recherche ne reste à combler).
+  for (; noteIdx < noteEls.length; noteIdx++) reset(noteEls[noteIdx]);
 }
 
-let _sizeResizeTimer;
+let _layoutResizeTimer;
 window.addEventListener('resize', () => {
-  clearTimeout(_sizeResizeTimer);
-  _sizeResizeTimer = setTimeout(sizeComposer, 150);
+  clearTimeout(_layoutResizeTimer);
+  _layoutResizeTimer = setTimeout(layoutMosaic, 150);
 });
 
 function renderNotes() {
@@ -612,7 +649,6 @@ function renderNotes() {
   grid.querySelectorAll('.note').forEach((el) => el.remove());
   $('#notes-empty').hidden = state.notes.length > 0;
   const dragOk = notesReorderable();
-  sizeComposer();
 
   for (const n of state.notes) {
     const el = document.createElement('article');
@@ -752,6 +788,8 @@ function renderNotes() {
 
     grid.appendChild(el);
   }
+
+  layoutMosaic();
 }
 
 /* Pendant le survol, on déplace en direct la carte glissée juste avant ou
