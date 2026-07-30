@@ -28,6 +28,14 @@ const BUCKET_LABELS = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+/* Filet de sécurité : une action qui échoue sans être explicitement
+   rattrapée ne doit jamais rester silencieuse — sans quoi un clic qui ne
+   fait rien devient indiscernable d'un bug de l'interface. */
+window.addEventListener('unhandledrejection', (e) => {
+  const texte = e.reason && e.reason.message ? e.reason.message : 'Une erreur est survenue.';
+  if (texte !== 'Session expirée') alert(texte);
+});
+
 /* ------------------------------- API ------------------------------- */
 
 function token() { return localStorage.getItem(TOKEN_KEY); }
@@ -343,20 +351,97 @@ function renderNotes() {
   }
 }
 
+/* Composeur — bascule entre texte libre et liste à cocher en direct : dès
+   qu'on coche l'option, chaque ligne devient une case, comme dans Keep. */
+let composerChecklist = false;
+let composerItems = [{ text: '', checked: false }];
+
+function resetComposer() {
+  $('#nc-title').value = '';
+  $('#nc-content').value = '';
+  composerChecklist = false;
+  composerItems = [{ text: '', checked: false }];
+  renderComposer();
+  msg($('#composer-msg'), '');
+}
+
+function renderComposer() {
+  $('#nc-content').hidden = composerChecklist;
+  $('#nc-items').hidden = !composerChecklist;
+  $('#nc-toggle-checklist').classList.toggle('active-toggle', composerChecklist);
+  $('#nc-cancel').hidden = !composerChecklist;
+  if (!composerChecklist) return;
+
+  const box = $('#nc-items');
+  box.innerHTML = '';
+  composerItems.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'composer-item-row';
+    row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
+      <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
+      <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
+    const [cb, txt, del] = row.children;
+    cb.onchange = (e) => { item.checked = e.target.checked; };
+    txt.oninput = (e) => { item.text = e.target.value; };
+    txt.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      // Entrée sur la dernière ligne : on en ouvre une nouvelle, comme Keep.
+      if (idx === composerItems.length - 1 && txt.value.trim()) {
+        composerItems.push({ text: '', checked: false });
+        renderComposer();
+        $('#nc-items').lastElementChild.querySelector('input[type=text]').focus();
+      }
+    };
+    del.onclick = () => {
+      composerItems.splice(idx, 1);
+      if (composerItems.length === 0) composerItems.push({ text: '', checked: false });
+      renderComposer();
+    };
+    box.appendChild(row);
+  });
+}
+
+$('#nc-toggle-checklist').addEventListener('click', () => {
+  if (!composerChecklist) {
+    // Bascule depuis le texte libre : chaque ligne déjà tapée devient un élément.
+    const lignes = $('#nc-content').value.split('\n').filter((l) => l.trim());
+    composerItems = lignes.length
+      ? lignes.map((l) => ({ text: l.trim(), checked: false }))
+      : [{ text: '', checked: false }];
+  }
+  composerChecklist = !composerChecklist;
+  renderComposer();
+});
+
+$('#nc-cancel').addEventListener('click', resetComposer);
+
 $('#nc-add').addEventListener('click', async () => {
   const title = $('#nc-title').value.trim();
   const content = $('#nc-content').value.trim();
-  const isChecklist = $('#nc-checklist').checked;
-  if (!title && !content) return;
+  const items = composerItems.filter((i) => i.text.trim());
 
-  const body = { title, content: isChecklist ? '' : content, is_checklist: isChecklist, items: [] };
-  if (isChecklist) {
-    body.items = content.split('\n').filter((l) => l.trim()).map((l) => ({ text: l.trim(), checked: false }));
+  if (!title && !content && !(composerChecklist && items.length)) return;
+
+  const body = {
+    title,
+    content: composerChecklist ? '' : content,
+    is_checklist: composerChecklist,
+    items: composerChecklist ? items : [],
+  };
+
+  try {
+    await api('/notes', { method: 'POST', body });
+    resetComposer();
+    loadNotes();
+  } catch (err) {
+    // Sans ceci, un échec silencieux donne l'impression que le bouton ne
+    // fait rien — on affiche toujours la cause dans le composeur.
+    msg($('#composer-msg'), err.message);
   }
-  await api('/notes', { method: 'POST', body });
-  $('#nc-title').value = ''; $('#nc-content').value = ''; $('#nc-checklist').checked = false;
-  loadNotes();
 });
+
+renderComposer();
 
 let searchTimer;
 $('#notes-search').addEventListener('input', (e) => {

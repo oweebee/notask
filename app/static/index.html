@@ -87,13 +87,14 @@
       <div class="note-composer">
         <input class="title-in" id="nc-title" placeholder="Titre">
         <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+        <div id="nc-items" hidden></div>
         <div class="toolbar" style="margin: .6rem 0 0;">
-          <label style="font-size:.85rem;color:var(--muted)">
-            <input type="checkbox" id="nc-checklist"> Liste à cocher
-          </label>
+          <button class="btn ghost sm" id="nc-toggle-checklist" type="button">Liste à cocher</button>
           <span class="spacer" style="flex:1"></span>
+          <button class="btn ghost sm" id="nc-cancel" type="button" hidden>Annuler</button>
           <button class="btn sm" id="nc-add">Ajouter</button>
         </div>
+        <div id="composer-msg"></div>
       </div>
 
       <div class="toolbar">

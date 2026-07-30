@@ -261,7 +261,7 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
   }
 }
 
-main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; }
+main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .toolbar input[type=search], .toolbar input[type=text], .toolbar input[type=date] {
@@ -296,6 +296,34 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; }
 .note-composer input::placeholder, .note-composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .note-composer input:focus, .note-composer textarea:focus { outline: none; }
 .note-composer .title-in { font-size: 1rem; font-weight: 500; }
+
+/* Bascule "Liste à cocher" : état enfoncé une fois activée */
+#nc-toggle-checklist.active-toggle {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Lignes du composeur en mode liste : identiques aux cases des notes,
+   mais éditables en direct — Entrée sur la dernière ligne en ouvre une autre. */
+#nc-items { margin-top: .25rem; }
+.composer-item-row {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  padding: .25rem 0;
+}
+.composer-item-row input[type=text] {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--md-outline-variant);
+  color: var(--md-on-surface);
+  padding: .3rem 0;
+}
+.composer-item-row input[type=text]:focus { outline: none; border-bottom-color: var(--md-primary); }
+.composer-item-row button { flex: none; opacity: .6; }
+.composer-item-row button:hover { opacity: 1; }
 
 .notes-grid {
   display: grid;
@@ -513,7 +541,7 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; }
   color: var(--md-on-surface-variant);
 }
 .note-due svg { width: 14px; height: 14px; }
-.note-due input[type=checkbox] { width: 15px; height: 15px; margin: 0; }
+.note-due input[type=checkbox] { width: 18px; height: 18px; }
 .note-due.late { background: rgba(242,184,181,.15); color: var(--md-error); }
 .note-due.done { opacity: .6; }
 .note-due.done span { text-decoration: line-through; }
@@ -540,13 +568,41 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; }
   font-size: .75rem;
 }
 
-/* Cases à cocher aux couleurs du thème */
+/* Case à cocher Material : carré à coins doux, coche dessinée en CSS.
+   Remplace le rendu par défaut du navigateur sur toutes les cases de l'app. */
 input[type=checkbox] {
-  accent-color: var(--md-primary);
-  width: 18px; height: 18px;
-  margin-top: .15rem;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  margin: 0;
+  border: 2px solid var(--md-outline);
+  border-radius: 4px;
+  background: transparent;
+  display: inline-grid;
+  place-content: center;
   cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
 }
+input[type=checkbox]::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  margin-top: -1px;
+  border: solid var(--md-on-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform .12s ease;
+}
+input[type=checkbox]:checked {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+}
+input[type=checkbox]:checked::after { transform: rotate(45deg) scale(1); }
+input[type=checkbox]:hover { border-color: var(--md-on-surface); }
+input[type=checkbox]:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ============================= Comptes ============================= */
 
