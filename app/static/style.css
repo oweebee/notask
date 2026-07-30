@@ -49,6 +49,11 @@
 
 * { box-sizing: border-box; }
 
+/* Un sélecteur de classe (.gate, .tabs…) l'emporte sur le display:none que le
+   navigateur applique à [hidden]. Sans cette règle, les écrans masqués restent
+   visibles et se superposent. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
