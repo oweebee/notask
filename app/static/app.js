@@ -1,19 +1,28 @@
 /* notask — interface web. Vanilla JS, aucun framework. */
 
 const TOKEN_KEY = 'notask_token';
-const COLORS = ['default','red','orange','yellow','green','teal','blue','purple','pink','brown','grey'];
+const COLORS = [
+  'default', 'red', 'coral', 'orange', 'amber', 'yellow', 'lime',
+  'green', 'emerald', 'teal', 'cyan', 'blue', 'indigo', 'violet',
+  'purple', 'magenta', 'pink', 'rose', 'brown', 'slate', 'grey',
+];
 
 let state = {
   user: null,
+  view: 'notes',
   notes: [],
   showArchived: false,
   search: '',
-  lists: [],
-  currentListId: null,
   tasks: [],
   editingNote: null,
   editingNoteItems: [],
-  editingTask: null,
+};
+
+const BUCKET_LABELS = {
+  late: 'En retard',
+  today: "Aujourd'hui",
+  upcoming: 'À venir',
+  done: 'Terminées',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -56,12 +65,65 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+/* Icônes SVG, tracé uniquement — aucune police ni dépendance externe.
+   Volontairement différentes de celles de Keep tout en restant lisibles. */
+const ICONS = {
+  palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><path d="M12 14v6"/></svg>',
+  pinFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><path d="M12 14v6" fill="none"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>',
+  unarchive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M12 17v-5"/><path d="M9.5 14.5 12 12l2.5 2.5"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 4h4"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
 
-function formatDue(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+  /* Cuillère : grosse tête ovale, manche court. Jaune, en remplacement de
+     l'ampoule de Keep. */
+  spoon: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="8" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="7.6" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="13" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
+
+  tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l2 2 3.5-3.5"/><path d="M4 17l2 2 3.5-3.5"/><path d="M13 7h7"/><path d="M13 17h7"/></svg>',
+  late: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><circle cx="12" cy="14.5" r="1.6" fill="currentColor"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  noteRef: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 15.5h4"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+/* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
+function formatDue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  const now = new Date();
+  const heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const memeJour = (a, b) => a.toDateString() === b.toDateString();
+
+  const demain = new Date(now); demain.setDate(now.getDate() + 1);
+  const hier = new Date(now); hier.setDate(now.getDate() - 1);
+
+  if (memeJour(d, now)) return `aujourd'hui ${heure}`;
+  if (memeJour(d, demain)) return `demain ${heure}`;
+  if (memeJour(d, hier)) return `hier ${heure}`;
+
+  const jour = d.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+  return `${jour} ${heure}`;
+}
+
+/* Conversions entre <input type="datetime-local"> (heure locale, sans fuseau)
+   et l'ISO 8601 en UTC attendu par l'API. */
+function isoToLocalInput(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localInputToIso(value) {
+  return value ? new Date(value).toISOString() : null;
 }
 
 function show(id) {
@@ -87,6 +149,18 @@ function enterApp() {
   show('screen-app');
   $('#who').textContent = state.user.username;
   $('#tab-admin').hidden = !state.user.is_admin;
+  $('#admin-sep').hidden = !state.user.is_admin;
+
+  // Icônes du menu latéral et logo
+  $('#brand-logo').innerHTML = ICONS.spoon;
+  $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notes</span>';
+  $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
+  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes</span>';
+  $('#nav-late').innerHTML = ICONS.late + '<span class="label">En retard</span>';
+  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Aujourd\'hui</span>';
+  $('#nav-done').innerHTML = ICONS.check + '<span class="label">Terminées</span>';
+  $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
+
   switchView('notes');
   if (state.user.must_change_password) {
     $('#dlg-password').showModal();
@@ -94,13 +168,30 @@ function enterApp() {
   }
 }
 
+const TASK_VIEWS = { tasks: null, late: 'late', today: 'today', done: 'done' };
+
 function switchView(view) {
-  $$('nav.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
-  $('#view-notes').hidden = view !== 'notes';
-  $('#view-tasks').hidden = view !== 'tasks';
+  state.view = view;
+  $$('.drawer-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+
+  const isNotes = view === 'notes' || view === 'archives';
+  const isTasks = view in TASK_VIEWS;
+
+  $('#view-notes').hidden = !isNotes;
+  $('#view-tasks').hidden = !isTasks;
   $('#view-admin').hidden = view !== 'admin';
-  if (view === 'notes') loadNotes();
-  if (view === 'tasks') loadLists();
+
+  if (isNotes) {
+    state.showArchived = view === 'archives';
+    $('#notes-empty').textContent = state.showArchived ? 'Aucune note archivée.' : 'Aucune note.';
+    $('.note-composer').hidden = state.showArchived;  // on ne compose pas dans les archives
+    loadNotes();
+  }
+  if (isTasks) {
+    const titres = { tasks: 'Toutes les tâches', late: 'En retard', today: "Aujourd'hui", done: 'Terminées' };
+    $('#tasks-title').textContent = titres[view];
+    loadTasks(TASK_VIEWS[view]);
+  }
   if (view === 'admin') loadUsers();
 }
 
@@ -137,7 +228,7 @@ $('#form-login').addEventListener('submit', async (e) => {
 });
 
 $('#btn-logout').addEventListener('click', () => { setToken(null); location.reload(); });
-$$('nav.tabs button').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.view)));
+$$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.view)));
 
 /* -------------------------------- Notes -------------------------------- */
 
@@ -155,29 +246,46 @@ function renderNotes() {
 
   for (const n of state.notes) {
     const el = document.createElement('article');
-    el.className = 'note c-' + n.color;
+    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
 
-    let inner = '';
-    if (n.pinned) inner += '<span class="pin-mark">épinglée</span>';
+    let inner = `<button class="pin-btn" data-act="pin"
+      title="${n.pinned ? 'Désépingler' : 'Épingler'}"
+      aria-label="${n.pinned ? 'Désépingler' : 'Épingler'}">${n.pinned ? ICONS.pinFilled : ICONS.pin}</button>`;
+
     if (n.title) inner += `<h3>${escapeHtml(n.title)}</h3>`;
 
     if (n.is_checklist) {
       inner += '<ul class="check">';
       for (const it of n.items) {
+        const due = it.due_at
+          ? `<em class="item-due-tag">${formatDue(it.due_at)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
-          <input type="checkbox" ${it.checked ? 'checked' : ''}><span>${escapeHtml(it.text)}</span></li>`;
+          <input type="checkbox" ${it.checked ? 'checked' : ''}>
+          <span>${escapeHtml(it.text)}${due}</span></li>`;
       }
       inner += '</ul>';
     } else if (n.content) {
       inner += `<div class="body">${escapeHtml(n.content)}</div>`;
     }
 
-    inner += `<div class="actions">
-      <button data-act="edit">Modifier</button>
-      <button data-act="pin">${n.pinned ? 'Désépingler' : 'Épingler'}</button>
-      <button data-act="archive">${n.archived ? 'Désarchiver' : 'Archiver'}</button>
-      <button data-act="delete">Supprimer</button>
-    </div>`;
+    if (n.due_at) {
+      const now = new Date();
+      const late = !n.done && new Date(n.due_at) < now;
+      inner += `<div class="note-due ${late ? 'late' : ''} ${n.done ? 'done' : ''}">
+        <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
+        ${ICONS.clock}<span>${formatDue(n.due_at)}</span>
+      </div>`;
+    }
+
+    inner += `<div class="palette" hidden></div>
+      <div class="actions">
+        <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
+        <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
+          aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
+        <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
+        <span class="sep"></span>
+        <button data-act="delete" title="Supprimer" aria-label="Supprimer">${ICONS.trash}</button>
+      </div>`;
 
     el.innerHTML = inner;
 
@@ -196,14 +304,37 @@ function renderNotes() {
       loadNotes();
     };
 
+    const doneBox = el.querySelector('[data-act=done]');
+    if (doneBox) doneBox.onchange = async (e) => {
+      await api(`/tasks/note/${n.id}`, { method: 'PATCH', body: { done: e.target.checked } });
+      loadNotes();
+    };
+
+    // Palette dépliable, à même la carte
+    const palette = el.querySelector('.palette');
+    el.querySelector('[data-act=color]').onclick = () => {
+      if (!palette.dataset.filled) {
+        for (const c of COLORS) {
+          const s = document.createElement('button');
+          s.type = 'button';
+          s.className = 'swatch c-' + c + (c === n.color ? ' active' : '');
+          s.title = c;
+          s.onclick = async () => {
+            await api('/notes/' + n.id, { method: 'PATCH', body: { color: c } });
+            loadNotes();
+          };
+          palette.appendChild(s);
+        }
+        palette.dataset.filled = '1';
+      }
+      palette.hidden = !palette.hidden;
+    };
+
     el.querySelectorAll('ul.check li').forEach((li) => {
       li.querySelector('input').onchange = async (ev) => {
-        const items = n.items.map((i) => ({
-          id: i.id,
-          text: i.text,
-          checked: i.id === Number(li.dataset.item) ? ev.target.checked : i.checked,
-        }));
-        await api('/notes/' + n.id, { method: 'PATCH', body: { items } });
+        await api(`/notes/${n.id}/items/${li.dataset.item}`, {
+          method: 'PATCH', body: { checked: ev.target.checked },
+        });
         loadNotes();
       };
     });
@@ -233,20 +364,19 @@ $('#notes-search').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => { state.search = e.target.value.trim(); loadNotes(); }, 250);
 });
 
-$('#btn-archived').addEventListener('click', () => {
-  state.showArchived = !state.showArchived;
-  $('#btn-archived').textContent = state.showArchived ? 'Voir les notes actives' : 'Voir les archives';
-  loadNotes();
-});
+/* Les archives sont désormais une entrée du menu latéral, pas un bouton. */
 
 /* --- Dialogue note --- */
 
 function openNoteDialog(note) {
   state.editingNote = note;
-  state.editingNoteItems = note.items.map((i) => ({ text: i.text, checked: i.checked }));
+  state.editingNoteItems = note.items.map((i) => ({
+    text: i.text, checked: i.checked, due_at: i.due_at,
+  }));
 
   $('#dn-title').value = note.title;
   $('#dn-content').value = note.content;
+  $('#dn-due').value = isoToLocalInput(note.due_at);
   $('#dn-content-field').hidden = note.is_checklist;
   $('#dn-items-field').hidden = !note.is_checklist;
 
@@ -276,17 +406,22 @@ function renderNoteItems() {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:.4rem;align-items:center;margin-bottom:.35rem';
     row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-      <input type="text" value="${escapeHtml(item.text)}" style="flex:1">
-      <button class="btn ghost sm" type="button">✕</button>`;
+      <input type="text" value="${escapeHtml(item.text)}" style="flex:1" placeholder="Texte de la ligne">
+      <input type="datetime-local" value="${isoToLocalInput(item.due_at)}"
+             title="Dater cette ligne en fait une tâche" class="item-due">
+      <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
     row.children[0].onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
     row.children[1].oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
-    row.children[2].onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItems(); };
+    row.children[2].onchange = (e) => {
+      state.editingNoteItems[idx].due_at = localInputToIso(e.target.value);
+    };
+    row.children[3].onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItems(); };
     box.appendChild(row);
   });
 }
 
 $('#dn-add-item').addEventListener('click', () => {
-  state.editingNoteItems.push({ text: '', checked: false });
+  state.editingNoteItems.push({ text: '', checked: false, due_at: null });
   renderNoteItems();
 });
 
@@ -294,7 +429,11 @@ $('#dn-cancel').addEventListener('click', () => $('#dlg-note').close());
 
 $('#dn-save').addEventListener('click', async () => {
   const n = state.editingNote;
-  const body = { title: $('#dn-title').value, color: n.color };
+  const body = {
+    title: $('#dn-title').value,
+    color: n.color,
+    due_at: localInputToIso($('#dn-due').value),
+  };
   if (n.is_checklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());
   } else {
@@ -302,162 +441,83 @@ $('#dn-save').addEventListener('click', async () => {
   }
   await api('/notes/' + n.id, { method: 'PATCH', body });
   $('#dlg-note').close();
-  loadNotes();
+
+  // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
+  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
+  else loadNotes();
 });
 
-/* -------------------------------- Tâches -------------------------------- */
+/* -------------------------------- Tâches --------------------------------
+   Aucune création ici : une tâche est une note datée, ou une ligne à cocher
+   datée à l'intérieur d'une note. On ne fait que les lister et les cocher. */
 
-async function loadLists() {
-  state.lists = await api('/lists');
-  if (!state.currentListId || !state.lists.some((l) => l.id === state.currentListId)) {
-    state.currentListId = state.lists[0].id;
-  }
-  renderLists();
-  loadTasks();
-}
-
-function renderLists() {
-  const box = $('#lists-container');
-  box.innerHTML = '';
-  for (const l of state.lists) {
-    const b = document.createElement('button');
-    b.className = 'list-item' + (l.id === state.currentListId ? ' active' : '');
-    b.textContent = l.title;
-    b.onclick = () => { state.currentListId = l.id; renderLists(); loadTasks(); };
-    box.appendChild(b);
-  }
-  const cur = state.lists.find((l) => l.id === state.currentListId);
-  $('#list-title').textContent = cur ? cur.title : '';
-}
-
-async function loadTasks() {
-  state.tasks = await api(`/lists/${state.currentListId}/tasks`);
+async function loadTasks(bucket) {
+  const params = new URLSearchParams();
+  if (bucket) params.set('bucket', bucket);
+  state.tasks = await api('/tasks' + (params.toString() ? '?' + params : ''));
   renderTasks();
 }
 
 function renderTasks() {
-  const ul = $('#tasks-list');
-  ul.innerHTML = '';
+  const grid = $('#tasks-grid');
+  grid.innerHTML = '';
   $('#tasks-empty').hidden = state.tasks.length > 0;
 
-  const parents = state.tasks.filter((t) => t.parent_id === null);
-  const childrenOf = (id) => state.tasks.filter((t) => t.parent_id === id);
+  // Regroupement par échéance, dans un ordre qui a du sens à la lecture
+  const ordre = ['late', 'today', 'upcoming', 'done'];
+  const groupes = {};
+  for (const t of state.tasks) (groupes[t.bucket] ||= []).push(t);
 
-  const draw = (t, isSub) => {
-    const li = document.createElement('li');
-    li.className = 'task' + (t.completed ? ' done' : '') + (isSub ? ' sub' : '');
+  for (const b of ordre) {
+    if (!groupes[b]) continue;
 
-    const late = t.due_date && !t.completed && t.due_date < todayISO();
-    let meta = '';
-    if (t.due_date) meta += `<span class="${late ? 'late' : ''}">${formatDue(t.due_date)}${late ? ' — en retard' : ''}</span>`;
-    if (t.details) meta += `<span>${escapeHtml(t.details.slice(0, 60))}${t.details.length > 60 ? '…' : ''}</span>`;
+    const titre = document.createElement('h2');
+    titre.className = 'tasks-group' + (b === 'late' ? ' late' : '');
+    titre.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
+    grid.appendChild(titre);
 
-    li.innerHTML = `
-      <input type="checkbox" ${t.completed ? 'checked' : ''}>
-      <div class="t-main">
-        <div class="t-title">${t.starred ? '★ ' : ''}${escapeHtml(t.title)}</div>
-        ${meta ? `<div class="t-meta">${meta}</div>` : ''}
-      </div>
-      <div class="t-actions">
-        <button data-act="star">${t.starred ? '★' : '☆'}</button>
-        ${isSub ? '' : '<button data-act="sub">+ sous-tâche</button>'}
-        <button data-act="edit">Modifier</button>
-        <button data-act="del">✕</button>
-      </div>`;
+    const liste = document.createElement('div');
+    liste.className = 'task-cards';
 
-    li.querySelector('input').onchange = async (e) => {
-      await api('/tasks/' + t.id, { method: 'PATCH', body: { completed: e.target.checked } });
-      loadTasks();
-    };
-    li.querySelector('[data-act=star]').onclick = async () => {
-      await api('/tasks/' + t.id, { method: 'PATCH', body: { starred: !t.starred } });
-      loadTasks();
-    };
-    li.querySelector('[data-act=edit]').onclick = () => openTaskDialog(t);
-    li.querySelector('[data-act=del]').onclick = async () => {
-      await api('/tasks/' + t.id, { method: 'DELETE' });
-      loadTasks();
-    };
-    const subBtn = li.querySelector('[data-act=sub]');
-    if (subBtn) subBtn.onclick = async () => {
-      const title = prompt('Titre de la sous-tâche :');
-      if (!title || !title.trim()) return;
-      await api(`/lists/${state.currentListId}/tasks`, {
-        method: 'POST', body: { title: title.trim(), parent_id: t.id },
-      });
-      loadTasks();
-    };
+    for (const t of groupes[b]) {
+      const card = document.createElement('article');
+      card.className = 'task-card c-' + t.color + (t.done ? ' done' : '');
 
-    ul.appendChild(li);
-    if (!isSub) childrenOf(t.id).forEach((c) => draw(c, true));
-  };
+      // Une tâche issue d'une ligne rappelle toujours la note dont elle vient
+      const origine = t.kind === 'item'
+        ? `<button class="task-origin" title="Ouvrir la note">
+             ${ICONS.noteRef}<span>${escapeHtml(t.note_title || 'Note sans titre')}</span>
+           </button>`
+        : '';
 
-  parents.forEach((t) => draw(t, false));
+      card.innerHTML = `
+        <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Terminer">
+        <div class="task-main">
+          <div class="task-text">${escapeHtml(t.text)}</div>
+          <div class="task-meta">
+            <span class="${b === 'late' ? 'late' : ''}">${ICONS.clock}${formatDue(t.due_at)}</span>
+          </div>
+          ${origine}
+        </div>`;
+
+      card.querySelector('input').onchange = async (e) => {
+        await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
+        loadTasks(TASK_VIEWS[state.view]);
+      };
+
+      const lien = card.querySelector('.task-origin');
+      if (lien) lien.onclick = () => ouvrirNoteParId(t.note_id);
+
+      liste.appendChild(card);
+    }
+    grid.appendChild(liste);
+  }
 }
 
-$('#btn-add-task').addEventListener('click', async () => {
-  const title = $('#task-input').value.trim();
-  if (!title) return;
-  const due = $('#task-due').value || null;
-  await api(`/lists/${state.currentListId}/tasks`, { method: 'POST', body: { title, due_date: due } });
-  $('#task-input').value = ''; $('#task-due').value = '';
-  loadTasks();
-});
-
-$('#task-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-add-task').click(); });
-
-$('#btn-new-list').addEventListener('click', async () => {
-  const title = prompt('Nom de la nouvelle liste :');
-  if (!title || !title.trim()) return;
-  const tl = await api('/lists', { method: 'POST', body: { title: title.trim() } });
-  state.currentListId = tl.id;
-  loadLists();
-});
-
-$('#btn-rename-list').addEventListener('click', async () => {
-  const cur = state.lists.find((l) => l.id === state.currentListId);
-  const title = prompt('Nouveau nom :', cur.title);
-  if (!title || !title.trim()) return;
-  await api('/lists/' + cur.id, { method: 'PATCH', body: { title: title.trim() } });
-  loadLists();
-});
-
-$('#btn-delete-list').addEventListener('click', async () => {
-  if (!confirm('Supprimer cette liste et toutes ses tâches ?')) return;
-  try {
-    await api('/lists/' + state.currentListId, { method: 'DELETE' });
-    state.currentListId = null;
-    loadLists();
-  } catch (err) { alert(err.message); }
-});
-
-$('#btn-clear-done').addEventListener('click', async () => {
-  await api(`/lists/${state.currentListId}/clear-completed`, { method: 'POST' });
-  loadTasks();
-});
-
-function openTaskDialog(task) {
-  state.editingTask = task;
-  $('#dt-title').value = task.title;
-  $('#dt-details').value = task.details || '';
-  $('#dt-due').value = task.due_date || '';
-  $('#dlg-task').showModal();
+async function ouvrirNoteParId(noteId) {
+  const note = await api('/notes/' + noteId);
+  openNoteDialog(note);
 }
-
-$('#dt-cancel').addEventListener('click', () => $('#dlg-task').close());
-
-$('#dt-save').addEventListener('click', async () => {
-  await api('/tasks/' + state.editingTask.id, {
-    method: 'PATCH',
-    body: {
-      title: $('#dt-title').value.trim(),
-      details: $('#dt-details').value,
-      due_date: $('#dt-due').value || null,
-    },
-  });
-  $('#dlg-task').close();
-  loadTasks();
-});
 
 /* -------------------------------- Comptes -------------------------------- */
 

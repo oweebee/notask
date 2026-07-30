@@ -172,34 +172,96 @@ header.topbar {
   z-index: 10;
 }
 header.topbar .brand { font-size: 1.375rem; font-weight: 400; margin-right: .5rem; }
+header.topbar .logo { display: block; width: 28px; height: 28px; }
+header.topbar .logo svg { width: 100%; height: 100%; display: block; }
 header.topbar .spacer { flex: 1; }
 header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 
-/* Onglets MD3 : soulignement du libellé actif */
-nav.tabs { display: flex; height: 100%; }
-nav.tabs button {
-  position: relative;
-  padding: 0 1.25rem;
+/* ===================== Menu latéral (navigation drawer) ===================== */
+
+.shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+}
+
+.drawer {
+  padding: .75rem .75rem 2rem 0;
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.drawer-section {
+  margin: .75rem 0 .25rem;
+  padding-left: 1.5rem;
+  font-size: .6875rem;
+  font-weight: 500;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--md-on-surface-variant);
+}
+
+.drawer-sep {
+  border: none;
+  border-top: 1px solid var(--md-outline-variant);
+  margin: .75rem 0 .25rem 1rem;
+}
+
+/* Élément de navigation MD3 : pilule pleine à droite */
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 1.5rem 0 1.5rem;
   background: transparent;
   border: none;
+  border-radius: 0 var(--shape-full) var(--shape-full) 0;
   color: var(--md-on-surface-variant);
   font-size: .875rem;
   font-weight: 500;
   letter-spacing: .1px;
-  transition: color .15s;
+  text-align: left;
+  transition: background .15s, color .15s;
 }
-nav.tabs button:hover { color: var(--md-on-surface); }
-nav.tabs button.active { color: var(--md-primary); }
-nav.tabs button.active::after {
-  content: '';
-  position: absolute;
-  left: 1rem; right: 1rem; bottom: 0;
-  height: 3px;
-  background: var(--md-primary);
-  border-radius: 3px 3px 0 0;
+.drawer-item:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
+.drawer-item.active {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+.drawer-item svg { width: 22px; height: 22px; flex: none; }
+.drawer-item .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drawer-item.add { color: var(--md-on-surface-variant); }
+
+/* Sous 860 px le menu passe au-dessus du contenu, en bandeau défilant */
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .drawer {
+    position: static;
+    max-height: none;
+    display: flex;
+    gap: .5rem;
+    overflow-x: auto;
+    padding: .5rem 1rem;
+  }
+  .drawer-section, .drawer-sep { display: none; }
+  .drawer-item {
+    width: auto;
+    min-height: 40px;
+    padding: 0 1rem;
+    border-radius: var(--shape-full);
+    white-space: nowrap;
+  }
 }
 
-main { padding: 1.5rem 1rem; max-width: 1100px; margin: 0 auto; }
+main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .toolbar input[type=search], .toolbar input[type=text], .toolbar input[type=date] {
@@ -242,31 +304,85 @@ main { padding: 1.5rem 1rem; max-width: 1100px; margin: 0 auto; }
   align-items: start;
 }
 
+/* Carte Material : aucune bordure, c'est le ton de la surface qui la détache
+   du fond. L'élévation ne change qu'au survol. */
 .note {
-  border-radius: var(--shape-md);
-  padding: 1rem;
+  border: none;
+  border-radius: var(--shape-sm);
+  padding: .875rem 1rem .5rem;
   background: var(--md-surface-2);
   position: relative;
-  transition: box-shadow .15s;
+  transition: box-shadow .18s ease;
 }
-.note:hover { box-shadow: var(--elev-2); }
-.note h3 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 500; }
-.note .body { white-space: pre-wrap; word-break: break-word; font-size: .875rem; color: var(--md-on-surface-variant); }
-.note .actions { display: flex; gap: .25rem; margin-top: .875rem; flex-wrap: wrap; }
-.note .actions button {
-  background: transparent;
-  border: none;
-  border-radius: var(--shape-full);
-  color: var(--md-on-surface-variant);
-  padding: .3rem .7rem;
-  font-size: .75rem;
+.note:hover, .note:focus-within { box-shadow: var(--elev-2); }
+
+.note h3 {
+  margin: 0 1.75rem .5rem 0;   /* place réservée à l'épingle */
+  font-size: 1rem;
   font-weight: 500;
 }
-.note .actions button:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
-.note .pin-mark {
-  position: absolute; top: .75rem; right: .875rem;
-  font-size: .6875rem; letter-spacing: .5px;
-  color: var(--md-primary);
+.note .body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: .875rem;
+  color: var(--md-on-surface-variant);
+  min-height: 1.2em;
+}
+
+/* Épingle : visible seulement au survol, sauf si la note est épinglée */
+.note .pin-btn {
+  position: absolute;
+  top: .5rem; right: .5rem;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  opacity: 0;
+  transition: opacity .18s ease, background .15s;
+}
+.note .pin-btn:hover { background: rgba(230,224,233,.10); color: var(--md-on-surface); }
+.note:hover .pin-btn, .note:focus-within .pin-btn { opacity: 1; }
+.note.pinned .pin-btn { opacity: 1; color: var(--md-primary); }
+
+/* Barre d'icônes : apparaît en fondu au survol, comme dans Keep */
+.note .actions {
+  display: flex;
+  gap: .125rem;
+  margin-top: .5rem;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.note:hover .actions, .note:focus-within .actions { opacity: 1; }
+
+/* Sur écran tactile il n'y a pas de survol : on garde les icônes visibles */
+@media (hover: none) {
+  .note .actions, .note .pin-btn { opacity: 1; }
+}
+
+.note .actions button {
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  transition: background .15s, color .15s;
+}
+.note .actions button:hover { background: rgba(230,224,233,.10); color: var(--md-on-surface); }
+.note .actions .sep { flex: 1; }
+
+.note svg { width: 18px; height: 18px; display: block; }
+
+/* Palette dépliable dans la carte */
+.note .palette {
+  display: flex;
+  gap: .375rem;
+  flex-wrap: wrap;
+  padding: .5rem 0 .25rem;
 }
 
 .note ul.check { list-style: none; padding: 0; margin: .5rem 0 0; }
@@ -279,74 +395,150 @@ main { padding: 1.5rem 1rem; max-width: 1100px; margin: 0 auto; }
   border-radius: 50%;
   border: 1px solid var(--md-outline-variant);
   cursor: pointer;
+  padding: 0;
 }
+.swatch:hover { transform: scale(1.1); }
 .swatch.active { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+.note .palette .swatch { width: 22px; height: 22px; }
 
-/* Conteneurs tonaux de couleur, calibrés pour un fond sombre */
+/* Couleurs de note — saturées, sur deux rangées.
+   Assez soutenues pour se distinguer nettement, assez sombres pour que le
+   texte clair reste lisible. */
 .c-default { background: var(--md-surface-2); }
-.c-red     { background: #4e3436; }
-.c-orange  { background: #4d3a2c; }
-.c-yellow  { background: #4a452e; }
-.c-green   { background: #334736; }
-.c-teal    { background: #2d4744; }
-.c-blue    { background: #313f54; }
-.c-purple  { background: #3f3550; }
-.c-pink    { background: #4c3342; }
-.c-brown   { background: #3f3733; }
-.c-grey    { background: #35343a; }
+.c-red     { background: #7a2e33; }
+.c-coral   { background: #8a3a2a; }
+.c-orange  { background: #8a541c; }
+.c-amber   { background: #856614; }
+.c-yellow  { background: #7a6f12; }
+.c-lime    { background: #55771c; }
+.c-green   { background: #2f7a3c; }
+.c-emerald { background: #16785b; }
+.c-teal    { background: #146b6a; }
+.c-cyan    { background: #12607a; }
+.c-blue    { background: #1d548f; }
+.c-indigo  { background: #364196; }
+.c-violet  { background: #5138a3; }
+.c-purple  { background: #68318f; }
+.c-magenta { background: #7d2c7d; }
+.c-pink    { background: #8a2c61; }
+.c-rose    { background: #8a2c44; }
+.c-brown   { background: #664a37; }
+.c-slate   { background: #3f4b5a; }
+.c-grey    { background: #4b4b52; }
 
 /* ============================== Tâches ============================== */
 
-.tasks-layout { display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; }
-@media (max-width: 720px) { .tasks-layout { grid-template-columns: 1fr; } }
-
-.lists { background: var(--md-surface-1); border-radius: var(--shape-md); padding: .75rem; }
-.lists button.list-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: .75rem 1rem;
-  margin-bottom: .25rem;
-  background: transparent;
-  border: none;
-  border-radius: var(--shape-full);
+/* Rappel du principe, sous le titre de la vue */
+.tasks-hint {
+  margin: -.5rem 0 1.25rem;
+  font-size: .8125rem;
   color: var(--md-on-surface-variant);
-  font-size: .875rem;
+}
+
+.tasks-group {
+  margin: 1.5rem 0 .625rem;
+  font-size: .8125rem;
   font-weight: 500;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--md-on-surface-variant);
 }
-.lists button.list-item:hover { background: rgba(230,224,233,.08); }
-.lists button.list-item.active {
-  background: var(--md-secondary-container);
-  color: var(--md-on-secondary-container);
+.tasks-group:first-child { margin-top: 0; }
+.tasks-group.late { color: var(--md-error); }
+
+.task-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: .75rem;
+  align-items: start;
 }
 
-.task-panel { background: var(--md-surface-1); border-radius: var(--shape-md); padding: 1.25rem; }
-
-ul.tasks { list-style: none; padding: 0; margin: 0; }
-ul.tasks li.task {
+/* Carte de tâche : même langage visuel que la note, en plus compact */
+.task-card {
   display: flex;
-  gap: .875rem;
+  gap: .75rem;
   align-items: flex-start;
-  padding: .75rem 0;
-  border-bottom: 1px solid var(--md-outline-variant);
+  padding: .875rem 1rem;
+  border-radius: var(--shape-sm);
+  background: var(--md-surface-2);
+  transition: box-shadow .18s ease;
 }
-ul.tasks li.task.sub { padding-left: 2.25rem; }
-ul.tasks li.task.done .t-title { text-decoration: line-through; color: var(--md-on-surface-variant); }
-.t-main { flex: 1; min-width: 0; }
-.t-title { word-break: break-word; font-size: .9375rem; }
-.t-meta { font-size: .75rem; color: var(--md-on-surface-variant); display: flex; gap: .875rem; flex-wrap: wrap; margin-top: .25rem; }
-.t-meta .late { color: var(--md-error); }
-.t-actions { display: flex; gap: .25rem; }
-.t-actions button {
-  background: transparent;
+.task-card:hover { box-shadow: var(--elev-2); }
+.task-card.done { opacity: .6; }
+.task-card.done .task-text { text-decoration: line-through; }
+
+.task-main { flex: 1; min-width: 0; }
+.task-text { font-size: .9375rem; word-break: break-word; }
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .3rem;
+  font-size: .75rem;
+  color: var(--md-on-surface-variant);
+}
+.task-meta span { display: inline-flex; align-items: center; gap: .3rem; }
+.task-meta svg { width: 14px; height: 14px; }
+.task-meta .late { color: var(--md-error); font-weight: 500; }
+
+/* Rappel de la note d'origine, pour une tâche issue d'une ligne à cocher */
+.task-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .45rem;
+  padding: .2rem .625rem .2rem .45rem;
+  background: rgba(230,224,233,.07);
   border: none;
   border-radius: var(--shape-full);
   color: var(--md-on-surface-variant);
-  padding: .25rem .6rem;
   font-size: .75rem;
-  font-weight: 500;
+  max-width: 100%;
 }
-.t-actions button:hover { background: rgba(230,224,233,.08); color: var(--md-on-surface); }
+.task-origin:hover { background: rgba(230,224,233,.14); color: var(--md-on-surface); }
+.task-origin svg { width: 14px; height: 14px; flex: none; }
+.task-origin span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Échéance affichée sur la carte de note */
+.note-due {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .625rem;
+  padding: .25rem .7rem .25rem .45rem;
+  border-radius: var(--shape-full);
+  background: rgba(230,224,233,.09);
+  font-size: .75rem;
+  color: var(--md-on-surface-variant);
+}
+.note-due svg { width: 14px; height: 14px; }
+.note-due input[type=checkbox] { width: 15px; height: 15px; margin: 0; }
+.note-due.late { background: rgba(242,184,181,.15); color: var(--md-error); }
+.note-due.done { opacity: .6; }
+.note-due.done span { text-decoration: line-through; }
+
+/* Échéance d'une ligne à cocher, à même la note */
+.item-due-tag {
+  margin-left: .4rem;
+  padding: .05rem .4rem;
+  border-radius: var(--shape-full);
+  background: rgba(230,224,233,.10);
+  font-size: .6875rem;
+  font-style: normal;
+  color: var(--md-on-surface-variant);
+}
+
+/* Champ date des lignes, dans le dialogue */
+#dn-items .item-due {
+  width: 190px;
+  padding: .4rem .5rem;
+  background: var(--md-surface-4);
+  border: none;
+  border-radius: var(--shape-xs);
+  color: var(--md-on-surface);
+  font-size: .75rem;
+}
 
 /* Cases à cocher aux couleurs du thème */
 input[type=checkbox] {

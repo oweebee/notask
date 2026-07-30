@@ -10,8 +10,6 @@ from app.deps import get_current_admin
 from app.models import (
     Note,
     NoteItem,
-    Task,
-    TaskList,
     User,
     UserCreate,
     UserPublic,
@@ -113,10 +111,6 @@ def delete_user(
         session.delete(item)
     for note in session.exec(select(Note).where(Note.user_id == user_id)).all():
         session.delete(note)
-    for task in session.exec(select(Task).where(Task.user_id == user_id)).all():
-        session.delete(task)
-    for tl in session.exec(select(TaskList).where(TaskList.user_id == user_id)).all():
-        session.delete(tl)
     for s in session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).all():
         session.delete(s)
 

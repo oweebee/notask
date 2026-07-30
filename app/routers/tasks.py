@@ -1,5 +1,11 @@
-"""Tâches — équivalent Google Tasks : listes, échéance, détails, sous-tâches, étoile."""
+"""Tâches — vue sur les notes datées, sans table dédiée.
 
+Une tâche est soit une note portant une échéance, soit une case à cocher
+datée à l'intérieur d'une note. Rien ne se crée ici : toute tâche naît d'une
+note. On ne peut que la cocher, la décocher, ou la lire.
+"""
+
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,215 +13,142 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.deps import get_current_user
-from app.models import (
-    Task,
-    TaskCreate,
-    TaskList,
-    TaskListCreate,
-    TaskListOut,
-    TaskListUpdate,
-    TaskOut,
-    TaskUpdate,
-    User,
-    utcnow,
-)
+from app.models import Note, NoteItem, TaskDone, TaskOut, User, utcnow
 
-router = APIRouter(prefix="/api", tags=["tasks"])
+router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+BUCKETS = ("late", "today", "upcoming", "done")
 
 
-def _owned_list(list_id: int, user: User, session: Session) -> TaskList:
-    tl = session.get(TaskList, list_id)
-    if tl is None or tl.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liste introuvable")
-    return tl
+def _aware(dt: datetime) -> datetime:
+    """SQLite renvoie des datetimes sans fuseau : on les considère en UTC."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _owned_task(task_id: int, user: User, session: Session) -> Task:
-    task = session.get(Task, task_id)
-    if task is None or task.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tâche introuvable")
-    return task
+def _bucket(due_at: datetime, done: bool, now: datetime) -> str:
+    if done:
+        return "done"
+    due_at = _aware(due_at)
+    if due_at < now:
+        return "late"
+    if due_at.date() == now.date():
+        return "today"
+    return "upcoming"
 
 
-# ============================== Listes ==============================
-
-@router.get("/lists", response_model=List[TaskListOut])
-def list_lists(
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    lists = session.exec(
-        select(TaskList).where(TaskList.user_id == user.id).order_by(TaskList.position, TaskList.id)
-    ).all()
-    # Tout utilisateur dispose d'au moins une liste, comme dans Google Tasks.
-    if not lists:
-        default = TaskList(user_id=user.id, title="Mes tâches", position=0)
-        session.add(default)
-        session.commit()
-        session.refresh(default)
-        lists = [default]
-    return lists
-
-
-@router.post("/lists", response_model=TaskListOut, status_code=status.HTTP_201_CREATED)
-def create_list(
-    payload: TaskListCreate,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    count = len(session.exec(select(TaskList.id).where(TaskList.user_id == user.id)).all())
-    tl = TaskList(user_id=user.id, title=payload.title.strip(), position=count)
-    session.add(tl)
-    session.commit()
-    session.refresh(tl)
-    return tl
-
-
-@router.patch("/lists/{list_id}", response_model=TaskListOut)
-def update_list(
-    list_id: int,
-    payload: TaskListUpdate,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    tl = _owned_list(list_id, user, session)
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(tl, key, value)
-    session.add(tl)
-    session.commit()
-    session.refresh(tl)
-    return tl
-
-
-@router.delete("/lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_list(
-    list_id: int,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    tl = _owned_list(list_id, user, session)
-    remaining = session.exec(
-        select(TaskList).where(TaskList.user_id == user.id, TaskList.id != list_id)
-    ).first()
-    if remaining is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Impossible de supprimer la dernière liste")
-
-    for task in session.exec(select(Task).where(Task.list_id == list_id)).all():
-        session.delete(task)
-    session.delete(tl)
-    session.commit()
-
-
-# ============================== Tâches ==============================
-
-@router.get("/lists/{list_id}/tasks", response_model=List[TaskOut])
+@router.get("", response_model=List[TaskOut])
 def list_tasks(
-    list_id: int,
-    include_completed: bool = Query(default=True),
+    bucket: Optional[str] = Query(
+        default=None, description="late, today, upcoming ou done ; tout si absent"
+    ),
+    include_archived: bool = Query(default=False, description="Inclure les notes archivées"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    _owned_list(list_id, user, session)
-    stmt = select(Task).where(Task.list_id == list_id, Task.user_id == user.id)
-    if not include_completed:
-        stmt = stmt.where(Task.completed == False)  # noqa: E712
-    return session.exec(stmt.order_by(Task.completed, Task.position, Task.id)).all()
+    if bucket is not None and bucket not in BUCKETS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Regroupement inconnu : {bucket}")
+
+    now = utcnow()
+    tasks: List[TaskOut] = []
+
+    notes = session.exec(select(Note).where(Note.user_id == user.id)).all()
+    by_id = {n.id: n for n in notes}
+    visible = [n for n in notes if include_archived or not n.archived]
+
+    # 1. Les notes qui portent une échéance
+    for n in visible:
+        if n.due_at is None:
+            continue
+        tasks.append(TaskOut(
+            kind="note",
+            id=n.id,
+            note_id=n.id,
+            note_title=n.title,
+            text=n.title or (n.content[:80] if n.content else "Note sans titre"),
+            due_at=n.due_at,
+            done=n.done,
+            color=n.color,
+            bucket=_bucket(n.due_at, n.done, now),
+        ))
+
+    # 2. Les lignes à cocher qui portent une échéance
+    visible_ids = [n.id for n in visible]
+    if visible_ids:
+        items = session.exec(
+            select(NoteItem).where(NoteItem.note_id.in_(visible_ids), NoteItem.due_at.is_not(None))
+        ).all()
+        for it in items:
+            parent = by_id[it.note_id]
+            tasks.append(TaskOut(
+                kind="item",
+                id=it.id,
+                note_id=parent.id,
+                note_title=parent.title,
+                text=it.text or "Ligne sans texte",
+                due_at=it.due_at,
+                done=it.checked,
+                color=parent.color,
+                bucket=_bucket(it.due_at, it.checked, now),
+            ))
+
+    if bucket:
+        tasks = [t for t in tasks if t.bucket == bucket]
+
+    # Les tâches terminées en dernier, le reste par échéance croissante.
+    tasks.sort(key=lambda t: (t.done, _aware(t.due_at)))
+    return tasks
 
 
-@router.post("/lists/{list_id}/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-def create_task(
-    list_id: int,
-    payload: TaskCreate,
+@router.patch("/{kind}/{obj_id}", response_model=TaskOut)
+def set_done(
+    kind: str,
+    obj_id: int,
+    payload: TaskDone,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    _owned_list(list_id, user, session)
+    """Coche ou décoche une tâche, quelle que soit son origine."""
+    now = utcnow()
 
-    if payload.parent_id is not None:
-        parent = _owned_task(payload.parent_id, user, session)
-        if parent.parent_id is not None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Un seul niveau de sous-tâches")
-        if parent.list_id != list_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "La tâche parente est dans une autre liste")
+    if kind == "note":
+        note = session.get(Note, obj_id)
+        if note is None or note.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tâche introuvable")
+        if note.due_at is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette note n'a pas d'échéance")
 
-    count = len(session.exec(select(Task.id).where(Task.list_id == list_id)).all())
-    task = Task(**payload.model_dump(), user_id=user.id, list_id=list_id, position=count)
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-    return task
+        note.done = payload.done
+        note.done_at = now if payload.done else None
+        note.updated_at = now
+        session.add(note)
+        session.commit()
+        session.refresh(note)
 
+        return TaskOut(
+            kind="note", id=note.id, note_id=note.id, note_title=note.title,
+            text=note.title or "Note sans titre", due_at=note.due_at, done=note.done,
+            color=note.color, bucket=_bucket(note.due_at, note.done, now),
+        )
 
-@router.get("/tasks/{task_id}", response_model=TaskOut)
-def get_task(
-    task_id: int,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    return _owned_task(task_id, user, session)
+    if kind == "item":
+        item = session.get(NoteItem, obj_id)
+        if item is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tâche introuvable")
+        parent = session.get(Note, item.note_id)
+        if parent is None or parent.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tâche introuvable")
+        if item.due_at is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette ligne n'a pas d'échéance")
 
+        item.checked = payload.done
+        session.add(item)
+        session.commit()
+        session.refresh(item)
 
-@router.patch("/tasks/{task_id}", response_model=TaskOut)
-def update_task(
-    task_id: int,
-    payload: TaskUpdate,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    task = _owned_task(task_id, user, session)
-    data = payload.model_dump(exclude_unset=True)
+        return TaskOut(
+            kind="item", id=item.id, note_id=parent.id, note_title=parent.title,
+            text=item.text, due_at=item.due_at, done=item.checked,
+            color=parent.color, bucket=_bucket(item.due_at, item.checked, now),
+        )
 
-    if "list_id" in data and data["list_id"] is not None:
-        _owned_list(data["list_id"], user, session)
-    if "parent_id" in data and data["parent_id"] is not None:
-        if data["parent_id"] == task.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Une tâche ne peut pas être sa propre parente")
-        parent = _owned_task(data["parent_id"], user, session)
-        if parent.parent_id is not None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Un seul niveau de sous-tâches")
-
-    if "completed" in data and data["completed"] != task.completed:
-        task.completed_at = utcnow() if data["completed"] else None
-        # Cocher une tâche coche ses sous-tâches, comme dans Google Tasks.
-        if data["completed"]:
-            for child in session.exec(select(Task).where(Task.parent_id == task.id)).all():
-                child.completed = True
-                child.completed_at = task.completed_at
-                session.add(child)
-
-    for key, value in data.items():
-        setattr(task, key, value)
-
-    task.updated_at = utcnow()
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-    return task
-
-
-@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(
-    task_id: int,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    task = _owned_task(task_id, user, session)
-    for child in session.exec(select(Task).where(Task.parent_id == task.id)).all():
-        session.delete(child)
-    session.delete(task)
-    session.commit()
-
-
-@router.post("/lists/{list_id}/clear-completed", status_code=status.HTTP_204_NO_CONTENT)
-def clear_completed(
-    list_id: int,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    """Supprime les tâches terminées de la liste (bouton « Effacer terminées » de Google Tasks)."""
-    _owned_list(list_id, user, session)
-    for task in session.exec(
-        select(Task).where(Task.list_id == list_id, Task.user_id == user.id, Task.completed == True)  # noqa: E712
-    ).all():
-        session.delete(task)
-    session.commit()
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Type de tâche inconnu")

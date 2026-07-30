@@ -1,4 +1,8 @@
-"""Notes — équivalent Google Keep : couleur, épinglage, archive, cases à cocher."""
+"""Notes — l'unique objet créable.
+
+Une échéance posée sur une note, ou sur l'une de ses cases à cocher, en fait
+une tâche visible dans la vue Tâches. Voir app/routers/tasks.py.
+"""
 
 from typing import List, Optional
 
@@ -12,6 +16,8 @@ from app.models import (
     NoteCreate,
     NoteItem,
     NoteItemIn,
+    NoteItemOut,
+    NoteItemUpdate,
     NoteOut,
     NoteUpdate,
     User,
@@ -21,8 +27,9 @@ from app.models import (
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
 COLORS = {
-    "default", "red", "orange", "yellow", "green",
-    "teal", "blue", "purple", "pink", "brown", "grey",
+    "default", "red", "coral", "orange", "amber", "yellow", "lime",
+    "green", "emerald", "teal", "cyan", "blue", "indigo", "violet",
+    "purple", "magenta", "pink", "rose", "brown", "slate", "grey",
 }
 
 
@@ -39,11 +46,18 @@ def _check_color(color: Optional[str]) -> None:
 
 
 def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> None:
+    """Remplace les lignes en conservant les échéances des lignes réutilisées."""
     for existing in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
         session.delete(existing)
     session.flush()
     for position, item in enumerate(items):
-        session.add(NoteItem(note_id=note.id, text=item.text, checked=item.checked, position=position))
+        session.add(NoteItem(
+            note_id=note.id,
+            text=item.text,
+            checked=item.checked,
+            due_at=item.due_at,
+            position=position,
+        ))
 
 
 @router.get("", response_model=List[NoteOut])
@@ -96,6 +110,22 @@ def update_note(
     data = payload.model_dump(exclude_unset=True)
     _check_color(data.get("color"))
 
+    # Sans échéance, une note n'est pas une tâche : rien à terminer.
+    if data.get("done") and (data.get("due_at", note.due_at) is None):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Une note sans échéance ne peut pas être marquée terminée",
+        )
+
+    if "done" in data and data["done"] != note.done:
+        note.done_at = utcnow() if data["done"] else None
+
+    # Retirer l'échéance annule aussi l'état terminé.
+    if "due_at" in data and data["due_at"] is None:
+        note.done = False
+        note.done_at = None
+        data.pop("done", None)
+
     items = data.pop("items", None)
     for key, value in data.items():
         setattr(note, key, value)
@@ -120,3 +150,28 @@ def delete_note(
         session.delete(item)
     session.delete(note)
     session.commit()
+
+
+# -------------------- Lignes à cocher, une par une --------------------
+# Utile pour dater une ligne ou la cocher sans réécrire toute la note.
+
+@router.patch("/{note_id}/items/{item_id}", response_model=NoteItemOut)
+def update_item(
+    note_id: int,
+    item_id: int,
+    payload: NoteItemUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _owned_note(note_id, user, session)
+    item = session.get(NoteItem, item_id)
+    if item is None or item.note_id != note_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, key, value)
+
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import JSON, Column
@@ -58,11 +58,7 @@ class Token(SQLModel):
     user: UserPublic
 
 
-# ============================== Réglages ==============================
-# Boîte libre : le serveur conserve un objet JSON par utilisateur sans
-# interpréter son contenu. Le web et un futur client Android y rangent ce
-# qu'ils veulent (thème, tri, dernière liste ouverte…) sans modification
-# du serveur.
+# =============================== Réglages ===============================
 
 class UserSettings(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -72,7 +68,15 @@ class UserSettings(SQLModel, table=True):
 
 
 # ================================= Notes =================================
-# Équivalent Google Keep : couleur, épinglage, archive, cases à cocher.
+# La note est le seul objet que l'utilisateur crée.
+#
+# Une note porte éventuellement une échéance (`due_at`). Dans ce cas elle
+# devient une tâche : elle apparaît dans la vue Tâches et devient cochable.
+# Sans échéance, c'est une note ordinaire, non cochable.
+#
+# Chaque case à cocher d'une note peut elle aussi porter sa propre échéance.
+# La ligne devient alors une tâche à part entière, sans changer d'apparence
+# à l'intérieur de la note.
 
 class NoteBase(SQLModel):
     title: str = Field(default="", max_length=300)
@@ -81,11 +85,15 @@ class NoteBase(SQLModel):
     pinned: bool = False
     archived: bool = False
     is_checklist: bool = False
+    # Échéance de la note entière. Non nulle => c'est une tâche.
+    due_at: Optional[datetime] = None
 
 
 class Note(NoteBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
+    done: bool = False
+    done_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -101,6 +109,8 @@ class NoteItem(SQLModel, table=True):
     text: str = Field(default="", max_length=500)
     checked: bool = False
     position: int = 0
+    # Échéance propre à la ligne. Non nulle => la ligne est une tâche.
+    due_at: Optional[datetime] = None
 
     note: Optional[Note] = Relationship(back_populates="items")
 
@@ -109,6 +119,13 @@ class NoteItemIn(SQLModel):
     id: Optional[int] = None
     text: str = ""
     checked: bool = False
+    due_at: Optional[datetime] = None
+
+
+class NoteItemUpdate(SQLModel):
+    text: Optional[str] = None
+    checked: Optional[bool] = None
+    due_at: Optional[datetime] = None
 
 
 class NoteItemOut(SQLModel):
@@ -116,6 +133,7 @@ class NoteItemOut(SQLModel):
     text: str
     checked: bool
     position: int
+    due_at: Optional[datetime] = None
 
 
 class NoteCreate(NoteBase):
@@ -129,86 +147,35 @@ class NoteUpdate(SQLModel):
     pinned: Optional[bool] = None
     archived: Optional[bool] = None
     is_checklist: Optional[bool] = None
+    due_at: Optional[datetime] = None
+    done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
 
 
 class NoteOut(NoteBase):
     id: int
+    done: bool
+    done_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     items: List[NoteItemOut] = []
 
 
-# ================================= Tâches =================================
-# Équivalent Google Tasks : listes, échéance, détails, sous-tâches, étoile.
+# ================================ Tâches ================================
+# Aucune table : une tâche est une vue sur une note datée ou sur une ligne
+# à cocher datée. Rien ne se crée ici, tout naît d'une note.
 
-class TaskListBase(SQLModel):
-    title: str = Field(min_length=1, max_length=100)
-    position: int = 0
-
-
-class TaskList(TaskListBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class TaskListCreate(SQLModel):
-    title: str = Field(min_length=1, max_length=100)
+class TaskOut(SQLModel):
+    kind: str            # "note" ou "item"
+    id: int              # identifiant de la note ou de la ligne
+    note_id: int         # note d'origine, toujours renseignée
+    note_title: str      # pour situer une ligne dans sa note
+    text: str            # libellé affiché
+    due_at: datetime
+    done: bool
+    color: str
+    bucket: str          # "late" | "today" | "upcoming" | "done"
 
 
-class TaskListUpdate(SQLModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    position: Optional[int] = None
-
-
-class TaskListOut(TaskListBase):
-    id: int
-    created_at: datetime
-
-
-class TaskBase(SQLModel):
-    title: str = Field(min_length=1, max_length=300)
-    details: str = ""
-    due_date: Optional[date] = None
-    completed: bool = False
-    starred: bool = False
-    position: int = 0
-
-
-class Task(TaskBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
-    list_id: int = Field(foreign_key="tasklist.id", index=True)
-    parent_id: Optional[int] = Field(default=None, foreign_key="task.id", index=True)
-    completed_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=utcnow)
-    updated_at: datetime = Field(default_factory=utcnow)
-
-
-class TaskCreate(SQLModel):
-    title: str = Field(min_length=1, max_length=300)
-    details: str = ""
-    due_date: Optional[date] = None
-    starred: bool = False
-    parent_id: Optional[int] = None
-
-
-class TaskUpdate(SQLModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=300)
-    details: Optional[str] = None
-    due_date: Optional[date] = None
-    completed: Optional[bool] = None
-    starred: Optional[bool] = None
-    position: Optional[int] = None
-    list_id: Optional[int] = None
-    parent_id: Optional[int] = None
-
-
-class TaskOut(TaskBase):
-    id: int
-    list_id: int
-    parent_id: Optional[int] = None
-    completed_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
+class TaskDone(SQLModel):
+    done: bool

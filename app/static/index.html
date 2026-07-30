@@ -56,17 +56,30 @@
 <!-- ============ Application ============ -->
 <div id="screen-app" hidden>
   <header class="topbar">
+    <span class="logo" id="brand-logo"></span>
     <span class="brand">notask</span>
-    <nav class="tabs">
-      <button data-view="notes" class="active">Notes</button>
-      <button data-view="tasks">Tâches</button>
-      <button data-view="admin" id="tab-admin" hidden>Comptes</button>
-    </nav>
     <span class="spacer"></span>
     <span class="who" id="who"></span>
     <button class="btn ghost sm" id="btn-password">Mot de passe</button>
     <button class="btn ghost sm" id="btn-logout">Déconnexion</button>
   </header>
+
+  <div class="shell">
+    <aside class="drawer">
+      <p class="drawer-section">Notes</p>
+      <button class="drawer-item active" data-view="notes" id="nav-notes">Notes</button>
+      <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
+
+      <hr class="drawer-sep">
+      <p class="drawer-section">Tâches</p>
+      <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
+      <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
+      <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
+      <button class="drawer-item" data-view="done" id="nav-done">Terminées</button>
+
+      <hr class="drawer-sep" id="admin-sep" hidden>
+      <button class="drawer-item" data-view="admin" id="tab-admin" hidden>Comptes</button>
+    </aside>
 
   <main>
     <!-- ---- Notes ---- -->
@@ -85,7 +98,6 @@
 
       <div class="toolbar">
         <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
-        <button class="btn ghost sm" id="btn-archived">Voir les archives</button>
       </div>
 
       <div class="notes-grid" id="notes-grid"></div>
@@ -94,30 +106,14 @@
 
     <!-- ---- Tâches ---- -->
     <section id="view-tasks" hidden>
-      <div class="tasks-layout">
-        <aside class="lists">
-          <div id="lists-container"></div>
-          <button class="btn ghost sm" id="btn-new-list" style="width:100%;margin-top:.5rem">+ Nouvelle liste</button>
-        </aside>
-
-        <div class="task-panel">
-          <div class="toolbar">
-            <strong id="list-title" style="flex:1"></strong>
-            <button class="btn ghost sm" id="btn-rename-list">Renommer</button>
-            <button class="btn ghost sm" id="btn-delete-list">Supprimer</button>
-            <button class="btn ghost sm" id="btn-clear-done">Effacer terminées</button>
-          </div>
-
-          <div class="toolbar">
-            <input type="text" id="task-input" placeholder="Nouvelle tâche…" style="flex:1;padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-            <input type="date" id="task-due" style="padding:.55rem;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-            <button class="btn sm" id="btn-add-task">Ajouter</button>
-          </div>
-
-          <ul class="tasks" id="tasks-list"></ul>
-          <div class="empty" id="tasks-empty" hidden>Aucune tâche dans cette liste.</div>
-        </div>
+      <div class="toolbar">
+        <strong id="tasks-title" style="flex:1"></strong>
       </div>
+      <p class="tasks-hint">
+        Une tâche naît toujours d'une note : datez une note, ou l'une de ses cases à cocher.
+      </p>
+      <div class="tasks-grid" id="tasks-grid"></div>
+      <div class="empty" id="tasks-empty" hidden>Aucune tâche.</div>
     </section>
 
     <!-- ---- Comptes ---- -->
@@ -134,6 +130,7 @@
       </table>
     </section>
   </main>
+  </div>
 </div>
 
 <!-- ============ Boîtes de dialogue ============ -->
@@ -145,9 +142,13 @@
     <textarea id="dn-content" rows="6"></textarea>
   </div>
   <div class="field" id="dn-items-field" hidden>
-    <label>Éléments</label>
+    <label>Éléments — une date transforme la ligne en tâche</label>
     <div id="dn-items"></div>
     <button class="btn ghost sm" id="dn-add-item" type="button" style="margin-top:.4rem">+ Élément</button>
+  </div>
+  <div class="field">
+    <label for="dn-due">Échéance de la note — la transforme en tâche</label>
+    <input id="dn-due" type="datetime-local">
   </div>
   <div class="field">
     <label>Couleur</label>
@@ -156,17 +157,6 @@
   <div class="dialog-actions">
     <button class="btn ghost" id="dn-cancel" type="button">Annuler</button>
     <button class="btn" id="dn-save" type="button">Enregistrer</button>
-  </div>
-</dialog>
-
-<dialog id="dlg-task">
-  <h2>Modifier la tâche</h2>
-  <div class="field"><label for="dt-title">Titre</label><input id="dt-title"></div>
-  <div class="field"><label for="dt-details">Détails</label><textarea id="dt-details" rows="4"></textarea></div>
-  <div class="field"><label for="dt-due">Échéance</label><input id="dt-due" type="date"></div>
-  <div class="dialog-actions">
-    <button class="btn ghost" id="dt-cancel" type="button">Annuler</button>
-    <button class="btn" id="dt-save" type="button">Enregistrer</button>
   </div>
 </dialog>
 

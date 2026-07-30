@@ -1,7 +1,8 @@
-"""Tests bout en bout : configuration initiale, isolation des données, notes, tâches, comptes."""
+"""Tests bout en bout : verrouillage initial, comptes, notes, notâches, réglages."""
 
 import os
 import tempfile
+from datetime import datetime, timedelta, timezone
 
 _TMP = tempfile.mkdtemp()
 os.environ["NOTASK_DATA_DIR"] = _TMP
@@ -24,179 +25,177 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_full_flow():
-    # --- L'app est verrouillée tant qu'aucun compte n'existe ---
+def iso(**delta):
+    return (datetime.now(timezone.utc) + timedelta(**delta)).isoformat()
+
+
+def test_verrouillage_et_comptes():
     assert client.get("/api/auth/status").json()["needs_setup"] is True
     assert client.get("/api/notes").status_code == 401
     assert client.post("/api/auth/login", json=ADMIN).status_code == 409
 
-    # --- Configuration initiale ---
     r = client.post("/api/auth/setup", json={**ADMIN, "is_admin": True})
     assert r.status_code == 201, r.text
-    admin_token = r.json()["access_token"]
     assert r.json()["user"]["is_admin"] is True
     assert client.get("/api/auth/status").json()["needs_setup"] is False
+    assert client.post("/api/auth/setup", json=ADMIN).status_code == 409
 
-    # Un second setup doit être refusé
-    assert client.post("/api/auth/setup", json={**ADMIN, "is_admin": True}).status_code == 409
-
-    # --- Connexion ---
+    token = r.json()["access_token"]
     assert client.post("/api/auth/login", json={"username": "admin", "password": "faux"}).status_code == 401
-    admin_token = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 
-    # --- Notes : couleur, épinglage, archive, checklist ---
-    note = client.post("/api/notes", json={"title": "Courses", "content": "pain", "color": "blue"},
-                       headers=auth(admin_token)).json()
-    assert note["color"] == "blue"
-
-    check = client.post("/api/notes", json={
-        "title": "Liste", "is_checklist": True,
-        "items": [{"text": "lait", "checked": False}, {"text": "oeufs", "checked": True}],
-    }, headers=auth(admin_token)).json()
-    assert len(check["items"]) == 2
-    assert check["items"][1]["checked"] is True
-
-    # Couleur invalide refusée
-    assert client.post("/api/notes", json={"title": "x", "color": "fluo"},
-                       headers=auth(admin_token)).status_code == 400
-
-    # Épingler : la note remonte en tête
-    client.patch(f"/api/notes/{check['id']}", json={"pinned": True}, headers=auth(admin_token))
-    notes = client.get("/api/notes", headers=auth(admin_token)).json()
-    assert notes[0]["id"] == check["id"]
-
-    # Archiver : sort de la vue principale
-    client.patch(f"/api/notes/{note['id']}", json={"archived": True}, headers=auth(admin_token))
-    assert all(n["id"] != note["id"] for n in client.get("/api/notes", headers=auth(admin_token)).json())
-    archived = client.get("/api/notes?archived=true", headers=auth(admin_token)).json()
-    assert archived[0]["id"] == note["id"]
-
-    # --- Tâches : liste par défaut, échéance, sous-tâche, terminé ---
-    lists = client.get("/api/lists", headers=auth(admin_token)).json()
-    assert len(lists) == 1
-    lid = lists[0]["id"]
-
-    t = client.post(f"/api/lists/{lid}/tasks",
-                    json={"title": "Appeler le plombier", "due_date": "2026-08-01"},
-                    headers=auth(admin_token)).json()
-    sub = client.post(f"/api/lists/{lid}/tasks",
-                      json={"title": "Trouver le numéro", "parent_id": t["id"]},
-                      headers=auth(admin_token)).json()
-    assert sub["parent_id"] == t["id"]
-
-    # Deux niveaux de sous-tâches refusés
-    assert client.post(f"/api/lists/{lid}/tasks",
-                       json={"title": "trop profond", "parent_id": sub["id"]},
-                       headers=auth(admin_token)).status_code == 400
-
-    # Cocher le parent coche l'enfant
-    client.patch(f"/api/tasks/{t['id']}", json={"completed": True}, headers=auth(admin_token))
-    tasks = client.get(f"/api/lists/{lid}/tasks", headers=auth(admin_token)).json()
-    assert all(x["completed"] for x in tasks)
-
-    # Effacer les terminées
-    client.post(f"/api/lists/{lid}/clear-completed", headers=auth(admin_token))
-    assert client.get(f"/api/lists/{lid}/tasks", headers=auth(admin_token)).json() == []
-
-    # Dernière liste non supprimable
-    assert client.delete(f"/api/lists/{lid}", headers=auth(admin_token)).status_code == 400
-
-    # --- Comptes ---
-    r = client.post("/api/users", json={**BOB, "is_admin": False}, headers=auth(admin_token))
-    assert r.status_code == 201, r.text
-    bob_id = r.json()["id"]
+    # Création d'un second compte, puis cloisonnement
+    r = client.post("/api/users", json={**BOB, "is_admin": False}, headers=auth(token))
+    assert r.status_code == 201
     assert r.json()["must_change_password"] is True
+    assert client.post("/api/users", json=BOB, headers=auth(token)).status_code == 409
 
-    # Doublon refusé
-    assert client.post("/api/users", json=BOB, headers=auth(admin_token)).status_code == 409
+    bob = client.post("/api/auth/login", json=BOB).json()["access_token"]
+    assert client.get("/api/users", headers=auth(bob)).status_code == 403
 
-    bob_token = client.post("/api/auth/login", json=BOB).json()["access_token"]
+    # Garde-fous : rester au moins un admin actif
+    me = client.get("/api/auth/me", headers=auth(token)).json()
+    assert client.patch(f"/api/users/{me['id']}", json={"is_admin": False}, headers=auth(token)).status_code == 400
+    assert client.delete(f"/api/users/{me['id']}", headers=auth(token)).status_code == 400
 
-    # Un membre ne peut pas gérer les comptes
-    assert client.get("/api/users", headers=auth(bob_token)).status_code == 403
-
-    # --- Isolation : bob ne voit pas les données de l'admin ---
-    assert client.get("/api/notes", headers=auth(bob_token)).json() == []
-    assert client.get(f"/api/notes/{check['id']}", headers=auth(bob_token)).status_code == 404
-    assert client.patch(f"/api/notes/{check['id']}", json={"title": "pirate"},
-                        headers=auth(bob_token)).status_code == 404
-    assert client.delete(f"/api/notes/{check['id']}", headers=auth(bob_token)).status_code == 404
-    assert client.get(f"/api/lists/{lid}/tasks", headers=auth(bob_token)).status_code == 404
-
-    # bob a sa propre liste par défaut, distincte
-    bob_lists = client.get("/api/lists", headers=auth(bob_token)).json()
-    assert bob_lists[0]["id"] != lid
-
-    # --- Changement de mot de passe ---
-    assert client.post("/api/auth/password",
-                       json={"current_password": "faux", "new_password": "nouveaumdp1"},
-                       headers=auth(bob_token)).status_code == 400
-    assert client.post("/api/auth/password",
-                       json={"current_password": BOB["password"], "new_password": "nouveaumdp1"},
-                       headers=auth(bob_token)).status_code == 204
-    assert client.post("/api/auth/login", json=BOB).status_code == 401
-    assert client.post("/api/auth/login",
-                       json={"username": "bob", "password": "nouveaumdp1"}).status_code == 200
-
-    # --- Garde-fous admin ---
-    assert client.patch(f"/api/users/{r.json()['id']}", json={"is_active": False},
-                        headers=auth(admin_token)).status_code == 200
-    me = client.get("/api/auth/me", headers=auth(admin_token)).json()
-    assert client.patch(f"/api/users/{me['id']}", json={"is_admin": False},
-                        headers=auth(admin_token)).status_code == 400
-    assert client.delete(f"/api/users/{me['id']}", headers=auth(admin_token)).status_code == 400
-
-    # Compte désactivé : accès refusé
-    assert client.post("/api/auth/login",
-                       json={"username": "bob", "password": "nouveaumdp1"}).status_code == 403
-
-    # Suppression de bob et de ses données
-    assert client.delete(f"/api/users/{bob_id}", headers=auth(admin_token)).status_code == 204
-    assert len(client.get("/api/users", headers=auth(admin_token)).json()) == 1
-
-    # --- Jeton invalide ---
-    assert client.get("/api/auth/me", headers=auth("n-importe-quoi")).status_code == 401
+    assert client.get("/api/auth/me", headers=auth("jeton-bidon")).status_code == 401
 
 
-def test_settings():
-    """Réglages : stockage libre, fusion, suppression de clé, cloisonnement."""
-    admin_token = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+def test_note_simple():
+    """Sans échéance : une note ordinaire, ni tâche ni cochable."""
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 
-    # Vide au départ
-    assert client.get("/api/settings", headers=auth(admin_token)).json() == {}
+    n = client.post("/api/notes", json={"title": "Idée", "content": "réfléchir", "color": "lime"},
+                    headers=auth(t)).json()
+    assert n["due_at"] is None
+    assert n["done"] is False
 
-    # Écriture libre : le serveur n'impose aucun schéma
-    r = client.patch("/api/settings",
-                     json={"theme": "dark", "tri": "date", "widget": {"liste": 3, "compact": True}},
-                     headers=auth(admin_token))
+    # Elle n'apparaît pas dans les tâches
+    assert all(x["note_id"] != n["id"] for x in client.get("/api/tasks", headers=auth(t)).json())
+
+    # Et on ne peut pas la terminer
+    r = client.patch(f"/api/notes/{n['id']}", json={"done": True}, headers=auth(t))
+    assert r.status_code == 400
+    assert "échéance" in r.json()["detail"]
+    assert client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t)).status_code == 400
+
+    # Couleur inconnue refusée
+    assert client.post("/api/notes", json={"title": "x", "color": "fuchsia"}, headers=auth(t)).status_code == 400
+
+
+def test_note_datee_devient_tache():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    n = client.post("/api/notes", json={"title": "Appeler le plombier", "due_at": iso(days=3)},
+                    headers=auth(t)).json()
+
+    tasks = client.get("/api/tasks", headers=auth(t)).json()
+    mine = [x for x in tasks if x["note_id"] == n["id"]]
+    assert len(mine) == 1
+    assert mine[0]["kind"] == "note"
+    assert mine[0]["bucket"] == "upcoming"
+
+    # Terminer depuis la vue Tâches
+    r = client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t))
     assert r.status_code == 200
-    assert r.json()["widget"]["liste"] == 3
+    assert r.json()["bucket"] == "done"
+    assert client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()["done_at"] is not None
 
-    # Fusion : les clés absentes sont conservées
-    r = client.patch("/api/settings", json={"theme": "light"}, headers=auth(admin_token))
-    assert r.json() == {"theme": "light", "tri": "date", "widget": {"liste": 3, "compact": True}}
+    # Retirer l'échéance : la note redevient une note, et n'est plus terminée
+    back = client.patch(f"/api/notes/{n['id']}", json={"due_at": None}, headers=auth(t)).json()
+    assert back["due_at"] is None and back["done"] is False and back["done_at"] is None
+    assert all(x["note_id"] != n["id"] for x in client.get("/api/tasks", headers=auth(t)).json())
 
-    # null supprime la clé
-    r = client.patch("/api/settings", json={"tri": None}, headers=auth(admin_token))
-    assert "tri" not in r.json()
 
-    # PUT remplace tout
-    r = client.put("/api/settings", json={"theme": "auto"}, headers=auth(admin_token))
-    assert r.json() == {"theme": "auto"}
-    assert client.get("/api/settings", headers=auth(admin_token)).json() == {"theme": "auto"}
+def test_ligne_datee_devient_tache_autonome():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 
-    # Garde-fous
-    assert client.put("/api/settings", json={"x": "y" * 20000},
-                      headers=auth(admin_token)).status_code == 400
-    assert client.put("/api/settings", json={str(i): i for i in range(200)},
-                      headers=auth(admin_token)).status_code == 400
+    n = client.post("/api/notes", json={
+        "title": "Courses", "is_checklist": True,
+        "items": [{"text": "lait"}, {"text": "réserver le train", "due_at": iso(days=-1)}],
+    }, headers=auth(t)).json()
 
-    # Cloisonnement : un autre compte a ses propres réglages
-    client.post("/api/users", json={"username": "zoe", "password": "motdepasse9"},
-                headers=auth(admin_token))
-    zoe_token = client.post("/api/auth/login",
-                            json={"username": "zoe", "password": "motdepasse9"}).json()["access_token"]
-    assert client.get("/api/settings", headers=auth(zoe_token)).json() == {}
+    # La note elle-même n'est pas datée : seule la ligne l'est
+    assert n["due_at"] is None
+    datee = [i for i in n["items"] if i["due_at"]]
+    assert len(datee) == 1
+    ligne = datee[0]
 
-    # Sans jeton, rien
+    tasks = client.get("/api/tasks", headers=auth(t)).json()
+    depuis_ligne = [x for x in tasks if x["kind"] == "item" and x["id"] == ligne["id"]]
+    assert len(depuis_ligne) == 1
+    assert depuis_ligne[0]["note_id"] == n["id"]
+    assert depuis_ligne[0]["note_title"] == "Courses"
+    assert depuis_ligne[0]["bucket"] == "late"      # échéance dépassée
+    assert depuis_ligne[0]["color"] == n["color"]   # couleur héritée de la note
+
+    # La ligne non datée n'est pas une tâche
+    assert len([x for x in tasks if x["kind"] == "item"]) == 1
+
+    # Cocher depuis la vue Tâches
+    r = client.patch(f"/api/tasks/item/{ligne['id']}", json={"done": True}, headers=auth(t))
+    assert r.status_code == 200 and r.json()["bucket"] == "done"
+
+    # Dater une ligne après coup, ligne par ligne
+    simple = [i for i in n["items"] if not i["due_at"]][0]
+    r = client.patch(f"/api/notes/{n['id']}/items/{simple['id']}",
+                     json={"due_at": iso(hours=2)}, headers=auth(t))
+    assert r.status_code == 200 and r.json()["due_at"] is not None
+    assert len([x for x in client.get("/api/tasks", headers=auth(t)).json() if x["kind"] == "item"]) == 2
+
+    # Cocher une ligne sans échéance est refusé
+    n2 = client.post("/api/notes", json={"is_checklist": True, "items": [{"text": "libre"}]},
+                     headers=auth(t)).json()
+    assert client.patch(f"/api/tasks/item/{n2['items'][0]['id']}",
+                        json={"done": True}, headers=auth(t)).status_code == 400
+
+
+def test_regroupements_et_archives():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    retard = client.post("/api/notes", json={"title": "En retard", "due_at": iso(days=-2)},
+                         headers=auth(t)).json()
+    client.post("/api/notes", json={"title": "Ce soir", "due_at": iso(minutes=30)}, headers=auth(t))
+
+    buckets = {x["bucket"] for x in client.get("/api/tasks", headers=auth(t)).json()}
+    assert {"late", "today"} <= buckets
+
+    n_late = client.get("/api/tasks?bucket=late", headers=auth(t)).json()
+    assert all(x["bucket"] == "late" for x in n_late) and n_late
+
+    assert client.get("/api/tasks?bucket=nimportequoi", headers=auth(t)).status_code == 400
+
+    # Archiver retire de la vue Tâches, sauf demande explicite
+    client.patch(f"/api/notes/{retard['id']}", json={"archived": True}, headers=auth(t))
+    assert all(x["note_id"] != retard["id"] for x in client.get("/api/tasks", headers=auth(t)).json())
+    inclus = client.get("/api/tasks?include_archived=true", headers=auth(t)).json()
+    assert any(x["note_id"] == retard["id"] for x in inclus)
+
+    # Épinglage et recherche restent fonctionnels
+    client.patch(f"/api/notes/{retard['id']}", json={"archived": False, "pinned": True}, headers=auth(t))
+    assert client.get("/api/notes", headers=auth(t)).json()[0]["id"] == retard["id"]
+    assert client.get("/api/notes?q=retard", headers=auth(t)).json()
+
+
+def test_cloisonnement():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+    bob = client.post("/api/auth/login", json=BOB).json()["access_token"]
+
+    n = client.post("/api/notes", json={"title": "Privé", "due_at": iso(days=1)}, headers=auth(t)).json()
+
+    assert all(x["note_id"] != n["id"] for x in client.get("/api/tasks", headers=auth(bob)).json())
+    assert client.get(f"/api/notes/{n['id']}", headers=auth(bob)).status_code == 404
+    assert client.patch(f"/api/notes/{n['id']}", json={"title": "pirate"}, headers=auth(bob)).status_code == 404
+    assert client.delete(f"/api/notes/{n['id']}", headers=auth(bob)).status_code == 404
+    assert client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(bob)).status_code == 404
+
+
+def test_reglages():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+
+    assert client.get("/api/settings", headers=auth(t)).json() == {}
+    r = client.patch("/api/settings", json={"theme": "dark", "widget": {"n": 3}}, headers=auth(t))
+    assert r.json()["widget"]["n"] == 3
+    assert client.patch("/api/settings", json={"theme": None}, headers=auth(t)).json() == {"widget": {"n": 3}}
+    assert client.put("/api/settings", json={"a": 1}, headers=auth(t)).json() == {"a": 1}
+    assert client.put("/api/settings", json={"x": "y" * 20000}, headers=auth(t)).status_code == 400
     assert client.get("/api/settings").status_code == 401

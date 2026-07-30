@@ -12,14 +12,28 @@ configuration. Ensuite, l'admin gère les comptes depuis l'onglet *Comptes*.
 
 Chaque utilisateur ne voit que ses propres notes et tâches.
 
+## Principe : la notâche
+
+**Il n'existe qu'un objet créable : la note.** Une tâche n'est pas une chose
+séparée, c'est une note à laquelle on a posé une échéance.
+
+- Une note **sans date** est une note ordinaire. Elle n'est pas cochable.
+- Une note **avec date** devient une tâche : elle apparaît dans la vue Tâches
+  et peut être terminée. Retirer la date la ramène à l'état de note.
+- Chaque **case à cocher** d'une note peut porter sa propre échéance. La ligne
+  devient alors une tâche autonome, sans changer d'apparence dans la note.
+  Dans la vue Tâches, elle rappelle toujours le nom de sa note d'origine.
+
+On ne crée jamais une tâche directement : elle naît d'une note. La vue Tâches
+est une lecture, pas un lieu de création.
+
 ## Fonctions
 
-**Notes (Keep)** — titre et texte libre, 11 couleurs, épinglage, archive,
-listes à cocher, recherche.
+**Notes** — titre et texte libre, 21 couleurs, épinglage, archive, listes à
+cocher, recherche.
 
-**Tâches (Tasks)** — listes multiples, échéance avec repérage des retards,
-détails, sous-tâches (un niveau), étoile, effacement des tâches terminées.
-Cocher une tâche coche ses sous-tâches.
+**Tâches** — regroupement automatique en *En retard*, *Aujourd'hui*, *À venir*
+et *Terminées*, échéance à la minute, lien retour vers la note d'origine.
 
 ## Structure
 
@@ -61,11 +75,9 @@ Documentation interactive sur `/docs`.
 | PUT | `/api/settings` | remplacer tous les réglages |
 | GET/POST | `/api/notes` | lister / créer |
 | GET/PATCH/DELETE | `/api/notes/{id}` | détail / modifier / supprimer |
-| GET/POST | `/api/lists` | listes de tâches |
-| PATCH/DELETE | `/api/lists/{id}` | renommer / supprimer |
-| GET/POST | `/api/lists/{id}/tasks` | tâches d'une liste |
-| POST | `/api/lists/{id}/clear-completed` | effacer les terminées |
-| GET/PATCH/DELETE | `/api/tasks/{id}` | détail / modifier / supprimer |
+| PATCH | `/api/notes/{id}/items/{item_id}` | cocher ou dater une ligne |
+| GET | `/api/tasks` | notes et lignes datées, regroupées |
+| PATCH | `/api/tasks/{kind}/{id}` | terminer (`kind` = `note` ou `item`) |
 
 Le jeton est valable 30 jours — adapté à un client Android natif dont les
 widgets d'écran d'accueil interrogent l'API en tâche de fond.
