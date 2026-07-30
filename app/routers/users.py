@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.deps import get_current_admin
 from app.models import (
+    Label,
     Note,
     NoteItem,
     User,
@@ -113,6 +114,8 @@ def delete_user(
         session.delete(note)
     for s in session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).all():
         session.delete(s)
+    for lbl in session.exec(select(Label).where(Label.user_id == user_id)).all():
+        session.delete(lbl)
 
     session.delete(user)
     session.commit()

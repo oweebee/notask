@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>notask</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -76,6 +77,14 @@
       <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
       <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
       <button class="drawer-item" data-view="done" id="nav-done">Terminées</button>
+
+      <hr class="drawer-sep">
+      <p class="drawer-section">Libellés</p>
+      <div id="labels-list"></div>
+      <div class="label-new-row">
+        <input id="label-new-input" placeholder="Nouveau libellé…" maxlength="50">
+        <button class="btn ghost sm" id="label-new-btn" type="button" aria-label="Créer">+</button>
+      </div>
 
       <hr class="drawer-sep" id="admin-sep" hidden>
       <button class="drawer-item" data-view="admin" id="tab-admin" hidden>Comptes</button>
@@ -164,6 +173,10 @@
   <div class="field">
     <label>Couleur</label>
     <div class="swatches" id="dn-colors"></div>
+  </div>
+  <div class="field">
+    <label>Libellés</label>
+    <div class="label-chips" id="dn-labels"></div>
   </div>
   <div class="dialog-actions">
     <button class="btn ghost" id="dn-cancel" type="button">Annuler</button>

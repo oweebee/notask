@@ -176,10 +176,21 @@ header.topbar .brand { font-size: 1.375rem; font-weight: 400; margin-right: .5re
 header.topbar .logo {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   height: 28px;
 }
 header.topbar .logo svg { height: 100%; width: auto; display: block; flex: none; }
+
+/* Paire de cuillères réutilisable partout ailleurs que le logo d'en-tête
+   (drawer, favicon-like usages…) : même écart resserré de 4px. */
+.spoon-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  flex: none;
+}
+.spoon-pair svg { height: 100%; width: auto; display: block; flex: none; }
 header.topbar .spacer { flex: 1; }
 header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 
@@ -239,6 +250,8 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
   color: var(--md-on-secondary-container);
 }
 .drawer-item svg { width: 22px; height: 22px; flex: none; }
+.drawer-item .spoon-pair { height: 22px; }
+.drawer-item .spoon-pair svg { width: auto; height: 100%; }
 .drawer-item .label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -628,8 +641,8 @@ main { padding: 1.5rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 input[type=checkbox] {
   appearance: none;
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex: none;
   margin: 0;
   border: 2px solid var(--md-outline);
@@ -638,26 +651,75 @@ input[type=checkbox] {
   display: inline-grid;
   place-content: center;
   cursor: pointer;
-  transition: background .15s ease, border-color .15s ease;
+  transition: background .15s ease, border-color .15s ease, outline-color .15s ease;
 }
 input[type=checkbox]::after {
   content: '';
-  width: 5px;
-  height: 9px;
+  width: 4px;
+  height: 7px;
   margin-top: -1px;
-  border: solid var(--md-on-primary);
+  border: solid #1b1300;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) scale(0);
   transition: transform .12s ease;
 }
+/* Coché : coeur jaune, liseret bleu à l'extérieur — écho des cuillères. */
 input[type=checkbox]:checked {
-  background: var(--md-primary);
-  border-color: var(--md-primary);
+  background: #ffd54f;
+  border-color: #ffd54f;
+  outline: 2px solid #42a5f5;
+  outline-offset: 1px;
 }
 input[type=checkbox]:checked::after { transform: rotate(45deg) scale(1); }
 input[type=checkbox]:hover { border-color: var(--md-on-surface); }
 input[type=checkbox]:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ============================= Libellés ============================= */
+
+.drawer-item.label-item { padding-left: 2.5rem; }
+
+.label-new-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem 1.5rem .3rem 2.5rem;
+}
+.label-new-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--md-outline-variant);
+  color: var(--md-on-surface);
+  font-size: .8125rem;
+  padding: .3rem 0;
+}
+.label-new-row input:focus { outline: none; border-bottom-color: var(--md-primary); }
+.label-new-row button { flex: none; opacity: .7; }
+.label-new-row button:hover { opacity: 1; }
+
+/* Chips de libellés, sur une carte de note ou dans le dialogue d'édition */
+.label-chips { display: flex; gap: .375rem; flex-wrap: wrap; margin-top: .5rem; }
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .2rem .7rem;
+  border-radius: var(--shape-full);
+  background: rgba(230,224,233,.09);
+  color: var(--md-on-surface-variant);
+  font-size: .75rem;
+  cursor: pointer;
+  border: none;
+  transition: background .15s, color .15s;
+}
+.label-chip:hover { background: rgba(230,224,233,.16); }
+.label-chip.active {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+.note .label-chips { pointer-events: none; }
+.note .label-chip { cursor: default; padding: .1rem .55rem; }
 
 /* ============================= Comptes ============================= */
 
@@ -683,6 +745,7 @@ table.users th { color: var(--md-on-surface-variant); font-weight: 500; font-siz
 /* ============================ Dialogues ============================ */
 
 dialog {
+  position: relative;
   background: var(--md-surface-3);
   color: var(--md-on-surface);
   border: none;

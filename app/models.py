@@ -94,6 +94,17 @@ class Note(NoteBase, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     done: bool = False
     done_at: Optional[datetime] = None
+    # Identifiants des libellés (catégories) attachés à la note.
+    # Stocké en JSON plutôt qu'en table de liaison : une note appartenant à
+    # un seul utilisateur, une petite liste d'entiers suffit.
+    # NOT NULL + server_default '[]' : la migration ajoutant cette colonne à
+    # une table `note` déjà peuplée (déploiement existant) doit pouvoir
+    # remplir les lignes existantes avec une liste vide, jamais NULL — sinon
+    # la sérialisation NoteOut (List[int]) échoue sur les anciennes notes.
+    label_ids: List[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default="[]"),
+    )
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -138,6 +149,7 @@ class NoteItemOut(SQLModel):
 
 class NoteCreate(NoteBase):
     items: List[NoteItemIn] = []
+    label_ids: List[int] = []
 
 
 class NoteUpdate(SQLModel):
@@ -150,15 +162,44 @@ class NoteUpdate(SQLModel):
     due_at: Optional[datetime] = None
     done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
+    label_ids: Optional[List[int]] = None
 
 
 class NoteOut(NoteBase):
     id: int
     done: bool
     done_at: Optional[datetime] = None
+    label_ids: List[int] = []
     created_at: datetime
     updated_at: datetime
     items: List[NoteItemOut] = []
+
+
+# ================================ Libellés ================================
+# Catégories façon Keep : un nom, affiché dans le menu latéral. Une note peut
+# en porter plusieurs (via Note.label_ids).
+
+class LabelBase(SQLModel):
+    name: str = Field(min_length=1, max_length=50)
+
+
+class Label(LabelBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class LabelCreate(LabelBase):
+    pass
+
+
+class LabelUpdate(SQLModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=50)
+
+
+class LabelOut(LabelBase):
+    id: int
+    created_at: datetime
 
 
 # ================================ Tâches ================================

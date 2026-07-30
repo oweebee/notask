@@ -189,6 +189,59 @@ def test_cloisonnement():
     assert client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(bob)).status_code == 404
 
 
+def test_libelles():
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+    bob = client.post("/api/auth/login", json=BOB).json()["access_token"]
+
+    assert client.get("/api/labels", headers=auth(t)).json() == []
+
+    maison = client.post("/api/labels", json={"name": "Maison"}, headers=auth(t)).json()
+    travail = client.post("/api/labels", json={"name": "Travail"}, headers=auth(t)).json()
+    assert maison["id"] != travail["id"]
+
+    # Nom en double refusé pour le même utilisateur
+    assert client.post("/api/labels", json={"name": "Maison"}, headers=auth(t)).status_code == 409
+    # Nom vide (ou blanc) refusé
+    assert client.post("/api/labels", json={"name": "   "}, headers=auth(t)).status_code == 400
+
+    # Chaque utilisateur a ses propres libellés
+    assert client.get("/api/labels", headers=auth(bob)).json() == []
+
+    # Attribution d'un libellé à une note, à la création
+    n = client.post("/api/notes", json={"title": "Courses", "label_ids": [maison["id"]]},
+                     headers=auth(t)).json()
+    assert n["label_ids"] == [maison["id"]]
+
+    # Un libellé qui n'appartient pas à l'utilisateur (ou inexistant) est refusé
+    assert client.post("/api/notes", json={"title": "x", "label_ids": [999999]},
+                        headers=auth(t)).status_code == 400
+
+    # Mise à jour des libellés d'une note existante
+    r = client.patch(f"/api/notes/{n['id']}", json={"label_ids": [maison["id"], travail["id"]]},
+                      headers=auth(t))
+    assert sorted(r.json()["label_ids"]) == sorted([maison["id"], travail["id"]])
+
+    # Filtrage des notes par libellé
+    autre = client.post("/api/notes", json={"title": "Sans libellé"}, headers=auth(t)).json()
+    filtrees = client.get(f"/api/notes?label={travail['id']}", headers=auth(t)).json()
+    assert {x["id"] for x in filtrees} == {n["id"]}
+    assert autre["id"] not in {x["id"] for x in filtrees}
+
+    # Renommage
+    renomme = client.patch(f"/api/labels/{maison['id']}", json={"name": "Domicile"}, headers=auth(t)).json()
+    assert renomme["name"] == "Domicile"
+
+    # Suppression : nettoie la référence orpheline dans label_ids
+    client.delete(f"/api/labels/{maison['id']}", headers=auth(t))
+    note_apres = client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()
+    assert maison["id"] not in note_apres["label_ids"]
+    assert travail["id"] in note_apres["label_ids"]
+
+    # Cloisonnement : bob ne peut ni modifier ni supprimer un libellé d'admin
+    assert client.patch(f"/api/labels/{travail['id']}", json={"name": "vol"}, headers=auth(bob)).status_code == 404
+    assert client.delete(f"/api/labels/{travail['id']}", headers=auth(bob)).status_code == 404
+
+
 def test_reglages():
     t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
 

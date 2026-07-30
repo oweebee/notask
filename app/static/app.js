@@ -16,6 +16,9 @@ let state = {
   tasks: [],
   editingNote: null,
   editingNoteItems: [],
+  labels: [],
+  labelFilter: null,
+  editingLabelIds: [],
 };
 
 const BUCKET_LABELS = {
@@ -158,17 +161,35 @@ function openCalPopup(anchor, currentIso, onChange) {
       <button type="button" class="btn ghost sm" data-act="clear">Effacer</button>
       <button type="button" class="btn sm" data-act="ok">Valider</button>
     </div>`;
-  document.body.appendChild(pop);
+
+  // Une case datée peut se trouver dans une <dialog> ouverte : celle-ci
+  // s'affiche dans le "top layer" du navigateur, indépendant du z-index
+  // normal. Un popup ajouté à document.body resterait donc caché derrière.
+  // On l'ajoute plutôt dans le dialog lui-même, et on le positionne par
+  // rapport à lui (dialog { position: relative } dans le CSS).
+  const hostDialog = anchor.closest('dialog');
+  const host = hostDialog || document.body;
+  host.appendChild(pop);
 
   const input = pop.querySelector('.cal-popup-input');
   input.value = isoToLocalInput(currentIso);
 
-  const rect = anchor.getBoundingClientRect();
-  const top = rect.bottom + window.scrollY + 6;
-  let left = rect.left + window.scrollX;
-  left = Math.min(left, window.scrollX + document.documentElement.clientWidth - 260);
-  pop.style.top = `${top}px`;
-  pop.style.left = `${Math.max(8, left)}px`;
+  if (hostDialog) {
+    const dialogRect = hostDialog.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    let top = anchorRect.bottom - dialogRect.top + 6;
+    let left = anchorRect.left - dialogRect.left;
+    left = Math.min(left, dialogRect.width - 250);
+    pop.style.top = `${top}px`;
+    pop.style.left = `${Math.max(8, left)}px`;
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    const top = rect.bottom + window.scrollY + 6;
+    let left = rect.left + window.scrollX;
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - 260);
+    pop.style.top = `${top}px`;
+    pop.style.left = `${Math.max(8, left)}px`;
+  }
 
   const finish = (iso) => { onChange(iso); closeCalPopup(); };
   pop.querySelector('[data-act=ok]').onclick = () => finish(localInputToIso(input.value));
@@ -215,7 +236,8 @@ function enterApp() {
 
   // Icônes du menu latéral et logo
   $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
-  $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notes</span>';
+  $('#nav-notes').innerHTML =
+    `<span class="spoon-pair">${ICONS.spoon}${ICONS.spoonBlue}</span><span class="label">Notes</span>`;
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
   $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes</span>';
   $('#nav-late').innerHTML = ICONS.late + '<span class="label">En retard</span>';
@@ -223,6 +245,7 @@ function enterApp() {
   $('#nav-done').innerHTML = ICONS.check + '<span class="label">Terminées</span>';
   $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
 
+  loadLabels();
   switchView('notes');
   if (state.user.must_change_password) {
     $('#dlg-password').showModal();
@@ -297,9 +320,56 @@ $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => s
 async function loadNotes() {
   const params = new URLSearchParams({ archived: state.showArchived });
   if (state.search) params.set('q', state.search);
+  if (state.labelFilter) params.set('label', state.labelFilter);
   state.notes = await api('/notes?' + params);
   renderNotes();
 }
+
+/* -------------------------------- Libellés --------------------------------
+   Catégories façon Keep, affichées dans le menu latéral. Cliquer sur un
+   libellé filtre les notes ; une note peut en porter plusieurs. */
+
+async function loadLabels() {
+  state.labels = await api('/labels');
+  renderLabelsDrawer();
+}
+
+function renderLabelsDrawer() {
+  const box = $('#labels-list');
+  box.innerHTML = '';
+  for (const l of state.labels) {
+    const btn = document.createElement('button');
+    btn.className = 'drawer-item label-item' + (state.labelFilter === l.id ? ' active' : '');
+    btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
+    btn.onclick = () => {
+      state.labelFilter = state.labelFilter === l.id ? null : l.id;
+      if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
+      else { renderLabelsDrawer(); loadNotes(); }
+    };
+    btn.oncontextmenu = async (e) => {
+      e.preventDefault();
+      if (!confirm(`Supprimer le libellé « ${l.name} » ?`)) return;
+      await api('/labels/' + l.id, { method: 'DELETE' });
+      if (state.labelFilter === l.id) state.labelFilter = null;
+      loadLabels();
+      loadNotes();
+    };
+    box.appendChild(btn);
+  }
+}
+
+$('#label-new-btn').addEventListener('click', async () => {
+  const name = $('#label-new-input').value.trim();
+  if (!name) return;
+  try {
+    await api('/labels', { method: 'POST', body: { name } });
+    $('#label-new-input').value = '';
+    loadLabels();
+  } catch (err) { alert(err.message); }
+});
+$('#label-new-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('#label-new-btn').click(); }
+});
 
 function renderNotes() {
   const grid = $('#notes-grid');
@@ -337,6 +407,15 @@ function renderNotes() {
         <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
         ${ICONS.clock}<span>${formatDue(n.due_at)}</span>
       </div>`;
+    }
+
+    if (n.label_ids && n.label_ids.length) {
+      const noms = n.label_ids
+        .map((id) => state.labels.find((l) => l.id === id))
+        .filter(Boolean)
+        .map((l) => `<span class="label-chip">${escapeHtml(l.name)}</span>`)
+        .join('');
+      if (noms) inner += `<div class="label-chips">${noms}</div>`;
     }
 
     inner += `<div class="palette" hidden></div>
@@ -521,6 +600,8 @@ function openNoteDialog(note) {
   state.editingNoteItems = note.items.map((i) => ({
     text: i.text, checked: i.checked, due_at: i.due_at,
   }));
+  state.editingLabelIds = [...(note.label_ids || [])];
+  renderNoteLabelChips();
 
   $('#dn-title').value = note.title;
   $('#dn-content').value = note.content;
@@ -612,6 +693,31 @@ function renderNoteItems() {
   });
 }
 
+/* Chips de libellés dans le dialogue d'édition : un clic bascule
+   l'appartenance de la note au libellé. */
+function renderNoteLabelChips() {
+  const box = $('#dn-labels');
+  box.innerHTML = '';
+  for (const l of state.labels) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'label-chip' + (state.editingLabelIds.includes(l.id) ? ' active' : '');
+    chip.textContent = l.name;
+    chip.onclick = () => {
+      if (state.editingLabelIds.includes(l.id)) {
+        state.editingLabelIds = state.editingLabelIds.filter((id) => id !== l.id);
+      } else {
+        state.editingLabelIds.push(l.id);
+      }
+      renderNoteLabelChips();
+    };
+    box.appendChild(chip);
+  }
+  if (!state.labels.length) {
+    box.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
+  }
+}
+
 $('#dn-add-item').addEventListener('click', () => {
   state.editingNoteItems.push({ text: '', checked: false, due_at: null });
   renderNoteItems();
@@ -626,6 +732,7 @@ $('#dn-save').addEventListener('click', async () => {
     color: n.color,
     due_at: $('#dn-due').value || null,
     is_checklist: state.editingIsChecklist,
+    label_ids: state.editingLabelIds,
   };
   if (state.editingIsChecklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());

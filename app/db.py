@@ -64,7 +64,13 @@ def _migrate_sqlite_schema() -> None:
                 clause = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}'
 
                 if not col.nullable:
-                    default = _sqlite_default_literal(col)
+                    # Le modèle peut préciser explicitement la valeur de repli
+                    # (ex. server_default="[]" pour une colonne JSON) : on lui
+                    # fait confiance avant de retomber sur l'heuristique par type.
+                    if col.server_default is not None and getattr(col.server_default, "arg", None) is not None:
+                        default = f"'{col.server_default.arg.text}'" if hasattr(col.server_default.arg, "text") else f"'{col.server_default.arg}'"
+                    else:
+                        default = _sqlite_default_literal(col)
                     if default:
                         clause += f" NOT NULL DEFAULT {default}"
                     # sinon : colonne ajoutée sans NOT NULL, par prudence

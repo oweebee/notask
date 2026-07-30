@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
+    Label,
     Note,
     NoteCreate,
     NoteItem,
@@ -45,6 +46,18 @@ def _check_color(color: Optional[str]) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couleur inconnue : {color}")
 
 
+def _check_labels(label_ids: Optional[List[int]], user: User, session: Session) -> None:
+    """Vérifie que chaque libellé référencé appartient bien à l'utilisateur."""
+    if not label_ids:
+        return
+    owned = set(session.exec(
+        select(Label.id).where(Label.user_id == user.id, Label.id.in_(label_ids))
+    ).all())
+    unknown = set(label_ids) - owned
+    if unknown:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Libellé(s) inconnu(s) : {sorted(unknown)}")
+
+
 def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> None:
     """Remplace les lignes en conservant les échéances des lignes réutilisées."""
     for existing in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
@@ -64,6 +77,7 @@ def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> Non
 def list_notes(
     archived: bool = Query(default=False, description="Afficher les notes archivées"),
     q: Optional[str] = Query(default=None, description="Recherche titre et contenu"),
+    label: Optional[int] = Query(default=None, description="Filtrer par identifiant de libellé"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -71,7 +85,10 @@ def list_notes(
     if q:
         stmt = stmt.where(Note.title.contains(q) | Note.content.contains(q))
     # Épinglées d'abord, puis les plus récemment modifiées.
-    return session.exec(stmt.order_by(Note.pinned.desc(), Note.updated_at.desc())).all()
+    notes = session.exec(stmt.order_by(Note.pinned.desc(), Note.updated_at.desc())).all()
+    if label is not None:
+        notes = [n for n in notes if label in (n.label_ids or [])]
+    return notes
 
 
 @router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -81,6 +98,7 @@ def create_note(
     session: Session = Depends(get_session),
 ):
     _check_color(payload.color)
+    _check_labels(payload.label_ids, user, session)
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
     session.add(note)
     session.flush()
@@ -109,6 +127,7 @@ def update_note(
     note = _owned_note(note_id, user, session)
     data = payload.model_dump(exclude_unset=True)
     _check_color(data.get("color"))
+    _check_labels(data.get("label_ids"), user, session)
 
     # Sans échéance, une note n'est pas une tâche : rien à terminer.
     if data.get("done") and (data.get("due_at", note.due_at) is None):
