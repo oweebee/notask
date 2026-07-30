@@ -1020,11 +1020,13 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   flex: none;
   display: flex;
   align-items: center;
-  gap: .25rem;
+  gap: .375rem;
   width: fit-content;
   margin: .625rem 0 0;
-  padding: .25rem;
-  background: var(--md-surface-4);
+  padding: .375rem;
+  /* Transparent : se fond dans la couleur de la fenêtre (celle de la note),
+     plutôt qu'un gris qui tranche dessus. */
+  background: transparent;
   border-radius: var(--shape-full);
 }
 .fmt-toolbar button {
@@ -1032,7 +1034,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   height: 32px;
   display: grid;
   place-items: center;
-  background: transparent;
+  /* Rond clair visible en permanence sur chaque icône (pas seulement au
+     survol), pour le même effet que sur les icônes de la carte. */
+  background: rgba(255,255,255,.14);
   border: none;
   border-radius: 50%;
   color: var(--md-on-surface);
@@ -1040,7 +1044,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   cursor: pointer;
   transition: background .15s;
 }
-.fmt-toolbar button:hover { background: rgba(230,224,233,.12); }
+.fmt-toolbar button:hover { background: rgba(255,255,255,.24); }
 .fmt-toolbar button[data-fmt="bold"] { font-weight: 700; }
 .fmt-toolbar button[data-fmt="italic"] { font-style: italic; }
 .fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
