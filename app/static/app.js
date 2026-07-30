@@ -127,6 +127,7 @@ const ICONS = {
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3.5 12 9 17.5"/><path d="M15 6.5 20.5 12 15 17.5"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -742,7 +743,7 @@ function renderNotes() {
       }
       inner += '</ul>';
     } else if (n.content) {
-      inner += `<div class="body">${escapeHtml(n.content)}</div>`;
+      inner += `<div class="body">${renderFormatted(n.content)}</div>`;
     }
 
     if (n.due_at) {
@@ -1275,6 +1276,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-description').value = note.description || '';
   $('#dns-content').value = note.content;
   $('#dns-content-field').hidden = state.editingIsChecklist;
+  $('#dns-fmt-toolbar').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
   $('#dns-add-item').hidden = !state.editingIsChecklist;
   $('#dns-due').value = note.due_at || '';
@@ -1282,6 +1284,51 @@ function openNoteSimpleDialog(note) {
   renderNoteItemsSimple();
   applyDialogColor($('#dlg-note-simple'), note.color);
   $('#dlg-note-simple').showModal();
+}
+
+/* Barre d'outils de mise en forme, édition rapide uniquement. Entoure la
+   sélection courante d'une syntaxe façon markdown ; rendue en gras/italique/
+   souligné/code à l'affichage sur la carte (voir renderFormatted()) — le
+   <textarea> lui-même reste du texte brut, il ne peut pas afficher de mise
+   en forme, donc les marqueurs restent visibles tels quels pendant l'édition. */
+function wrapSelection(textarea, before, after) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  const selected = val.slice(start, end);
+  textarea.value = val.slice(0, start) + before + selected + after + val.slice(end);
+  textarea.focus();
+  textarea.selectionStart = start + before.length;
+  textarea.selectionEnd = start + before.length + selected.length;
+}
+
+const FMT_MARKERS = {
+  bold: ['**', '**'],
+  italic: ['*', '*'],
+  underline: ['__', '__'],
+  code: ['`', '`'],
+};
+
+$('#dns-fmt-toolbar').querySelectorAll('button[data-fmt]').forEach((btn) => {
+  if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
+  btn.addEventListener('click', () => {
+    const [before, after] = FMT_MARKERS[btn.dataset.fmt];
+    wrapSelection($('#dns-content'), before, after);
+  });
+});
+
+/* Rendu markdown minimal (gras/italique/souligné/code) pour l'affichage des
+   notes en texte libre sur la carte — jamais sur du HTML non échappé
+   (escapeHtml tourne toujours en premier, la mise en forme s'applique après
+   coup sur le texte déjà échappé). */
+function renderFormatted(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
+  html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
+  html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
+  html = html.replace(/\*([^\n*]+?)\*/g, '<em>$1</em>');
+  return html;
 }
 
 function renderNoteItemsSimple() {

@@ -76,8 +76,9 @@ input, textarea, select { font: inherit; }
   gap: .5rem;
   min-height: 40px;
   padding: 0 1.5rem;
-  background: var(--md-primary);
-  color: var(--md-on-primary);
+  /* Blanc plutôt que le mauve clair (--md-primary) par défaut de MD3. */
+  background: #fff;
+  color: #1b1b1f;
   border: none;
   border-radius: var(--shape-full);
   font-size: .875rem;
@@ -1009,6 +1010,61 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 }
 #dn-content, #dns-content { flex: 1; resize: none; }
 #dn-items-field #dn-items, #dns-items-field #dns-items { flex: 1; overflow-y: auto; }
+
+/* Barre d'outils de mise en forme, sous le texte, uniquement en édition
+   rapide. Pilule Material Design ; sélectionner du texte dans la zone puis
+   appuyer sur un bouton l'entoure de la syntaxe correspondante (voir
+   applyFormat() dans app.js), qui est ensuite rendue en gras/italique/
+   souligné/code sur la carte (voir renderFormatted()). */
+.fmt-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  width: fit-content;
+  margin: .625rem 0 0;
+  padding: .25rem;
+  background: var(--md-surface-4);
+  border-radius: var(--shape-full);
+}
+.fmt-toolbar button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface);
+  font-size: .875rem;
+  cursor: pointer;
+  transition: background .15s;
+}
+.fmt-toolbar button:hover { background: rgba(230,224,233,.12); }
+.fmt-toolbar button[data-fmt="bold"] { font-weight: 700; }
+.fmt-toolbar button[data-fmt="italic"] { font-style: italic; }
+.fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
+.fmt-toolbar button[data-fmt="code"] svg { width: 18px; height: 18px; }
+.fmt-toolbar .fmt-sep { width: 1px; height: 20px; background: var(--md-outline); margin: 0 .125rem; }
+
+/* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
+.note-code-inline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .8125rem;
+  background: rgba(230,224,233,.10);
+  padding: .05rem .3rem;
+  border-radius: 4px;
+}
+.note-code-block {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .8125rem;
+  background: rgba(230,224,233,.10);
+  padding: .5rem .625rem;
+  border-radius: var(--shape-xs);
+  overflow-x: auto;
+  margin: .375rem 0;
+  white-space: pre-wrap;
+}
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
 
