@@ -93,7 +93,8 @@ input, textarea, select { font: inherit; }
 /* Bouton "outlined" */
 .btn.ghost {
   background: transparent;
-  color: var(--md-primary);
+  /* Blanc plutôt que le mauve clair (--md-primary), comme pour .btn plein. */
+  color: #fff;
   border: 1px solid var(--md-outline);
 }
 .btn.ghost:hover { background: rgba(208,188,255,.08); box-shadow: none; }
@@ -1180,3 +1181,23 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   padding: 0;
 }
 #dlg-note-simple textarea:focus { outline: none; }
+
+/* Zone de contenu de l'édition rapide : contenteditable plutôt que
+   <textarea>, pour que le gras/italique/souligné/code de la barre d'outils
+   s'affiche réellement mis en forme pendant l'édition (WYSIWYG), et pas
+   seulement une fois la note enregistrée et réaffichée sur la carte.
+   Converti en texte façon markdown à l'enregistrement par richToText() dans
+   app.js — l'inverse de renderFormatted(), qui remplit cette zone à
+   l'ouverture. */
+.dns-content-editable {
+  width: 100%;
+  min-height: 120px;
+  background: transparent;
+  border: none;
+  color: var(--md-on-surface);
+  padding: 0;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dns-content-editable .note-code-block { white-space: pre-wrap; }

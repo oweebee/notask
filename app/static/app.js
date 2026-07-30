@@ -1274,7 +1274,7 @@ function openNoteSimpleDialog(note) {
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
-  $('#dns-content').value = note.content;
+  $('#dns-content').innerHTML = renderFormatted(note.content || '');
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-fmt-toolbar').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
@@ -1286,36 +1286,90 @@ function openNoteSimpleDialog(note) {
   $('#dlg-note-simple').showModal();
 }
 
-/* Barre d'outils de mise en forme, édition rapide uniquement. Entoure la
-   sélection courante d'une syntaxe façon markdown ; rendue en gras/italique/
-   souligné/code à l'affichage sur la carte (voir renderFormatted()) — le
-   <textarea> lui-même reste du texte brut, il ne peut pas afficher de mise
-   en forme, donc les marqueurs restent visibles tels quels pendant l'édition. */
-function wrapSelection(textarea, before, after) {
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const val = textarea.value;
-  const selected = val.slice(start, end);
-  textarea.value = val.slice(0, start) + before + selected + after + val.slice(end);
-  textarea.focus();
-  textarea.selectionStart = start + before.length;
-  textarea.selectionEnd = start + before.length + selected.length;
-}
+/* Barre d'outils de mise en forme, édition rapide uniquement. #dns-content
+   est une zone contenteditable (pas un <textarea>) : la sélection est donc
+   entourée d'un vrai tag HTML (<strong>/<em>/<u>/<code>) qui s'affiche
+   réellement mis en forme pendant l'édition (WYSIWYG), et pas seulement une
+   fois la note enregistrée et réaffichée sur la carte. Le contenu est
+   reconverti en texte façon markdown par richToText() à l'enregistrement —
+   l'opération inverse de renderFormatted(), qui remplit cette zone à
+   l'ouverture (voir openNoteSimpleDialog()). */
+const FMT_TAGS = { bold: 'strong', italic: 'em', underline: 'u' };
 
-const FMT_MARKERS = {
-  bold: ['**', '**'],
-  italic: ['*', '*'],
-  underline: ['__', '__'],
-  code: ['`', '`'],
-};
+function wrapSelectionRich(el, kind) {
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.commonAncestorContainer)) return;
+  const text = range.toString();
+
+  let wrapper;
+  if (kind === 'code') {
+    // Bloc de code si la sélection contient un saut de ligne, sinon code en
+    // ligne — même distinction que renderFormatted() (``` contre `) pour
+    // rester cohérent avec le rendu final sur la carte.
+    if (text.includes('\n')) {
+      wrapper = document.createElement('pre');
+      wrapper.className = 'note-code-block';
+      const code = document.createElement('code');
+      code.textContent = text || '\u200b';
+      wrapper.appendChild(code);
+    } else {
+      wrapper = document.createElement('code');
+      wrapper.className = 'note-code-inline';
+      wrapper.textContent = text || '\u200b';
+    }
+  } else {
+    wrapper = document.createElement(FMT_TAGS[kind]);
+    wrapper.textContent = text || '\u200b';
+  }
+
+  range.deleteContents();
+  range.insertNode(wrapper);
+
+  const newRange = document.createRange();
+  if (text) {
+    newRange.setStartAfter(wrapper);
+    newRange.collapse(true);
+  } else {
+    newRange.selectNodeContents(wrapper);
+  }
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+}
 
 $('#dns-fmt-toolbar').querySelectorAll('button[data-fmt]').forEach((btn) => {
   if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
-  btn.addEventListener('click', () => {
-    const [before, after] = FMT_MARKERS[btn.dataset.fmt];
-    wrapSelection($('#dns-content'), before, after);
-  });
+  // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
+  // la zone contenteditable au mousedown et efface la sélection avant même
+  // que le click ne se déclenche (constaté à la vérification : le texte
+  // sélectionné n'était plus entouré, un tag vide s'insérait au début).
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('click', () => wrapSelectionRich($('#dns-content'), btn.dataset.fmt));
 });
+
+/* Inverse de renderFormatted() : reconvertit le HTML de la zone
+   contenteditable en texte façon markdown pour l'enregistrement. */
+function richToText(root) {
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent.replace(/\u200b/g, '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName.toLowerCase();
+    const inner = () => Array.from(node.childNodes).map(walk).join('');
+    switch (tag) {
+      case 'br': return '\n';
+      case 'strong': case 'b': return '**' + inner() + '**';
+      case 'em': case 'i': return '*' + inner() + '*';
+      case 'u': return '__' + inner() + '__';
+      case 'pre': return '```' + node.textContent.replace(/\u200b/g, '') + '```';
+      case 'code': return '`' + node.textContent.replace(/\u200b/g, '') + '`';
+      case 'div': case 'p': return '\n' + inner();
+      default: return inner();
+    }
+  }
+  return Array.from(root.childNodes).map(walk).join('').replace(/^\n/, '');
+}
 
 /* Rendu markdown minimal (gras/italique/souligné/code) pour l'affichage des
    notes en texte libre sur la carte — jamais sur du HTML non échappé
@@ -1372,7 +1426,7 @@ async function saveNoteSimpleDialog() {
   if (state.editingIsChecklist) {
     body.items = state.editingNoteItems.filter((i) => i.text.trim());
   } else {
-    body.content = $('#dns-content').value;
+    body.content = richToText($('#dns-content'));
   }
   try {
     await api('/notes/' + n.id, { method: 'PATCH', body });
