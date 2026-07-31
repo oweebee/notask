@@ -1716,6 +1716,13 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   display: flex;
   flex-wrap: wrap;
   gap: .35rem;
+  /* Fond franchement opaque : le nuancier s'ouvre par-dessus le texte de
+     la notask, qui transparaissait derrière les pastilles et rendait le
+     choix illisible. Bordure + ombre pour le détacher nettement de la
+     carte colorée sur laquelle il se pose. */
+  background: #2a2730;
+  border: 1px solid var(--md-outline-variant);
+  box-shadow: var(--elev-3);
 }
 .text-color-popup .swatch {
   width: 22px;
@@ -1741,7 +1748,32 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   overflow-x: auto;
   margin: .375rem 0;
   white-space: pre-wrap;
+  /* Repère du bouton de copie posé en surimpression, et retrait à droite
+     réservé pour que le code ne passe jamais dessous. */
+  position: relative;
+  padding-right: 2.25rem;
 }
+/* Pastille de copie d'un bloc de code, en haut à droite. Visible en
+   permanence et non au survol : c'est un raccourci qu'on doit voir pour
+   savoir qu'il existe. Injectée par ajouterBoutonsCopieCode() dans app.js,
+   pas par renderFormatted(), pour ne jamais finir dans le texte enregistré. */
+.code-copy-btn {
+  position: absolute;
+  top: .25rem;
+  right: .25rem;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,.35);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.code-copy-btn:hover { background: #42a5f5; color: #0d1b2a; }
+.code-copy-btn svg { width: 14px; height: 14px; display: block; }
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
 

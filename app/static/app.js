@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-selection-copie-27';
+const BUILD_VERSION = '2026-07-31-nuancier-dans-dialog-29';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -485,6 +485,8 @@ const ICONS = {
   board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M12 16.5V20"/><path d="M9 20h6"/><path d="M7 12.5l3-3 2.5 2.5 2-2"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
   fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
+
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.8"/><path d="M15 6.5V5.8A1.8 1.8 0 0 0 13.2 4H5.8A1.8 1.8 0 0 0 4 5.8v7.4A1.8 1.8 0 0 0 5.8 15h.7"/></svg>',
 
   // Couleur du texte : un "A" surmontant une barre colorée, comme dans les
   // traitements de texte. La barre prend la couleur courante via
@@ -1639,6 +1641,7 @@ function renderNotes() {
 
     el.innerHTML = inner;
     hydrateInlineImages(el, n);
+    ajouterBoutonsCopieCode(el);
 
     // Déchiffrement paresseux des miniatures — chaque image n'est décodée
     // qu'une fois (voir le cache dans loadAttachment()), donc un ré-rendu
@@ -2745,6 +2748,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-description').value = note.description || '';
   $('#dns-content').innerHTML = renderFormatted(note.content || '');
   hydrateInlineImages($('#dns-content'), note);
+  ajouterBoutonsCopieCode($('#dns-content'));
   renderDnsMode();
   $('#dns-due').value = note.due_at || '';
   renderNoteDueBtnSimple();
@@ -2824,7 +2828,18 @@ function ouvrirNuancierTexte(anchor, editable) {
 
   const pop = document.createElement('div');
   pop.className = 'cal-popup text-color-popup';
-  document.body.appendChild(pop);
+
+  /* Même précaution que openCalPopup() : une <dialog> ouverte en modal
+     s'affiche dans le "top layer" du navigateur et rend TOUT le reste du
+     document inerte. Un popup ajouté à document.body se retrouvait donc
+     derrière le voile sombre (d'où son air transparent) et ne recevait
+     aucun clic : celui-ci atteignait le fond de la boîte, dont le
+     gestionnaire ferme la notask — d'où la couleur jamais appliquée et la
+     note qui se refermait. On l'ajoute donc DANS la boîte, et on le
+     positionne par rapport à elle. */
+  const hostDialog = anchor.closest('dialog');
+  const host = hostDialog || document.body;
+  host.appendChild(pop);
 
   for (const [hex, nom] of IMG_EDITOR_COLORS) {
     const s = document.createElement('button');
@@ -2840,9 +2855,23 @@ function ouvrirNuancierTexte(anchor, editable) {
     pop.appendChild(s);
   }
 
-  const rect = anchor.getBoundingClientRect();
-  pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
-  pop.style.left = `${Math.max(8, rect.left + window.scrollX - 40)}px`;
+  const LARGEUR = 200;   // cf. .text-color-popup dans style.css
+  if (hostDialog) {
+    const dialogRect = hostDialog.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const top = anchorRect.bottom - dialogRect.top + 6;
+    const left = Math.min(anchorRect.left - dialogRect.left, dialogRect.width - LARGEUR - 8);
+    pop.style.top = `${top}px`;
+    pop.style.left = `${Math.max(8, left)}px`;
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    const left = Math.min(
+      rect.left + window.scrollX,
+      window.scrollX + document.documentElement.clientWidth - LARGEUR - 8,
+    );
+    pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    pop.style.left = `${Math.max(8, left)}px`;
+  }
 
   const fermer = () => {
     pop.remove();
@@ -2901,6 +2930,9 @@ function richToText(root) {
         const hex = cssColorToHex(node.style.color);
         return hex ? `[c:${hex}]${inner()}[/c]` : inner();
       }
+      // Éléments d'interface injectés dans le rendu (pastille de copie des
+      // blocs de code) : ils ne font pas partie du texte de la notask.
+      case 'button': return '';
       case 'div': case 'p': return '\n' + inner();
       default: return inner();
     }
@@ -2936,6 +2968,45 @@ function cssColorToHex(valeur) {
   }
   const h = /^#([0-9a-fA-F]{6})$/.exec(valeur.trim());
   return h ? h[1].toLowerCase() : null;
+}
+
+/* Ajoute une pastille de copie sur chaque bloc de code déjà rendu. Injecté
+   après coup, jamais dans le HTML produit par renderFormatted() : ce même
+   HTML sert à remplir la zone d'édition, et un bouton laissé dans le
+   contenu finirait recopié dans le texte de la notask (voir aussi le
+   `case 'button'` de richToText, garde-fou pour le même risque).
+   contentEditable="false" : sans lui, le bouton devient éditable et
+   déplaçable au milieu du texte dans la boîte d'édition rapide. */
+function ajouterBoutonsCopieCode(root) {
+  if (!root) return;
+  root.querySelectorAll('pre.note-code-block').forEach((pre) => {
+    if (pre.querySelector('.code-copy-btn')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'code-copy-btn';
+    btn.contentEditable = 'false';
+    btn.title = 'Copier le code';
+    btn.setAttribute('aria-label', 'Copier le code');
+    btn.innerHTML = ICONS.copy;
+    // Sans ce preventDefault, le mousedown déplace le curseur/efface la
+    // sélection dans la zone éditable avant même que le clic n'arrive.
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', async (e) => {
+      // La carte entière est cliquable : sans ça, copier ouvrirait aussi
+      // la notask.
+      e.stopPropagation();
+      e.preventDefault();
+      const code = pre.querySelector('code');
+      const texte = (code ? code.textContent : pre.textContent) || '';
+      try {
+        await navigator.clipboard.writeText(texte);
+        afficherBulleCopie(e.clientX, e.clientY, 'Copié');
+      } catch {
+        afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
+      }
+    });
+    pre.appendChild(btn);
+  });
 }
 
 /* Remplace les <img data-att> d'un conteneur déjà rendu par leur vraie
@@ -4047,6 +4118,7 @@ async function openHistoryDetail(versionId) {
   }
   if (v.due_at) html += `<div class="history-detail-due">${ICONS.clock}${formatDue(v.due_at)}</div>`;
   $('#history-detail-content').innerHTML = html;
+  ajouterBoutonsCopieCode($('#history-detail-content'));
 
   if (v.attachments.length) {
     const wrap = document.createElement('div');
