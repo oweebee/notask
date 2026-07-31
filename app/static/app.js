@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-titres-sans-majuscules-44';
+const BUILD_VERSION = '2026-07-31-outils-compact-46';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -285,17 +285,17 @@ let state = {
    utilisé par la colonne d'échéances de l'accueil, où les sections
    voisinent avec la mosaïque. */
 const BUCKET_SHORT = {
-  late: 'En retard',
-  today: 'Du jour',
-  upcoming: 'À venir',
-  done: 'Terminées',
+  late: 'en retard',
+  today: 'du jour',
+  upcoming: 'à venir',
+  done: 'terminées',
 };
 
 const BUCKET_LABELS = {
-  late: 'Notasks en retard',
-  today: 'Notasks du jour',
-  upcoming: 'Notasks à venir',
-  done: 'Notasks terminées',
+  late: 'notasks en retard',
+  today: 'notasks du jour',
+  upcoming: 'notasks à venir',
+  done: 'notasks terminées',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -983,16 +983,16 @@ function enterApp() {
   // console pour vérifier si un déploiement a bien pris effet (voir
   // BUILD_VERSION en haut du fichier).
   $('#brand-logo').title = 'build ' + BUILD_VERSION;
-  $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notasks</span>';
+  $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">notasks</span>';
   // Entrée unique pour les notasks datées, juste sous "Notasks" : les
   // anciennes entrées par échéance (En retard / Aujourd'hui / À venir) ont
   // été retirées du menu, la vue les regroupe déjà avec des en-têtes de
   // couleur. Le compteur reste celui du total.
-  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">Notasks Prévues</span><span class="nav-count" id="count-tasks" hidden></span>';
-  $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
-  $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
-  $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">Corbeille</span>';
-  $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
+  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">notasks prévues</span><span class="nav-count" id="count-tasks" hidden></span>';
+  $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">favoris</span>';
+  $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">archives</span>';
+  $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">corbeille</span>';
+  $('#tab-admin').innerHTML = ICONS.users + '<span class="label">comptes</span>';
 
   loadLabels();
   switchView('notes');
@@ -4899,9 +4899,9 @@ async function collecterExport(progres) {
 }
 
 $('#btn-outils').addEventListener('click', () => {
-  $('#export-pw').value = ''; $('#export-pw2').value = '';
-  $('#import-pw').value = ''; $('#import-file').value = '';
-  msg($('#export-msg'), ''); msg($('#import-msg'), '');
+  $('#archive-pw').value = '';
+  $('#import-file').value = '';
+  msg($('#outil-msg'), '');
   $('#dlg-outils').showModal();
   animerOuvertureDialogue($('#dlg-outils'));
 });
@@ -4912,14 +4912,13 @@ $('#dlg-outils').addEventListener('cancel', (e) => {
 });
 
 $('#export-run').addEventListener('click', async () => {
-  const pw = $('#export-pw').value;
-  if (pw.length < 8) return msg($('#export-msg'), 'Mot de passe : 8 caractères minimum.');
-  if (pw !== $('#export-pw2').value) return msg($('#export-msg'), 'Les deux mots de passe ne correspondent pas.');
+  const pw = $('#archive-pw').value;
+  if (pw.length < 8) return msg($('#outil-msg'), 'Mot de passe : 8 caractères minimum.');
 
   const btn = $('#export-run');
   btn.disabled = true;
   try {
-    const avancement = (t) => msg($('#export-msg'), t, 'ok');
+    const avancement = (t) => msg($('#outil-msg'), t, 'ok');
     const donnees = await collecterExport(avancement);
 
     avancement('Chiffrement…');
@@ -4943,19 +4942,27 @@ $('#export-run').addEventListener('click', async () => {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 
-    msg($('#export-msg'), `Archive créée : ${donnees.notes.length} notask(s), ${donnees.labels.length} libellé(s).`, 'ok');
+    msg($('#outil-msg'), `Archive créée : ${donnees.notes.length} notask(s), ${donnees.labels.length} libellé(s).`, 'ok');
   } catch (err) {
-    msg($('#export-msg'), err.message);
+    msg($('#outil-msg'), err.message);
   } finally {
     btn.disabled = false;
   }
 });
 
-$('#import-run').addEventListener('click', async () => {
+/* "Importer" n'importe pas directement : il ouvre le sélecteur de fichier,
+   et c'est le choix du fichier qui déclenche l'opération. Un bouton
+   "Parcourir" séparé n'apportait rien. */
+$('#import-run').addEventListener('click', () => {
+  if (!$('#archive-pw').value) return msg($('#outil-msg'), 'Saisissez le mot de passe de l’archive.');
+  $('#import-file').value = '';   // permet de rechoisir le même fichier
+  $('#import-file').click();
+});
+
+$('#import-file').addEventListener('change', async () => {
   const fichier = $('#import-file').files[0];
-  const pw = $('#import-pw').value;
-  if (!fichier) return msg($('#import-msg'), 'Choisissez un fichier d’archive.');
-  if (!pw) return msg($('#import-msg'), 'Saisissez le mot de passe de l’archive.');
+  const pw = $('#archive-pw').value;
+  if (!fichier || !pw) return;
 
   const btn = $('#import-run');
   btn.disabled = true;
@@ -4979,7 +4986,7 @@ $('#import-run').addEventListener('click', async () => {
       throw new Error('Mot de passe incorrect, ou archive endommagée.');
     }
 
-    msg($('#import-msg'), 'Création des libellés…', 'ok');
+    msg($('#outil-msg'), 'Création des libellés…', 'ok');
     // Les identifiants de libellés de l'archive n'ont aucun sens ici : on
     // recrée les manquants et on garde une table de correspondance
     // nom -> nouvel identifiant pour rattacher les notasks.
@@ -5006,7 +5013,7 @@ $('#import-run').addEventListener('click', async () => {
     const notes = donnees.notes || [];
     let faits = 0, echecs = 0;
     for (const n of notes) {
-      msg($('#import-msg'), `Import des notasks… (${faits + echecs + 1}/${notes.length})`, 'ok');
+      msg($('#outil-msg'), `Import des notasks… (${faits + echecs + 1}/${notes.length})`, 'ok');
       try {
         const body = {
           title: await encryptField(n.title || ''),
@@ -5048,11 +5055,11 @@ $('#import-run').addEventListener('click', async () => {
 
     await loadLabels();
     await loadNotes();
-    msg($('#import-msg'),
+    msg($('#outil-msg'),
       `Import terminé : ${faits} notask(s) ajoutée(s)${echecs ? `, ${echecs} en échec` : ''}.`,
       echecs ? 'error' : 'ok');
   } catch (err) {
-    msg($('#import-msg'), err.message);
+    msg($('#outil-msg'), err.message);
   } finally {
     btn.disabled = false;
   }

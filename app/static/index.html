@@ -86,7 +86,7 @@
       </div>
 
       <hr class="drawer-sep">
-      <p class="drawer-section">Libellés</p>
+      <p class="drawer-section">libellés</p>
       <div id="labels-list"></div>
       <div class="label-new-row">
         <input id="label-new-input" placeholder="Nouveau libellé…" maxlength="50">
@@ -244,7 +244,7 @@
          bout de 30 jours (voir _purge_expired_trash() dans notes.py). -->
     <section id="view-trash" hidden>
       <div class="toolbar">
-        <strong style="flex:1">Corbeille</strong>
+        <strong style="flex:1">corbeille</strong>
       </div>
       <div class="trash-grid" id="trash-grid"></div>
       <div class="empty" id="trash-empty" hidden>La corbeille est vide.</div>
@@ -511,41 +511,20 @@
   <h2>Outils</h2>
 
   <section class="outil-bloc">
-    <h3>Exporter toute l'application</h3>
-    <p class="hint">
-      Libellés, notasks (lignes et pièces jointes comprises) et réglages,
-      réunis dans un seul fichier chiffré par le mot de passe ci-dessous.
-      Ce mot de passe est indépendant de celui du compte : notez-le, il est
-      le seul moyen de relire l'archive.
-    </p>
+    <h3>sauvegarde</h3>
     <div class="field">
-      <label for="export-pw">Mot de passe de l'archive</label>
-      <input id="export-pw" type="password" autocomplete="new-password">
+      <label for="archive-pw">Mot de passe de l'archive</label>
+      <input id="archive-pw" type="password" autocomplete="off">
     </div>
-    <div class="field">
-      <label for="export-pw2">Confirmation</label>
-      <input id="export-pw2" type="password" autocomplete="new-password">
+    <!-- Un seul mot de passe, deux boutons : c'est le bouton choisi qui
+         détermine le sens de l'opération. Le sélecteur de fichier reste
+         masqué, "Importer" l'ouvre lui-même. -->
+    <div class="outil-actions">
+      <button class="btn" id="export-run" type="button">Exporter</button>
+      <button class="btn" id="import-run" type="button">Importer</button>
     </div>
-    <button class="btn" id="export-run" type="button">Exporter</button>
-    <div id="export-msg"></div>
-  </section>
-
-  <section class="outil-bloc">
-    <h3>Réimporter une archive</h3>
-    <p class="hint">
-      Le contenu de l'archive s'ajoute à ce qui existe déjà — rien n'est
-      remplacé ni supprimé.
-    </p>
-    <div class="field">
-      <label for="import-file">Fichier d'archive</label>
-      <input id="import-file" type="file" accept=".notask,application/octet-stream">
-    </div>
-    <div class="field">
-      <label for="import-pw">Mot de passe de l'archive</label>
-      <input id="import-pw" type="password" autocomplete="current-password">
-    </div>
-    <button class="btn" id="import-run" type="button">Importer</button>
-    <div id="import-msg"></div>
+    <input type="file" id="import-file" accept=".notask,application/octet-stream" hidden>
+    <div id="outil-msg"></div>
   </section>
 
   <div class="dialog-actions">

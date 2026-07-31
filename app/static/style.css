@@ -271,8 +271,10 @@ header.topbar .who {
 }
 .outil-bloc:first-of-type { border-top: none; padding-top: 0; }
 .outil-bloc h3 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 500; }
-.outil-bloc .hint { margin: 0 0 .75rem; }
-#dlg-outils[open] { width: min(560px, 94vw); }
+/* Les deux boutons côte à côte sous le champ : c'est le bouton choisi qui
+   détermine le sens de l'opération, d'où leur poids visuel identique. */
+.outil-actions { display: flex; gap: .5rem; margin-top: .25rem; }
+#dlg-outils[open] { width: min(460px, 94vw); }
 
 /* ===================== Menu latéral (navigation drawer) ===================== */
 
