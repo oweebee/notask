@@ -1238,10 +1238,10 @@ function renderNotes() {
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
         <button data-act="label" title="Libellés" aria-label="Libellés">${ICONS.tag}</button>
-        <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
-          aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
         <span class="sep"></span>
+        <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
+          aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="delete" title="Mettre à la corbeille" aria-label="Mettre à la corbeille">${ICONS.trash}</button>
       </div>`;
 
