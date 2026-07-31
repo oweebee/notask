@@ -468,8 +468,67 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .toolbar input[type=search] { flex: 1; min-width: 200px; }
 .toolbar input:focus { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 
-/* Écho de la cuillère bleue du logo sur la barre de recherche, atténué. */
+/* Écho de la cuillère bleue du logo sur la barre de tri, atténué. */
 .search-toolbar input[type=search] { background: rgba(29, 84, 143, .55); }
+/* Seconde barre — recherche en profondeur — en jaune cuillère, pour la
+   distinguer d'un coup d'œil de la barre de tri juste au-dessus. */
+.deep-search-toolbar input[type=search] { background: rgba(133, 102, 20, .55); }
+
+/* ---- Résultats de la recherche en profondeur (voir renderSearchHits) ----
+   Cartes deux fois plus larges que dans la mosaïque : il ne s'agit plus
+   d'un aperçu mais d'un extrait à lire, avec son contexte. */
+.note.search-hit {
+  grid-column: span 2;
+  cursor: pointer;
+}
+.hit-nav {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: .25rem 0 .5rem;
+  font-size: .75rem;
+  color: var(--md-on-surface-variant);
+}
+.hit-nav button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,.22);
+  color: var(--md-on-surface);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.hit-nav button:hover { background: rgba(0,0,0,.38); }
+.hit-extract {
+  font-size: .875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0,0,0,.16);
+  border-radius: var(--shape-xs);
+  padding: .5rem .625rem;
+}
+.hit-line { min-height: 1.4em; }
+/* La ligne qui porte l'occurrence sélectionnée est légèrement détachée du
+   contexte, pour qu'on la retrouve sans la chercher. */
+.hit-line-current { background: rgba(255,255,255,.06); border-radius: 3px; }
+
+/* Occurrence sélectionnée en bleu cuillère, les autres en jaune cuillère —
+   mêmes teintes que les deux cuillères du logo. */
+.hit-extract mark.hit {
+  background: #ffd54f;
+  color: #1a1a1a;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.hit-extract mark.hit.current {
+  background: #42a5f5;
+  color: #0d1b2a;
+}
 
 .empty { color: var(--md-on-surface-variant); text-align: center; padding: 4rem 1rem; font-size: .875rem; }
 
@@ -1497,7 +1556,22 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .fmt-toolbar button[data-fmt="bold"] { font-weight: 700; }
 .fmt-toolbar button[data-fmt="italic"] { font-style: italic; }
 .fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
-.fmt-toolbar button[data-fmt="code"] svg { width: 18px; height: 18px; }
+.fmt-toolbar button[data-fmt="code"] svg,
+.fmt-toolbar button[data-fmt="color"] svg { width: 18px; height: 18px; }
+
+/* Nuancier flottant du bouton "Couleur du texte" (voir
+   ouvrirNuancierTexte() dans app.js). */
+.text-color-popup {
+  width: 200px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.text-color-popup .swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255,255,255,.35);
+}
 .fmt-toolbar .fmt-sep { width: 1px; height: 20px; background: var(--md-outline); margin: 0 .125rem; }
 
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
@@ -1774,25 +1848,34 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   font-size: .6875rem;
   color: var(--md-on-surface-variant);
 }
+/* Bouton de retrait d'une pièce jointe. Sur une chip fichier il suit le
+   texte ; sur une image il flotte en surimpression, en haut à droite.
+   Pastille nettement contrastée et bien détachée du bord : posé plus près
+   du coin et translucide, il se lisait comme une tache grise à cheval sur
+   l'image, sans qu'on devine sa fonction. */
 .dns-attach-remove {
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
+  border: none;
   border-radius: 50%;
   color: var(--md-on-surface-variant);
   background: transparent;
+  transition: background .15s, color .15s;
 }
 .dns-attach-chip.is-image .dns-attach-remove {
   position: absolute;
-  top: .25rem;
-  right: .25rem;
-  background: rgba(0,0,0,.55);
+  top: .5rem;
+  right: .5rem;
+  background: rgba(0,0,0,.72);
   color: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
-.dns-attach-remove:hover { background: rgba(242,184,181,.25); color: var(--md-error); }
-.dns-attach-remove svg { width: 13px; height: 13px; }
+.dns-attach-remove:hover { background: var(--md-error); color: var(--md-on-error); }
+.dns-attach-chip.is-image .dns-attach-remove:hover { background: var(--md-error); color: var(--md-on-error); }
+.dns-attach-remove svg { width: 14px; height: 14px; }
 
 /* Glisser-déposer un fichier sur la carte en édition simple, ou sur le
    composeur (même retour visuel, voir ncComposerEl dans app.js). */
@@ -1871,7 +1954,15 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   padding-left: .5rem;
   border-left: 1px solid var(--md-outline-variant);
 }
-.img-editor-colors .swatch { width: 22px; height: 22px; }
+/* Vraies couleurs de dessin (voir IMG_EDITOR_COLORS dans app.js), pas les
+   teintes assombries du thème. Contour un peu plus marqué que le .swatch
+   standard : sur la barre d'outils sombre, le noir se confondrait avec le
+   fond et le blanc n'aurait aucune limite visible. */
+.img-editor-colors .swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255,255,255,.35);
+}
 
 /* Épaisseur du trait libre. */
 .img-editor-size {

@@ -165,6 +165,7 @@
                 <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
                 <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
                 <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+                <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
                 <span class="fmt-sep"></span>
                 <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
                 <span class="fmt-sep"></span>
@@ -200,8 +201,16 @@
           </div>
         </div>
 
+        <!-- Deux barres distinctes, volontairement :
+             - "Trier" (bleu cuillère) filtre la mosaïque, affichage normal ;
+             - "Rechercher" (jaune cuillère) affiche des cartes deux fois
+               plus larges, centrées sur l'occurrence trouvée avec son
+               contexte — voir renderSearchHits() dans app.js. -->
         <div class="toolbar search-toolbar">
-          <input type="search" id="notes-search" placeholder="Rechercher dans les notasks…">
+          <input type="search" id="notes-search" placeholder="Trier les notasks…">
+        </div>
+        <div class="toolbar search-toolbar deep-search-toolbar">
+          <input type="search" id="notes-deep-search" placeholder="Rechercher dans les notasks…">
         </div>
         </div>
       </div>
@@ -342,6 +351,7 @@
         <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
         <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
         <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+        <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
         <span class="fmt-sep"></span>
         <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
         <span class="fmt-sep"></span>

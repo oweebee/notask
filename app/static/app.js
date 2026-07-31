@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-recherche-collee-agenda-1mois-15';
+const BUILD_VERSION = '2026-07-31-recherche-profondeur-19';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -252,6 +252,10 @@ let state = {
   showArchived: false,
   showFavoritesOnly: false,
   search: '',
+  // Recherche en profondeur (seconde barre) : terme cherché, et rang de
+  // l'occurrence affichée pour chaque notask (clé = id de la notask).
+  deepSearch: '',
+  deepCursor: {},
   tasks: [],
   trashNotes: [],
   editingNote: null,
@@ -469,6 +473,11 @@ const ICONS = {
   board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M12 16.5V20"/><path d="M9 20h6"/><path d="M7 12.5l3-3 2.5 2.5 2-2"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
   fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
+
+  // Couleur du texte : un "A" surmontant une barre colorée, comme dans les
+  // traitements de texte. La barre prend la couleur courante via
+  // currentColor, donc elle suit la teinte du bouton.
+  textColor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15.5 9.5 5l4.5 10.5"/><path d="M6.6 12.5h5.8"/><rect x="15.5" y="5" width="4" height="11" rx="1"/><path d="M4 20h16" stroke-width="2.4"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -1188,7 +1197,8 @@ $('#label-new-input').addEventListener('keydown', (e) => {
 // positions que du sous-ensemble visible mélangerait l'ordre des notes
 // masquées par le filtre.
 function notesReorderable() {
-  return !state.showArchived && !state.showFavoritesOnly && !state.search && !state.labelFilter;
+  return !state.showArchived && !state.showFavoritesOnly && !state.search
+    && !state.deepSearch && !state.labelFilter;
 }
 
 /* Place le composeur, la recherche, ET assez de notes pour les entourer des
@@ -1227,6 +1237,16 @@ function layoutMosaic() {
   const span = Math.min(2, cols);
   const start = Math.max(1, Math.floor((cols - span) / 2) + 1);
 
+  // Recherche en profondeur : les cartes de résultat font elles-mêmes deux
+  // colonnes de large, il n'y a plus de place à leur réserver de part et
+  // d'autre du bloc — on laisse la grille les enchaîner toute seule.
+  if (state.deepSearch) {
+    stack.style.gridColumn = `${start} / span ${span}`;
+    stack.style.gridRow = '1';
+    noteEls.forEach(reset);
+    return;
+  }
+
   stack.style.gridColumn = `${start} / span ${span}`;
   stack.style.gridRow = '1';
 
@@ -1255,13 +1275,157 @@ window.addEventListener('resize', () => {
   _layoutResizeTimer = setTimeout(layoutMosaic, 150);
 });
 
+/* ------------------ Recherche en profondeur (2e barre) ------------------
+   Contrairement au tri (1re barre) qui se contente de filtrer la mosaïque,
+   celle-ci montre OÙ le terme apparaît : cartes deux fois plus larges,
+   extrait de 3 lignes avant et 3 lignes après l'occurrence, navigation
+   entre occurrences d'une même notask. */
+
+// Nombre de lignes de contexte affichées de part et d'autre de l'occurrence.
+const HIT_CONTEXT_LINES = 3;
+
+/* Texte d'une notask ramené à une liste de lignes, tous champs confondus :
+   c'est sur cette liste que portent la recherche ET le découpage en
+   contexte, pour que "3 lignes avant/après" veuille dire la même chose
+   quel que soit le champ où le terme a été trouvé. */
+function noteLines(n) {
+  const lignes = [];
+  if (n.title) lignes.push(n.title);
+  if (n.description) lignes.push(n.description);
+  if (n.is_checklist) {
+    for (const it of (n.items || [])) lignes.push(it.text || '');
+  } else if (n.content) {
+    lignes.push(...n.content.split('\n'));
+  }
+  return lignes;
+}
+
+/* Toutes les occurrences du terme dans une notask, dans l'ordre de
+   lecture. Recherche insensible à la casse, sur du texte déjà déchiffré. */
+function findHits(n, terme) {
+  const lignes = noteLines(n);
+  const cible = terme.toLowerCase();
+  const hits = [];
+  lignes.forEach((ligne, idx) => {
+    const bas = (ligne || '').toLowerCase();
+    let from = 0;
+    for (;;) {
+      const p = bas.indexOf(cible, from);
+      if (p === -1) break;
+      hits.push({ ligne: idx, debut: p, fin: p + cible.length });
+      from = p + cible.length;
+    }
+  });
+  return { lignes, hits };
+}
+
+/* Rend un extrait : les lignes autour de l'occurrence courante, avec
+   toutes les occurrences visibles surlignées — celle qui est sélectionnée
+   en bleu cuillère, les autres en jaune cuillère. */
+function renderHitExtract(lignes, hits, courant) {
+  const cible = hits[courant];
+  const debut = Math.max(0, cible.ligne - HIT_CONTEXT_LINES);
+  const fin = Math.min(lignes.length - 1, cible.ligne + HIT_CONTEXT_LINES);
+
+  let html = '';
+  for (let i = debut; i <= fin; i++) {
+    const ligne = lignes[i] || '';
+    // Occurrences de CETTE ligne. On garde leur rang global (idx) pour
+    // savoir laquelle est celle qui est sélectionnée.
+    const surCetteLigne = hits
+      .map((h, idx) => ({ ...h, idx }))
+      .filter((h) => h.ligne === i);
+
+    let morceau = escapeHtml(ligne);
+    if (surCetteLigne.length) {
+      morceau = '';
+      let pos = 0;
+      for (const h of surCetteLigne.slice().sort((a, b) => a.debut - b.debut)) {
+        morceau += escapeHtml(ligne.slice(pos, h.debut));
+        const classe = h.idx === courant ? 'hit current' : 'hit';
+        morceau += `<mark class="${classe}">${escapeHtml(ligne.slice(h.debut, h.fin))}</mark>`;
+        pos = h.fin;
+      }
+      morceau += escapeHtml(ligne.slice(pos));
+    }
+    html += `<div class="hit-line${i === cible.ligne ? ' hit-line-current' : ''}">${morceau || '&nbsp;'}</div>`;
+  }
+  return html;
+}
+
+/* Remplace la mosaïque par les résultats de la recherche en profondeur. */
+function renderSearchHits() {
+  const grid = $('#notes-grid');
+  grid.querySelectorAll('.note').forEach((el) => el.remove());
+
+  const terme = state.deepSearch;
+  const resultats = [];
+  for (const n of state.notes) {
+    const { lignes, hits } = findHits(n, terme);
+    if (hits.length) resultats.push({ n, lignes, hits });
+  }
+
+  $('#notes-empty').hidden = resultats.length > 0;
+  $('#notes-empty').textContent = `Aucune notask ne contient « ${terme} ».`;
+
+  for (const { n, lignes, hits } of resultats) {
+    const courant = Math.min(state.deepCursor[n.id] || 0, hits.length - 1);
+
+    const el = document.createElement('article');
+    el.className = 'note search-hit c-' + n.color;
+    el.dataset.id = n.id;
+
+    const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
+    const nav = hits.length > 1
+      ? `<div class="hit-nav">
+           <button type="button" class="hit-prev" aria-label="Occurrence précédente">&#8249;</button>
+           <span class="hit-count">${courant + 1} / ${hits.length}</span>
+           <button type="button" class="hit-next" aria-label="Occurrence suivante">&#8250;</button>
+         </div>`
+      : `<div class="hit-nav"><span class="hit-count">1 occurrence</span></div>`;
+
+    el.innerHTML = `
+      <div class="note-title-row">${icon}<h3>${escapeHtml(n.title || 'Notask sans titre')}</h3></div>
+      ${nav}
+      <div class="hit-extract">${renderHitExtract(lignes, hits, courant)}</div>`;
+
+    const bouger = (delta) => {
+      state.deepCursor[n.id] = (courant + delta + hits.length) % hits.length;
+      renderSearchHits();
+    };
+    const prev = el.querySelector('.hit-prev');
+    const next = el.querySelector('.hit-next');
+    if (prev) prev.onclick = (e) => { e.stopPropagation(); bouger(-1); };
+    if (next) next.onclick = (e) => { e.stopPropagation(); bouger(1); };
+
+    // Clic ailleurs sur la carte : ouvre la notask, comme dans la mosaïque.
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.hit-nav')) return;
+      openNoteSimpleDialog(n);
+    });
+
+    grid.appendChild(el);
+  }
+
+  layoutMosaic();
+}
+
 function renderNotes() {
+  // Recherche en profondeur active : la mosaïque laisse place aux
+  // résultats détaillés (voir renderSearchHits()).
+  if (state.deepSearch) { renderSearchHits(); return; }
+
   const grid = $('#notes-grid');
   // Le composeur et la recherche vivent en dur DANS #notes-grid (voir
   // index.html) : on ne retire que les cartes de note d'un rendu précédent,
   // jamais tout le conteneur, sous peine de les faire disparaître.
   grid.querySelectorAll('.note').forEach((el) => el.remove());
   $('#notes-empty').hidden = state.notes.length > 0;
+  // Remet le message d'origine : la recherche en profondeur le remplace
+  // par « Aucune notask ne contient … » quand elle est active.
+  $('#notes-empty').textContent = state.showArchived
+    ? 'Aucune notask archivée.'
+    : state.showFavoritesOnly ? 'Aucun favori.' : 'Aucune notask.';
   const dragOk = notesReorderable();
 
   for (const n of state.notes) {
@@ -1757,11 +1921,7 @@ renderNcDueBtn();
 // #dns-fmt-toolbar en édition rapide (wrapSelectionRich()/richToText(),
 // définies plus bas dans ce fichier mais utilisables ici — déclarations de
 // fonction, donc "remontées" (hoisted) avant l'exécution de ce script).
-$('#nc-fmt-group').querySelectorAll('button[data-fmt]').forEach((btn) => {
-  if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
-  btn.addEventListener('mousedown', (e) => e.preventDefault());
-  btn.addEventListener('click', () => wrapSelectionRich($('#nc-content'), btn.dataset.fmt));
-});
+brancherBarreFormat('#nc-fmt-group', '#nc-content');
 
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
@@ -1915,6 +2075,21 @@ let searchTimer;
 $('#notes-search').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.search = e.target.value.trim(); loadNotes(); }, 250);
+});
+
+/* Seconde barre : recherche en profondeur, qui ne filtre pas la mosaïque
+   mais la remplace par des cartes larges centrées sur chaque occurrence
+   (voir renderSearchHits()). Les curseurs d'occurrence sont remis à zéro à
+   chaque frappe : la liste des résultats change, garder l'ancien rang
+   n'aurait aucun sens. */
+let deepSearchTimer;
+$('#notes-deep-search').addEventListener('input', (e) => {
+  clearTimeout(deepSearchTimer);
+  deepSearchTimer = setTimeout(() => {
+    state.deepSearch = e.target.value.trim();
+    state.deepCursor = {};
+    renderNotes();
+  }, 250);
 });
 
 /* Les archives sont désormais une entrée du menu latéral, pas un bouton. */
@@ -2423,7 +2598,7 @@ function openNoteSimpleDialog(note) {
    l'ouverture (voir openNoteSimpleDialog()). */
 const FMT_TAGS = { bold: 'strong', italic: 'em', underline: 'u' };
 
-function wrapSelectionRich(el, kind) {
+function wrapSelectionRich(el, kind, couleur) {
   el.focus();
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
@@ -2432,7 +2607,11 @@ function wrapSelectionRich(el, kind) {
   const text = range.toString();
 
   let wrapper;
-  if (kind === 'code') {
+  if (kind === 'color') {
+    wrapper = document.createElement('span');
+    wrapper.style.color = couleur;
+    wrapper.textContent = text || '​';
+  } else if (kind === 'code') {
     // Bloc de code si la sélection contient un saut de ligne, sinon code en
     // ligne — même distinction que renderFormatted() (``` contre `) pour
     // rester cohérent avec le rendu final sur la carte.
@@ -2466,15 +2645,68 @@ function wrapSelectionRich(el, kind) {
   sel.addRange(newRange);
 }
 
-$('#dns-fmt-toolbar').querySelectorAll('button[data-fmt]').forEach((btn) => {
-  if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
-  // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
-  // la zone contenteditable au mousedown et efface la sélection avant même
-  // que le click ne se déclenche (constaté à la vérification : le texte
-  // sélectionné n'était plus entouré, un tag vide s'insérait au début).
-  btn.addEventListener('mousedown', (e) => e.preventDefault());
-  btn.addEventListener('click', () => wrapSelectionRich($('#dns-content'), btn.dataset.fmt));
-});
+/* Petit nuancier flottant du bouton "Couleur du texte". Reprend les vraies
+   couleurs de l'éditeur d'image (IMG_EDITOR_COLORS) plutôt que les teintes
+   assombries des notes : le texte doit rester lisible sur la carte.
+   La sélection est déjà préservée par le preventDefault du mousedown sur
+   le bouton (voir brancherBarreFormat) — le popover, lui, ne prend jamais
+   le focus pour la même raison. */
+function ouvrirNuancierTexte(anchor, editable) {
+  document.querySelectorAll('.text-color-popup').forEach((p) => p.remove());
+
+  const pop = document.createElement('div');
+  pop.className = 'cal-popup text-color-popup';
+  document.body.appendChild(pop);
+
+  for (const [hex, nom] of IMG_EDITOR_COLORS) {
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch';
+    s.style.background = hex;
+    s.title = nom;
+    s.addEventListener('mousedown', (e) => e.preventDefault());
+    s.onclick = () => {
+      wrapSelectionRich(editable, 'color', hex);
+      fermer();
+    };
+    pop.appendChild(s);
+  }
+
+  const rect = anchor.getBoundingClientRect();
+  pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  pop.style.left = `${Math.max(8, rect.left + window.scrollX - 40)}px`;
+
+  const fermer = () => {
+    pop.remove();
+    document.removeEventListener('mousedown', dehors);
+    document.removeEventListener('keydown', touche);
+  };
+  const dehors = (e) => { if (!pop.contains(e.target) && e.target !== anchor) fermer(); };
+  const touche = (e) => { if (e.key === 'Escape') fermer(); };
+  setTimeout(() => document.addEventListener('mousedown', dehors), 0);
+  document.addEventListener('keydown', touche);
+}
+
+/* Branche une barre de mise en forme sur sa zone de texte. Mutualisée
+   entre l'édition rapide et le composeur : les deux ont exactement les
+   mêmes boutons, il n'y a aucune raison d'en tenir deux copies. */
+function brancherBarreFormat(groupeSel, editableSel) {
+  $(groupeSel).querySelectorAll('button[data-fmt]').forEach((btn) => {
+    if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
+    if (btn.dataset.fmt === 'color') btn.innerHTML = ICONS.textColor;
+    // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
+    // la zone contenteditable au mousedown et efface la sélection avant même
+    // que le click ne se déclenche (constaté à la vérification : le texte
+    // sélectionné n'était plus entouré, un tag vide s'insérait au début).
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      if (btn.dataset.fmt === 'color') ouvrirNuancierTexte(btn, $(editableSel));
+      else wrapSelectionRich($(editableSel), btn.dataset.fmt);
+    });
+  });
+}
+
+brancherBarreFormat('#dns-fmt-toolbar', '#dns-content');
 
 /* Inverse de renderFormatted() : reconvertit le HTML de la zone
    contenteditable en texte façon markdown pour l'enregistrement. */
@@ -2495,6 +2727,12 @@ function richToText(root) {
       // marqueur avec l'id de la pièce jointe, jamais les octets ni une
       // URL temporaire — voir NOTE_IMG_MARK et hydrateInlineImages().
       case 'img': return node.dataset.att ? `![att:${node.dataset.att}]` : '';
+      // Texte coloré : conservé sous forme de marqueur, comme le gras ou le
+      // code — voir NOTE_COLOR_MARK et renderFormatted().
+      case 'span': {
+        const hex = cssColorToHex(node.style.color);
+        return hex ? `[c:${hex}]${inner()}[/c]` : inner();
+      }
       case 'div': case 'p': return '\n' + inner();
       default: return inner();
     }
@@ -2513,6 +2751,25 @@ function richToText(root) {
    des octets dans le contenu — seul l'identifiant voyage. */
 const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
 
+/* Texte coloré dans le corps d'une notask : `[c:e53935]texte[/c]`. Même
+   principe que le gras/italique — un marqueur dans le texte, donc chiffré
+   avec lui et rendu à l'affichage. Hex sur 6 chiffres uniquement, pour ne
+   pas laisser passer n'importe quelle valeur CSS dans un attribut style. */
+const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
+
+/* `element.style.color` rend "rgb(r, g, b)" : reconverti en hex pour le
+   marqueur. Retourne null si la couleur est absente ou illisible, auquel
+   cas on n'écrit aucun marqueur. */
+function cssColorToHex(valeur) {
+  if (!valeur) return null;
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(valeur.trim());
+  if (m) {
+    return [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('');
+  }
+  const h = /^#([0-9a-fA-F]{6})$/.exec(valeur.trim());
+  return h ? h[1].toLowerCase() : null;
+}
+
 /* Remplace les <img data-att> d'un conteneur déjà rendu par leur vraie
    source, déchiffrée à la demande. Appelé après chaque insertion de HTML
    contenant du contenu de notask (carte ou édition rapide). */
@@ -2529,6 +2786,9 @@ function hydrateInlineImages(root, note) {
 function renderFormatted(text) {
   let html = escapeHtml(text);
   html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
+  // Couleur avant les autres marqueurs : son contenu peut lui-même être en
+  // gras/italique, qui seront traités ensuite à l'intérieur du span.
+  html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
@@ -2670,8 +2930,10 @@ $('#dlg-note-simple').addEventListener('click', (e) => {
    nouvel onglet. Cinq outils : rectangle, ellipse (contours), surlignage
    (aplat semi-transparent), texte, mosaïque (pour cacher une zone) — plus
    une palette de couleurs qui reprend telle quelle celle des notes/
-   libellés (COLORS, .c-* et LABEL_COLOR_HEX), pour rester dans le thème déjà
-   en place plutôt que d'inventer une nouvelle gamme de couleurs.
+   une palette de VRAIES couleurs (IMG_EDITOR_COLORS), volontairement
+   distincte de celle des notes : les teintes de notes sont assombries pour
+   servir de fond sur un thème sombre, un trait de marquage doit au
+   contraire ressortir sur la photo ou le tableau.
 
    Tout se dessine directement sur #img-editor-canvas, à la résolution
    naturelle de l'image (pas celle, réduite, à laquelle il est affiché à
@@ -2701,7 +2963,7 @@ const imgEditor = {
   // attente puisque la notask n'existe pas encore).
   mode: 'photo',
   tool: 'brush',
-  color: LABEL_COLOR_HEX.red,
+  color: '#e53935',   // rouge franc, cf. IMG_EDITOR_COLORS
   size: 6,          // épaisseur du trait libre, en pixels canvas
   // Couleur de fond, visible uniquement là où le canvas est transparent —
   // donc jamais sur une photo (opaque), et partout sur un tableau blanc
@@ -2751,18 +3013,31 @@ $('#img-editor-size').addEventListener('input', (e) => {
   $('#img-editor-size-val').textContent = imgEditor.size;
 });
 
-// Palette de couleurs de l'éditeur : construite une seule fois (elle ne
-// dépend d'aucune note en particulier), "default" exclu comme pour
-// label-color-grid — un gris quasi invisible ne sert à rien comme couleur
-// de marquage.
+/* Palette de dessin : de VRAIES couleurs, franches et saturées — pas la
+   palette des notes (LABEL_COLOR_HEX), dont les teintes sont volontairement
+   assombries pour servir de fond de carte sur un thème sombre. Un trait de
+   marquage doit ressortir sur la photo ou le tableau, pas se fondre dedans.
+   Noir et blanc inclus : indispensables pour annoter. */
+const IMG_EDITOR_COLORS = [
+  ['#000000', 'Noir'], ['#ffffff', 'Blanc'], ['#9e9e9e', 'Gris'],
+  ['#e53935', 'Rouge'], ['#ff5722', 'Orange vif'], ['#ff9800', 'Orange'],
+  ['#ffc107', 'Ambre'], ['#ffeb3b', 'Jaune'], ['#cddc39', 'Citron'],
+  ['#8bc34a', 'Vert clair'], ['#4caf50', 'Vert'], ['#009688', 'Turquoise'],
+  ['#00bcd4', 'Cyan'], ['#03a9f4', 'Bleu clair'], ['#2196f3', 'Bleu'],
+  ['#3f51b5', 'Indigo'], ['#673ab7', 'Violet'], ['#9c27b0', 'Pourpre'],
+  ['#e91e63', 'Rose'], ['#795548', 'Brun'],
+];
+
 (function buildImgEditorColors() {
   const box = $('#img-editor-colors');
-  for (const c of COLORS.filter((x) => x !== 'default')) {
-    const hex = LABEL_COLOR_HEX[c];
+  for (const [hex, nom] of IMG_EDITOR_COLORS) {
     const s = document.createElement('button');
     s.type = 'button';
-    s.className = 'swatch c-' + c + (hex === imgEditor.color ? ' active' : '');
-    s.title = c;
+    // Fond en style inline, pas via une classe .c-* : celles-ci portent
+    // justement les teintes assombries du thème qu'on veut éviter ici.
+    s.className = 'swatch' + (hex === imgEditor.color ? ' active' : '');
+    s.style.background = hex;
+    s.title = nom;
     s.onclick = () => {
       imgEditor.color = hex;
       box.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
@@ -2779,11 +3054,13 @@ $('#img-editor-size').addEventListener('input', (e) => {
    aplatie dans le PNG qu'à l'enregistrement (voir imgEditorFlatten()) :
    on peut donc en changer autant de fois qu'on veut sans jamais effacer
    ce qui est déjà dessiné. */
-const IMG_EDITOR_BG_COLORS = ['#ffffff', '#f2efe6', '#cfd8dc', '#263238', '#000000'];
+const IMG_EDITOR_BG_COLORS = ['#ffffff', '#fffde7', '#f2efe6', '#e0e0e0', '#cfd8dc', '#263238', '#000000'];
 
 (function buildImgEditorBgColors() {
   const box = $('#img-editor-bg-colors');
-  const hexes = [...IMG_EDITOR_BG_COLORS, ...COLORS.filter((c) => c !== 'default').map((c) => LABEL_COLOR_HEX[c])];
+  // Fonds neutres d'abord, puis les mêmes vraies couleurs que le trait —
+  // et non les teintes assombries du thème.
+  const hexes = [...IMG_EDITOR_BG_COLORS, ...IMG_EDITOR_COLORS.map(([hex]) => hex)];
   for (const hex of hexes) {
     const s = document.createElement('button');
     s.type = 'button';
@@ -3261,8 +3538,22 @@ imgEditorCanvas().addEventListener('pointercancel', () => {
 // annotations. Seul le bouton "Enregistrer" ci-dessous envoie quoi que ce
 // soit au serveur.
 $('#img-editor-cancel').addEventListener('click', () => $('#dlg-image-editor').close());
-$('#dlg-image-editor').addEventListener('click', (e) => {
-  if (e.target === $('#dlg-image-editor')) $('#dlg-image-editor').close();
+
+/* Clic à côté = ENREGISTRER puis fermer, comme la boîte d'édition rapide
+   (toute fermeture y enregistre). Perdre un dessin en cours parce qu'on a
+   cliqué à côté serait bien pire que d'enregistrer une version dont on ne
+   voulait pas — celle-ci reste rattrapable par l'historique. Seul le
+   bouton "Fermer sans enregistrer" abandonne volontairement le travail. */
+$('#dlg-image-editor').addEventListener('click', async (e) => {
+  if (e.target !== $('#dlg-image-editor')) return;
+  try {
+    await imgEditorPersist();
+    imgEditorRefreshCaller();
+  } catch (err) {
+    alert(err.message);
+    return; // on garde la boîte ouverte : le dessin n'est pas perdu
+  }
+  $('#dlg-image-editor').close();
 });
 
 /* Échap : sort d'abord du plein écran s'il est actif, et seulement au
