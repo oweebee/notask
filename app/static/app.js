@@ -1045,10 +1045,13 @@ function renderNotes() {
       };
     });
 
-    // Clic sur la carte (hors boutons, cases à cocher, palette) : édition
-    // simple façon Keep — juste le texte, sans les réglages de la carte.
+    // Clic sur la carte (hors boutons eux-mêmes, cases à cocher, palette) :
+    // édition simple façon Keep — juste le texte, sans les réglages de la
+    // carte. ".actions button" et non ".actions" : seuls les boutons sont
+    // exclus, pas les espaces vides autour (le séparateur, la marge) — un
+    // clic là doit ouvrir la carte comme n'importe où ailleurs.
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.pin-btn, .actions, .palette, input, .label-chips')) return;
+      if (e.target.closest('.pin-btn, .actions button, .palette, input, .label-chips')) return;
       openNoteSimpleDialog(n);
     });
 
