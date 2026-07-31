@@ -123,7 +123,16 @@
               <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
             </div>
             <div id="nc-items" hidden></div>
+            <!-- "+ Élément" juste sous la dernière ligne à cocher, pas dans
+                 la barre d'outils du bas : c'est là qu'on l'attend quand on
+                 vient de saisir une ligne. Idem en édition rapide
+                 (#dns-add-item). -->
             <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
+            <!-- Libellés : rangée persistante + bouton "+", exactement comme
+                 en édition rapide (#dns-labels) — même fonction de rendu
+                 partagée, voir renderLabelChipsInto() dans app.js. -->
+            <div class="label-chips" id="nc-labels"></div>
+            <div class="label-add-picker" id="nc-labels-picker" hidden></div>
             <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
                  encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
                  rien n'est envoyé avant ce moment-là (voir
@@ -141,29 +150,41 @@
                une nouvelle notask n'a pas d'étape "Modifier" à part) — pour
                pouvoir créer une carte complète sans repasser ensuite par
                une boîte de dialogue. -->
+          <!-- Même agencement que la barre basse de l'édition rapide
+               (.dns-bottom-bar) : d'abord la mise en forme + la bascule
+               case à cocher, puis sur la ligne suivante les actions
+               (pièce jointe, couleur, libellés, échéance). Couleur et
+               libellés en plus, ils n'existent pas en édition rapide. -->
           <div class="nc-toolbar-block" id="nc-toolbar-block" hidden>
-            <div class="toolbar composer-tools-row" id="nc-tools-row">
-              <span id="nc-fmt-group" class="fmt-toolbar" style="margin:0;padding:0;">
+            <div class="fmt-toolbar" id="nc-fmt-toolbar">
+              <span id="nc-fmt-group">
                 <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
                 <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
                 <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
                 <span class="fmt-sep"></span>
                 <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+                <span class="fmt-sep"></span>
               </span>
-              <span class="fmt-sep"></span>
-              <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
-              <button type="button" class="cal-btn" id="nc-labels-btn" title="Libellés" aria-label="Libellés"></button>
-              <button type="button" class="cal-btn" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
-              <span class="fmt-sep"></span>
+              <button type="button" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
+            </div>
+            <div class="field-actions-row composer-tools-row" id="nc-tools-row">
               <button type="button" class="cal-btn" id="nc-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
               <input type="file" id="nc-attach-input" multiple hidden>
-              <span class="fmt-sep"></span>
-              <button type="button" class="cal-btn" id="nc-due-btn" title="Régler l'échéance" aria-label="Échéance"></button>
-              <span id="nc-due-label" class="due-label">Aucune échéance</span>
-              <input type="hidden" id="nc-due">
+              <!-- Tableau blanc : ouvre l'éditeur d'image sur un fond uni
+                   vierge. Placé à côté du trombone parce qu'il produit lui
+                   aussi une pièce jointe image. -->
+              <button type="button" class="cal-btn" id="nc-board-btn" title="Tableau blanc (dessin)" aria-label="Tableau blanc"></button>
+              <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
+              <!-- Pas de bouton "Historique" ici : la notask n'existe pas
+                   encore, elle n'a donc aucune version à consulter. Seule
+                   différence assumée avec la barre de l'édition rapide. -->
+              <div class="due-row">
+                <button type="button" class="cal-btn" id="nc-due-btn" title="Régler l'échéance" aria-label="Échéance"></button>
+                <span id="nc-due-label" class="due-label">Aucune échéance</span>
+                <input type="hidden" id="nc-due">
+              </div>
             </div>
             <div class="palette" id="nc-colors" hidden></div>
-            <div class="label-chips" id="nc-label-chips" hidden></div>
           </div>
 
           <div class="toolbar" style="margin: .6rem 0 0;">
@@ -283,9 +304,8 @@
 </dialog>
 
 <!-- Édition simple, façon Keep : ouverte au clic sur une note — texte,
-     cases à cocher, échéance, pièces jointes et libellés s'y modifient ;
-     pas de couleur (réservée à la boîte "Modifier" complète). Toute
-     fermeture (clic à côté, Échap) enregistre. -->
+     cases à cocher, couleur, échéance, pièces jointes et libellés s'y
+     modifient. Toute fermeture (clic à côté, Échap) enregistre. -->
 <dialog id="dlg-note-simple">
   <div class="dns-card">
     <input id="dns-title" class="dns-title-in" placeholder="Titre">
@@ -296,6 +316,10 @@
     <div class="field" id="dns-items-field" hidden>
       <div id="dns-items"></div>
     </div>
+    <!-- "+ Élément" juste sous la dernière ligne à cocher plutôt que dans
+         la barre du bas : c'est là qu'on l'attend après avoir saisi une
+         ligne. Idem dans le composeur (#nc-add-item). -->
+    <button class="btn ghost sm" id="dns-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
     <div class="label-chips" id="dns-labels"></div>
     <div class="label-add-picker" id="dns-labels-picker" hidden></div>
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
@@ -316,10 +340,14 @@
       </span>
       <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
     </div>
-    <div class="field-actions-row">
-      <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
+    <!-- Même base d'outils que le composeur (voir #nc-tools-row) :
+         trombone, couleur, échéance — plus l'historique, qui n'a de sens
+         que sur une notask déjà existante. -->
+    <div class="field-actions-row composer-tools-row">
       <button type="button" class="cal-btn" id="dns-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
       <input type="file" id="dns-attach-input" multiple hidden>
+      <button type="button" class="cal-btn" id="dns-board-btn" title="Tableau blanc (dessin)" aria-label="Tableau blanc"></button>
+      <button type="button" class="cal-btn" id="dns-color-btn" title="Couleur" aria-label="Couleur"></button>
       <button type="button" class="cal-btn" id="dns-history-btn" title="Historique des versions" aria-label="Historique des versions"></button>
       <div class="due-row">
         <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
@@ -327,6 +355,7 @@
         <input type="hidden" id="dns-due">
       </div>
     </div>
+    <div class="palette" id="dns-colors" hidden></div>
   </div>
 </dialog>
 
@@ -340,14 +369,33 @@
 <dialog id="dlg-image-editor" class="img-editor-dlg">
   <div class="img-editor-toolbar">
     <div class="img-editor-tools" id="img-editor-tools">
+      <!-- Tracé libre (souris, stylet, tablette) : la pointe change le
+           rendu du trait, pas l'outil — voir imgEditorStrokeSegment(). -->
+      <button type="button" class="img-tool-btn" data-tool="brush" title="Pinceau" aria-label="Pinceau"></button>
+      <button type="button" class="img-tool-btn" data-tool="pencil" title="Crayon" aria-label="Crayon"></button>
+      <button type="button" class="img-tool-btn" data-tool="marker" title="Feutre" aria-label="Feutre"></button>
+      <button type="button" class="img-tool-btn" data-tool="eraser" title="Gomme" aria-label="Gomme"></button>
+      <span class="sep"></span>
       <button type="button" class="img-tool-btn" data-tool="rect" title="Rectangle" aria-label="Rectangle"></button>
       <button type="button" class="img-tool-btn" data-tool="ellipse" title="Ellipse" aria-label="Ellipse"></button>
       <button type="button" class="img-tool-btn" data-tool="highlight" title="Surligner" aria-label="Surligner"></button>
       <button type="button" class="img-tool-btn" data-tool="text" title="Texte" aria-label="Texte"></button>
       <button type="button" class="img-tool-btn" data-tool="mosaic" title="Cacher (mosaïque)" aria-label="Cacher (mosaïque)"></button>
     </div>
+    <label class="img-editor-size" title="Épaisseur du trait">
+      <input type="range" id="img-editor-size" min="1" max="60" step="1" value="6" aria-label="Épaisseur du trait">
+      <span id="img-editor-size-val">6</span>
+    </label>
     <div class="img-editor-colors" id="img-editor-colors"></div>
+    <!-- Couleur de fond : n'a d'effet visible que sur un tableau blanc, dont
+         le canvas est transparent et laisse voir ce fond (une photo, elle,
+         est opaque). Voir imgEditorSetBackground() dans app.js. -->
+    <div class="img-editor-bg" id="img-editor-bg-wrap">
+      <button type="button" class="img-tool-btn" id="img-editor-bg-btn" title="Couleur de fond" aria-label="Couleur de fond"></button>
+      <div class="img-editor-colors" id="img-editor-bg-colors" hidden></div>
+    </div>
     <div class="img-editor-actions">
+      <button type="button" class="img-tool-btn" id="img-editor-fullscreen" title="Plein écran" aria-label="Plein écran"></button>
       <button type="button" class="img-tool-btn" id="img-editor-undo" title="Annuler" aria-label="Annuler"></button>
       <button type="button" class="img-tool-btn" id="img-editor-download" title="Télécharger (enregistre d'abord la dernière version)" aria-label="Télécharger"></button>
       <span class="sep"></span>

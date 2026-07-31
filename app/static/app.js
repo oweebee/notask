@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-labels-x-toujours-visible-2';
+const BUILD_VERSION = '2026-07-31-barre-outils-commune-7';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -259,6 +259,9 @@ let state = {
   labels: [],
   labelFilter: null,
   editingLabelIds: [],
+  // Couleur en cours d'édition dans la boîte d'édition rapide (la boîte
+  // "Modifier" complète, elle, écrit directement dans state.editingNote).
+  editingColor: 'default',
   composerIcon: null,
   editingIcon: null,
 };
@@ -457,6 +460,15 @@ const ICONS = {
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8.5H4.5V5"/><path d="M4.5 8.5a8 8 0 1 1-2 5.3"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5a8 8 0 1 1 .8 6.2"/><path d="M4.5 4.5v5h5"/><path d="M12 8v4.5l3 2"/></svg>',
+
+  /* Pointes de tracé libre + tableau blanc + plein écran. */
+  imgBrush: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5 19.5 8.5 11 17a4 4 0 0 1-2 1.1l-3.6.8.8-3.6A4 4 0 0 1 7.3 13z"/><path d="M14 6 18 10"/></svg>',
+  imgPencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7 17 10.5"/><path d="M5 15.5 8.5 19"/></svg>',
+  imgMarker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-3.5.8.8-3.5 8.2-8.2a2 2 0 0 1 2.8 0l.9.9a2 2 0 0 1 0 2.8z"/><path d="M4 20h16"/></svg>',
+  imgEraser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 19 4 14.5a1.5 1.5 0 0 1 0-2.1l7.9-7.9a1.5 1.5 0 0 1 2.1 0l5.5 5.5a1.5 1.5 0 0 1 0 2.1L13.5 19z"/><path d="M8.5 19H20"/><path d="M9 9.5 15.5 16"/></svg>',
+  board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M12 16.5V20"/><path d="M9 20h6"/><path d="M7 12.5l3-3 2.5 2.5 2-2"/></svg>',
+  fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
+  fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -965,6 +977,9 @@ function renderTrash() {
 async function loadLabels() {
   state.labels = await api('/labels');
   renderLabelsDrawer();
+  // La rangée de libellés du composeur est persistante : elle doit refléter
+  // tout de suite un libellé créé/renommé/supprimé depuis le menu latéral.
+  renderComposerLabelChips();
 }
 
 function renderLabelsDrawer() {
@@ -1580,7 +1595,7 @@ function resetComposer() {
   $('#nc-due').value = '';
   renderNcDueBtn();
   $('#nc-colors').hidden = true;
-  $('#nc-label-chips').hidden = true;
+  renderComposerLabelChips();
   state.composerIcon = null;
   renderIconBtn($('#nc-icon-btn'), null);
   renderComposer();
@@ -1612,10 +1627,18 @@ function renderComposer() {
   $('#nc-content').hidden = composerChecklist;
   $('#nc-items').hidden = !composerChecklist;
   $('#nc-add-item').hidden = !composerChecklist;
+  // Gras/italique/souligné/code ne s'appliquent qu'au texte libre : groupe
+  // masqué en mode liste à cocher, comme #dns-fmt-group en édition rapide.
+  // La bascule note/liste, elle, reste visible dans les deux sens.
+  $('#nc-fmt-group').hidden = composerChecklist;
   renderComposerChecklistBtn();
   // Le bloc entier (fond arrondi propre, voir .nc-toolbar-block) bascule,
   // pas seulement la rangée de boutons à l'intérieur.
   $('#nc-toolbar-block').hidden = !composerExpanded;
+  // La rangée de libellés suit la barre d'outils : inutile d'afficher un
+  // "+" isolé sous un composeur replié qui ne montre que "Nouvelle notask…".
+  $('#nc-labels').hidden = !composerExpanded;
+  if (!composerExpanded) $('#nc-labels-picker').hidden = true;
   $('#nc-cancel').hidden = !composerExpanded;
   if (!composerChecklist) return;
 
@@ -1687,7 +1710,6 @@ const ncColorsBox = $('#nc-colors');
 $('#nc-color-btn').innerHTML = ICONS.palette;
 $('#nc-color-btn').addEventListener('click', () => {
   composerExpand();
-  if ($('#nc-label-chips').hidden === false) $('#nc-label-chips').hidden = true;
   if (!ncColorsBox.hidden) { ncColorsBox.hidden = true; return; }
   ncColorsBox.innerHTML = '';
   for (const c of COLORS) {
@@ -1705,38 +1727,19 @@ $('#nc-color-btn').addEventListener('click', () => {
   ncColorsBox.hidden = false;
 });
 
-// Libellés : liste complète en cases à cocher (une nouvelle notask n'a pas
-// encore de libellés "déjà posés" à afficher différemment, contrairement à
-// la rangée dédiée sur une carte existante — voir renderCardLabels()).
-const ncLabelChipsBox = $('#nc-label-chips');
-$('#nc-labels-btn').innerHTML = ICONS.tag;
+// Libellés : rangée persistante + bouton "+", strictement la même que dans
+// les boîtes d'édition — même fonction de rendu (renderLabelChipsInto),
+// seule la liste d'identifiants change (composerLabelIds au lieu de
+// state.editingLabelIds). Plus de bouton "Libellés" dans la barre d'outils :
+// la rangée est toujours visible, comme en édition rapide.
 function renderComposerLabelChips() {
-  ncLabelChipsBox.innerHTML = '';
-  if (!state.labels.length) {
-    ncLabelChipsBox.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
-    return;
-  }
-  for (const l of state.labels) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'label-chip' + (composerLabelIds.includes(l.id) ? ' active' : '');
-    chip.textContent = l.name;
-    chip.onclick = () => {
-      composerLabelIds = composerLabelIds.includes(l.id)
-        ? composerLabelIds.filter((id) => id !== l.id)
-        : [...composerLabelIds, l.id];
-      renderComposerLabelChips();
-    };
-    ncLabelChipsBox.appendChild(chip);
-  }
+  renderLabelChipsInto(
+    '#nc-labels', '#nc-labels-picker',
+    () => composerLabelIds,
+    (v) => { composerLabelIds = v; },
+    renderComposerLabelChips,
+  );
 }
-$('#nc-labels-btn').addEventListener('click', () => {
-  composerExpand();
-  if ($('#nc-colors').hidden === false) $('#nc-colors').hidden = true;
-  if (!ncLabelChipsBox.hidden) { ncLabelChipsBox.hidden = true; return; }
-  renderComposerLabelChips();
-  ncLabelChipsBox.hidden = false;
-});
 
 // Échéance : même bouton + popover calendrier que sur une notask existante
 // (voir renderDueBtn()/openCalPopup(), partagés avec dn-due-btn/dns-due-btn).
@@ -2038,13 +2041,13 @@ function renderNoteItems() {
    fermeture (voir saveNoteDialog()/saveNoteSimpleDialog()). Mêmes
    state.editingLabelIds et state.labels dans les deux dialogues — un seul
    dialogue est jamais ouvert à la fois, pas de risque de collision. */
-function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
+function renderLabelChipsInto(boxSelector, pickerSelector, getIds, setIds, rerender) {
   const box = $(boxSelector);
   const picker = $(pickerSelector);
   box.innerHTML = '';
   if (picker) { picker.innerHTML = ''; picker.hidden = true; }
 
-  const assigned = state.editingLabelIds
+  const assigned = getIds()
     .map((id) => state.labels.find((l) => l.id === id))
     .filter(Boolean);
 
@@ -2064,25 +2067,18 @@ function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
     x.innerHTML = ICONS.close;
     x.onclick = (e) => {
       e.stopPropagation();
-      state.editingLabelIds = state.editingLabelIds.filter((id) => id !== l.id);
+      setIds(getIds().filter((id) => id !== l.id));
       rerender();
     };
     chip.append(name, x);
     box.appendChild(chip);
   }
 
-  // Repère quand la notask n'a encore aucun libellé : sans ça, la rangée
-  // se résume à un "+" isolé, qu'on peut prendre pour un bouton
-  // afficher/masquer plutôt que pour "ajouter un libellé".
-  if (!assigned.length && state.labels.length) {
-    const hint = document.createElement('span');
-    hint.className = 'hint label-empty-hint';
-    hint.textContent = 'Aucun libellé sur cette notask —';
-    box.appendChild(hint);
-  }
-
+  // Notask sans aucun libellé : on n'affiche que le "+", sans texte
+  // explicatif (essayé un temps, retiré à la demande — ça alourdissait
+  // la rangée pour rien).
   if (picker) {
-    const remaining = state.labels.filter((l) => !state.editingLabelIds.includes(l.id));
+    const remaining = state.labels.filter((l) => !getIds().includes(l.id));
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'label-add-btn';
@@ -2106,7 +2102,7 @@ function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
           opt.textContent = l.name;
           opt.onclick = (e2) => {
             e2.stopPropagation();
-            state.editingLabelIds.push(l.id);
+            setIds([...getIds(), l.id]);
             rerender();
           };
           picker.appendChild(opt);
@@ -2121,8 +2117,14 @@ function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
     box.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
   }
 }
-function renderNoteLabelChips() { renderLabelChipsInto('#dn-labels', '#dn-labels-picker', renderNoteLabelChips); }
-function renderNoteLabelChipsSimple() { renderLabelChipsInto('#dns-labels', '#dns-labels-picker', renderNoteLabelChipsSimple); }
+const getEditingLabelIds = () => state.editingLabelIds;
+const setEditingLabelIds = (v) => { state.editingLabelIds = v; };
+function renderNoteLabelChips() {
+  renderLabelChipsInto('#dn-labels', '#dn-labels-picker', getEditingLabelIds, setEditingLabelIds, renderNoteLabelChips);
+}
+function renderNoteLabelChipsSimple() {
+  renderLabelChipsInto('#dns-labels', '#dns-labels-picker', getEditingLabelIds, setEditingLabelIds, renderNoteLabelChipsSimple);
+}
 
 $('#dn-add-item').addEventListener('click', () => {
   state.editingNoteItems.push({ text: '', checked: false, due_at: null });
@@ -2374,6 +2376,8 @@ function openNoteSimpleDialog(note) {
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
   pendingAttachmentUploads = [];
   state.editingLabelIds = [...(note.label_ids || [])];
+  state.editingColor = note.color || 'default';
+  $('#dns-colors').hidden = true;
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
@@ -2384,7 +2388,7 @@ function openNoteSimpleDialog(note) {
   renderNoteItemsSimple();
   renderAttachmentsSimple();
   renderNoteLabelChipsSimple();
-  applyDialogColor($('#dlg-note-simple'), note.color);
+  applyDialogColor($('#dlg-note-simple'), state.editingColor);
   $('#dlg-note-simple').showModal();
 }
 
@@ -2517,6 +2521,33 @@ $('#dns-add-item').addEventListener('click', () => {
   renderNoteItemsSimple();
 });
 
+/* Couleur en édition rapide : elle n'y était pas (réservée à la boîte
+   "Modifier" complète), ajoutée pour que les trois barres d'outils —
+   création, édition rapide d'une note, édition rapide d'une liste à
+   cocher — proposent la même base. La couleur choisie s'applique tout de
+   suite au fond de la boîte (applyDialogColor), et part avec le reste à
+   la fermeture (voir saveNoteSimpleDialog). */
+const dnsColorsBox = $('#dns-colors');
+$('#dns-color-btn').innerHTML = ICONS.palette;
+$('#dns-color-btn').addEventListener('click', () => {
+  if (!dnsColorsBox.hidden) { dnsColorsBox.hidden = true; return; }
+  dnsColorsBox.innerHTML = '';
+  for (const c of COLORS) {
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch c-' + c + (c === state.editingColor ? ' active' : '');
+    s.title = c;
+    s.onclick = () => {
+      state.editingColor = c;
+      dnsColorsBox.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+      applyDialogColor($('#dlg-note-simple'), c);
+    };
+    dnsColorsBox.appendChild(s);
+  }
+  dnsColorsBox.hidden = false;
+});
+
 async function saveNoteSimpleDialog() {
   const n = state.editingNote;
   if (!n) return;
@@ -2538,7 +2569,7 @@ async function saveNoteSimpleDialog() {
       title: $('#dns-title').value,
       description: $('#dns-description').value,
       content: state.editingIsChecklist ? '' : richToText($('#dns-content')),
-      color: n.color,
+      color: state.editingColor || n.color,
       due_at: $('#dns-due').value || null,
       is_checklist: state.editingIsChecklist,
       icon: (state.editingNoteOriginal && state.editingNoteOriginal.icon) || null,
@@ -2558,6 +2589,7 @@ async function saveNoteSimpleDialog() {
       // la note rouvrait dans son ancien mode au prochain clic.
       is_checklist: state.editingIsChecklist,
       label_ids: state.editingLabelIds,
+      color: state.editingColor || n.color,
     };
     // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
     // celui du mode courant : sinon, après une bascule, l'ancien contenu
