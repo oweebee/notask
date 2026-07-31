@@ -433,6 +433,7 @@ const ICONS = {
   attach: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8.5 9.5 16a3 3 0 0 1-4.2-4.2l8-8a4.5 4.5 0 0 1 6.4 6.4l-8.1 8.1a2 2 0 0 1-2.8-2.8l7-7"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.5H5.5A2 2 0 0 0 3.5 5.5v6l9.6 9.6a2 2 0 0 0 2.8 0l5.8-5.8a2 2 0 0 0 0-2.8z"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -732,10 +733,10 @@ function enterApp() {
     `<span class="spoon-pair">${ICONS.spoon}${ICONS.spoonBlue}</span><span class="label">Notasks</span>`;
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
-  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes les notasks</span>';
-  $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span>';
-  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span>';
-  $('#nav-done').innerHTML = ICONS.check + '<span class="label">Notasks terminées</span>';
+  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes les notasks</span><span class="nav-count" id="count-tasks" hidden></span>';
+  $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span><span class="nav-count" id="count-late" hidden></span>';
+  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span><span class="nav-count" id="count-today" hidden></span>';
+  $('#nav-upcoming').innerHTML = ICONS.calendar + `<span class="label">${BUCKET_LABELS.upcoming}</span><span class="nav-count" id="count-upcoming" hidden></span>`;
   $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
 
   loadLabels();
@@ -746,7 +747,7 @@ function enterApp() {
   }
 }
 
-const TASK_VIEWS = { tasks: null, late: 'late', today: 'today', done: 'done' };
+const TASK_VIEWS = { tasks: null, late: 'late', today: 'today', upcoming: 'upcoming' };
 
 function switchView(view) {
   state.view = view;
@@ -854,6 +855,7 @@ async function loadNotes() {
   state.notes = filtered;
   renderNotes();
   if (!$('#agenda-col').hidden) loadAgenda();
+  updateTaskBadges();
 }
 
 /* -------------------------------- Libellés --------------------------------
@@ -925,6 +927,8 @@ function openLabelEditPopup(anchor, label) {
       ).join('')}
     </div>
     <div class="cal-popup-actions">
+      <button type="button" class="btn ghost sm label-delete-btn" data-act="delete">Supprimer</button>
+      <span class="cal-popup-actions-spacer"></span>
       <button type="button" class="btn ghost sm" data-act="close">Fermer</button>
       <button type="button" class="btn sm" data-act="save">Enregistrer</button>
     </div>`;
@@ -972,6 +976,21 @@ function openLabelEditPopup(anchor, label) {
 
   pop.querySelector('[data-act=close]').onclick = save;
   pop.querySelector('[data-act=save]').onclick = save;
+  // Même geste que le clic droit sur le libellé dans le menu (raccourci
+  // existant, conservé) : confirmation puis suppression, sans passer par
+  // save() — un libellé supprimé n'a plus de nom/couleur à enregistrer.
+  pop.querySelector('[data-act=delete]').onclick = async () => {
+    if (!confirm(`Supprimer définitivement le libellé « ${label.name} » ?`)) return;
+    close();
+    try {
+      await api('/labels/' + label.id, { method: 'DELETE' });
+    } catch (err) {
+      alert(err.message);
+    }
+    if (state.labelFilter === label.id) state.labelFilter = null;
+    loadLabels();
+    loadNotes();
+  };
 
   const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) save(); };
   const onKey = (e) => { if (e.key === 'Escape') save(); };
@@ -1146,8 +1165,10 @@ function renderNotes() {
     }
 
     inner += `<div class="palette" hidden></div>
+      <div class="label-picker" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
+        <button data-act="labels" title="Libellés" aria-label="Libellés">${ICONS.tag}</button>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
@@ -1206,6 +1227,35 @@ function renderNotes() {
       palette.hidden = !palette.hidden;
     };
 
+    // Libellés dépliables, même principe que la palette — bascule immédiate
+    // (PATCH + rechargement à chaque clic), pas de bouton Enregistrer : la
+    // carte n'a pas de moment de fermeture où différer l'envoi, contrairement
+    // aux boîtes de dialogue (voir renderNoteLabelChips[Simple]()).
+    const labelPicker = el.querySelector('.label-picker');
+    el.querySelector('[data-act=labels]').onclick = () => {
+      if (!labelPicker.dataset.filled) {
+        if (!state.labels.length) {
+          labelPicker.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
+        } else {
+          for (const l of state.labels) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'label-chip' + ((n.label_ids || []).includes(l.id) ? ' active' : '');
+            chip.textContent = l.name;
+            chip.onclick = async () => {
+              const ids = n.label_ids || [];
+              const nextIds = ids.includes(l.id) ? ids.filter((id) => id !== l.id) : [...ids, l.id];
+              await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
+              loadNotes();
+            };
+            labelPicker.appendChild(chip);
+          }
+        }
+        labelPicker.dataset.filled = '1';
+      }
+      labelPicker.hidden = !labelPicker.hidden;
+    };
+
     el.querySelectorAll('ul.check li').forEach((li) => {
       li.querySelector('input').onchange = async (ev) => {
         await api(`/notes/${n.id}/items/${li.dataset.item}`, {
@@ -1221,7 +1271,7 @@ function renderNotes() {
     // exclus, pas les espaces vides autour (le séparateur, la marge) — un
     // clic là doit ouvrir la carte comme n'importe où ailleurs.
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.pin-btn, .actions button, .palette, input, .label-chips')) return;
+      if (e.target.closest('.pin-btn, .actions button, .palette, .label-picker, input, .label-chips')) return;
       openNoteSimpleDialog(n);
     });
 
@@ -1231,7 +1281,7 @@ function renderNotes() {
     if (dragOk) {
       el.draggable = true;
       el.addEventListener('dragstart', (e) => {
-        if (e.target.closest('.pin-btn, .actions, .palette, input, .label-chips')) {
+        if (e.target.closest('.pin-btn, .actions, .palette, .label-picker, input, .label-chips')) {
           e.preventDefault();
           return;
         }
@@ -1579,10 +1629,13 @@ function renderNoteItems() {
   });
 }
 
-/* Chips de libellés dans le dialogue d'édition : un clic bascule
-   l'appartenance de la note au libellé. */
-function renderNoteLabelChips() {
-  const box = $('#dn-labels');
+/* Chips de libellés dans une boîte de dialogue d'édition (complète ou
+   simple, voir les deux wrappers ci-dessous) : un clic bascule
+   l'appartenance de la note au libellé. Mêmes state.editingLabelIds et
+   state.labels dans les deux cas — un seul dialogue est jamais ouvert à la
+   fois, pas de risque de collision. */
+function renderLabelChipsInto(boxSelector, rerender) {
+  const box = $(boxSelector);
   box.innerHTML = '';
   for (const l of state.labels) {
     const chip = document.createElement('button');
@@ -1595,7 +1648,7 @@ function renderNoteLabelChips() {
       } else {
         state.editingLabelIds.push(l.id);
       }
-      renderNoteLabelChips();
+      rerender();
     };
     box.appendChild(chip);
   }
@@ -1603,6 +1656,8 @@ function renderNoteLabelChips() {
     box.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
   }
 }
+function renderNoteLabelChips() { renderLabelChipsInto('#dn-labels', renderNoteLabelChips); }
+function renderNoteLabelChipsSimple() { renderLabelChipsInto('#dns-labels', renderNoteLabelChipsSimple); }
 
 $('#dn-add-item').addEventListener('click', () => {
   state.editingNoteItems.push({ text: '', checked: false, due_at: null });
@@ -1825,6 +1880,7 @@ function openNoteSimpleDialog(note) {
   }));
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
   pendingAttachmentUploads = [];
+  state.editingLabelIds = [...(note.label_ids || [])];
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
@@ -1834,6 +1890,7 @@ function openNoteSimpleDialog(note) {
   renderNoteDueBtnSimple();
   renderNoteItemsSimple();
   renderAttachmentsSimple();
+  renderNoteLabelChipsSimple();
   applyDialogColor($('#dlg-note-simple'), note.color);
   $('#dlg-note-simple').showModal();
 }
@@ -1984,6 +2041,7 @@ async function saveNoteSimpleDialog() {
       // survivait pas à la fermeture : is_checklist n'était jamais envoyé,
       // la note rouvrait dans son ancien mode au prochain clic.
       is_checklist: state.editingIsChecklist,
+      label_ids: state.editingLabelIds,
     };
     // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
     // celui du mode courant : sinon, après une bascule, l'ancien contenu
@@ -2026,6 +2084,7 @@ async function loadTasks(bucket) {
   }));
   state.tasks = tasks;
   renderTasks();
+  updateTaskBadges();
 }
 
 function renderTasks() {
@@ -2090,6 +2149,35 @@ async function ouvrirNoteParId(noteId) {
   openNoteDialog(note);
 }
 
+/* Petits ronds de comptage dans le menu de gauche (nav-late/today/upcoming/
+   tasks). Pas de déchiffrement ici : `bucket` est calculé côté serveur à
+   partir de due_at/done, jamais chiffré — on n'a besoin que de ce champ
+   pour compter, inutile de déchiffrer texte/titre pour un simple nombre.
+   Volontairement indépendant de loadAgenda() : le badge "à venir" doit
+   refléter le total réel (la colonne, elle, se limite à 7 jours). */
+async function updateTaskBadges() {
+  let tasks;
+  try {
+    tasks = await api('/tasks');
+  } catch {
+    return;
+  }
+  const counts = { late: 0, today: 0, upcoming: 0 };
+  for (const t of tasks) if (t.bucket in counts) counts[t.bucket] += 1;
+  const total = counts.late + counts.today + counts.upcoming;
+
+  const set = (id, n) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = n;
+    el.hidden = n === 0;
+  };
+  set('count-tasks', total);
+  set('count-late', counts.late);
+  set('count-today', counts.today);
+  set('count-upcoming', counts.upcoming);
+}
+
 /* --------------------------- Colonne d'échéances --------------------------
    Aperçu compact des notasks proches, affiché à côté de la mosaïque (voir
    #agenda-col dans index.html et switchView() qui l'active/désactive selon
@@ -2130,7 +2218,10 @@ function renderAgenda(items) {
     if (!groupes[b] || !groupes[b].length) continue;
 
     const section = document.createElement('div');
-    section.className = 'agenda-group' + (b === 'late' ? ' late' : '');
+    // Classe de bucket toujours posée (pas seulement pour "late") : la
+    // couleur du titre de section en dépend (rouge/vert/bleu cuillère),
+    // voir .agenda-group.late/.today/.upcoming dans style.css.
+    section.className = 'agenda-group ' + b;
     const h2 = document.createElement('h2');
     h2.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
     section.appendChild(h2);
@@ -2138,11 +2229,10 @@ function renderAgenda(items) {
     for (const t of groupes[b]) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'agenda-item';
-      // Couleur de la note d'origine en repère (bordure gauche), via la
-      // même table hexadécimale que les puces de libellé — plus fiable
-      // qu'une classe .c-* ici, dont le fond serait à écraser en plus.
-      btn.style.borderLeftColor = LABEL_COLOR_HEX[t.color] || 'var(--md-outline-variant)';
+      // Fond = couleur propre de la note d'origine (même classe .c-* que
+      // sur sa carte), pas un simple repère en bordure : on veut
+      // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
+      btn.className = 'agenda-item c-' + t.color;
       const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
       btn.innerHTML = `<span class="agenda-item-text">${escapeHtml(label)}</span>
         <span class="agenda-item-due">${formatDue(t.due_at)}</span>`;

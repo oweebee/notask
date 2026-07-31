@@ -83,7 +83,7 @@
         <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
         <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
         <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
-        <button class="drawer-item" data-view="done" id="nav-done">Terminées</button>
+        <button class="drawer-item" data-view="upcoming" id="nav-upcoming">À venir</button>
       </div>
 
       <hr class="drawer-sep">
@@ -223,9 +223,10 @@
   </div>
 </dialog>
 
-<!-- Édition simple, façon Keep : ouverte au clic sur une note, seulement le
-     contenu texte est modifiable — pas de couleur, pas de libellé, pas
-     d'échéance. Toute fermeture (clic à côté, Échap) enregistre. -->
+<!-- Édition simple, façon Keep : ouverte au clic sur une note — texte,
+     cases à cocher, échéance, pièces jointes et libellés s'y modifient ;
+     pas de couleur (réservée à la boîte "Modifier" complète). Toute
+     fermeture (clic à côté, Échap) enregistre. -->
 <dialog id="dlg-note-simple">
   <div class="dns-card">
     <input id="dns-title" class="dns-title-in" placeholder="Titre">
@@ -236,6 +237,7 @@
     <div class="field" id="dns-items-field" hidden>
       <div id="dns-items"></div>
     </div>
+    <div class="label-chips" id="dns-labels"></div>
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
          la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
          l'envoi (voir uploadAttachment() dans app.js). -->
