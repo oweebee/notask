@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-recherche-scroll-effacer-20';
+const BUILD_VERSION = '2026-07-31-ouverture-gelatine-25';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -268,6 +268,18 @@ let state = {
   editingColor: 'default',
   composerIcon: null,
   editingIcon: null,
+};
+
+/* Intitulés courts, pour les en-têtes de colonne de la vue "Notasks
+   Prévues" : la vue n'a plus de titre et ne contient que des notasks, le
+   préfixe "Notasks" n'y apprend rien. BUCKET_LABELS (version longue) reste
+   utilisé par la colonne d'échéances de l'accueil, où les sections
+   voisinent avec la mosaïque. */
+const BUCKET_SHORT = {
+  late: 'En retard',
+  today: 'Du jour',
+  upcoming: 'À venir',
+  done: 'Terminées',
 };
 
 const BUCKET_LABELS = {
@@ -724,6 +736,37 @@ function renderIconBtn(btn, iconKey) {
   btn.classList.toggle('has-icon', !!iconKey);
 }
 
+/* ------------------ Animation d'ouverture des dialogues ------------------
+   La boîte grandit depuis le point cliqué, avec un rebond de matière
+   souple (élastique/gélatine) : elle dépasse légèrement sa taille finale
+   puis se stabilise en alternant étirement horizontal et vertical.
+
+   L'origine du geste est relevée sur le dernier pointerdown de la page, en
+   phase de capture : ça couvre d'un coup tous les points d'entrée (carte
+   de la mosaïque, carte de tâche, colonne d'échéances, résultat de
+   recherche) sans avoir à passer l'événement de main en main. */
+let dernierPointDeClic = null;
+document.addEventListener('pointerdown', (e) => {
+  dernierPointDeClic = { x: e.clientX, y: e.clientY };
+}, true);
+
+function animerOuvertureDialogue(dlg) {
+  const r = dlg.getBoundingClientRect();
+  // transform-origin exprimée dans le repère de la boîte : le point cliqué
+  // tombe souvent en dehors d'elle, ce qui est parfaitement admis et donne
+  // justement l'impression que la boîte "sort" de la carte.
+  dlg.style.transformOrigin = dernierPointDeClic
+    ? `${dernierPointDeClic.x - r.left}px ${dernierPointDeClic.y - r.top}px`
+    : '50% 50%';
+
+  // Retirer/relire/remettre : sans la lecture intermédiaire (qui force le
+  // recalcul de style), le navigateur regroupe les deux changements de
+  // classe et l'animation ne repart pas à la deuxième ouverture.
+  dlg.classList.remove('dlg-open-anim');
+  void dlg.offsetWidth;
+  dlg.classList.add('dlg-open-anim');
+}
+
 /* Applique la couleur de la note comme fond du dialogue (éditer ou éditer
    simple), pour qu'il se fonde dans la carte qu'on est en train d'ouvrir. */
 function applyDialogColor(dialogEl, color) {
@@ -840,10 +883,8 @@ function switchView(view) {
     loadNotes();
   }
   if (isTasks) {
-    // Mêmes intitulés que le menu de gauche (BUCKET_LABELS), plus "tasks"
-    // qui n'y figure pas (regroupement "Toutes", pas un bucket de tâches).
-    const titres = { tasks: 'Notasks Prévues', ...BUCKET_LABELS };
-    $('#tasks-title').textContent = titres[view];
+    // Plus de titre de vue : les en-têtes de colonne suffisent à situer
+    // l'utilisateur (voir #view-tasks dans index.html).
     loadTasks(TASK_VIEWS[view]);
   }
   if (view === 'trash') loadTrash();
@@ -1358,22 +1399,38 @@ function renderHitExtract(lignes, hits, courant) {
   return html;
 }
 
-/* Recadre l'extrait sur l'occurrence sélectionnée : elle doit être au
-   milieu de la zone visible, avec son contexte de part et d'autre.
-   Nécessaire parce qu'on rend la notask entière (pour pouvoir la faire
-   défiler au survol) et non le seul extrait. */
+/* Recadre l'extrait sur l'occurrence sélectionnée. Cadrage par le HAUT :
+   on aligne en tête de zone visible la ligne située HIT_CONTEXT_LINES
+   au-dessus de l'occurrence. L'occurrence apparaît donc en haut, avec ses
+   4 lignes de contexte au-dessus, et tout le reste de la notask en
+   dessous — plutôt que centrée au milieu du bloc.
+
+   Le calcul se fait en LIGNES du document, pas en pixels : une ligne
+   longue est repliée sur plusieurs rangées à l'écran, si bien qu'un
+   centrage au pixel ne donne pas le même nombre de lignes de contexte
+   d'une notask à l'autre. Positions relevées via getBoundingClientRect
+   plutôt qu'offsetTop : ce dernier se mesure par rapport au premier
+   ancêtre positionné (ici la carte, en position:relative), pas par
+   rapport au bloc défilant. */
 function cadrerExtrait(extrait) {
   if (!extrait) return;
   // Hauteur visible posée depuis JS plutôt qu'en dur dans la feuille de
   // style : HIT_CONTEXT_LINES reste la seule valeur à changer, les deux ne
   // peuvent pas diverger.
   extrait.style.setProperty('--hit-lines', HIT_CONTEXT_LINES * 2 + 1);
+
   const cible = extrait.querySelector('.hit-line-current');
   if (!cible) return;
-  extrait.scrollTop = Math.max(
-    0,
-    cible.offsetTop - (extrait.clientHeight - cible.offsetHeight) / 2,
-  );
+
+  let premiere = cible;
+  for (let i = 0; i < HIT_CONTEXT_LINES && premiere.previousElementSibling; i++) {
+    premiere = premiere.previousElementSibling;
+  }
+
+  const haut = premiere.getBoundingClientRect().top;
+  const hautBloc = extrait.getBoundingClientRect().top;
+  const marge = parseFloat(getComputedStyle(extrait).paddingTop) || 0;
+  extrait.scrollTop = Math.max(0, extrait.scrollTop + (haut - hautBloc) - marge);
 }
 
 /* Remplace la mosaïque par les résultats de la recherche en profondeur. */
@@ -2194,6 +2251,7 @@ function openNoteDialog(note) {
 
   renderNoteItems();
   $('#dlg-note').showModal();
+  animerOuvertureDialogue($('#dlg-note'));
 }
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
@@ -2644,6 +2702,7 @@ function openNoteSimpleDialog(note) {
   renderNoteLabelChipsSimple();
   applyDialogColor($('#dlg-note-simple'), state.editingColor);
   $('#dlg-note-simple').showModal();
+  animerOuvertureDialogue($('#dlg-note-simple'));
 }
 
 /* Barre d'outils de mise en forme, édition rapide uniquement. #dns-content
@@ -4058,7 +4117,7 @@ function renderTasks() {
 
     const titre = document.createElement('h2');
     titre.className = 'tasks-group ' + b;
-    titre.textContent = `${BUCKET_LABELS[b]} (${(groupes[b] || []).length})`;
+    titre.textContent = `${BUCKET_SHORT[b]} (${(groupes[b] || []).length})`;
     col.appendChild(titre);
 
     const liste = document.createElement('div');
@@ -4077,7 +4136,7 @@ function renderTasks() {
       // "done" : hors colonnes, en pleine largeur sous la grille.
       const titre = document.createElement('h2');
       titre.className = 'tasks-group ' + b;
-      titre.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
+      titre.textContent = `${BUCKET_SHORT[b]} (${groupes[b].length})`;
       grid.appendChild(titre);
       liste = document.createElement('div');
       liste.className = 'task-cards';

@@ -474,12 +474,26 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    distinguer d'un coup d'œil de la barre de tri juste au-dessus. */
 .deep-search-toolbar input[type=search] { background: rgba(133, 102, 20, .55); }
 
-/* Croix d'effacement, à droite de chaque barre. Masquée tant que le champ
-   est vide (attribut hidden posé par brancherEffacementRecherche()). */
+/* Croix d'effacement : DANS la barre, calée contre son bord droit, et non
+   posée à côté comme un bouton séparé. D'où le positionnement absolu par
+   rapport à .search-toolbar, et le retrait à droite réservé sur le champ
+   pour que le texte saisi ne passe jamais dessous.
+   Masquée tant que le champ est vide (attribut hidden posé par
+   brancherEffacementRecherche()). */
+.search-toolbar { position: relative; }
+.search-toolbar input[type=search] { padding-right: 2.75rem; }
+/* Contour blanc pur à la sélection, au lieu du violet de --md-primary
+   (règle générique .toolbar input:focus) : sur les fonds bleu et jaune des
+   deux barres, le violet passait mal. Sélecteur plus spécifique et placé
+   après pour l'emporter. */
+.search-toolbar input[type=search]:focus { outline: 2px solid #fff; outline-offset: -2px; }
 .search-clear {
-  flex: none;
-  width: 30px;
-  height: 30px;
+  position: absolute;
+  right: .5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border: none;
@@ -489,7 +503,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   cursor: pointer;
   transition: background .15s;
 }
-.search-clear:hover { background: rgba(0,0,0,.45); }
+.search-clear:hover { background: rgba(0,0,0,.5); }
 .search-clear svg { width: 15px; height: 15px; display: block; }
 
 /* ---- Résultats de la recherche en profondeur (voir renderSearchHits) ----
@@ -1492,6 +1506,44 @@ dialog {
   box-shadow: var(--elev-3);
 }
 dialog::backdrop { background: rgba(0,0,0,.5); }
+
+/* ---- Ouverture : la boîte "pousse" depuis le point cliqué ----
+   Matière souple plutôt qu'un simple zoom : elle dépasse un peu sa taille
+   finale, puis se stabilise en alternant étirement horizontal et vertical
+   d'amplitude décroissante — l'écrasement/rebond qu'aurait un objet
+   élastique. Les deux axes sont mis à l'échelle séparément (scale x, y),
+   c'est ce décalage entre largeur et hauteur qui donne l'effet gélatine ;
+   un scale uniforme ne ferait que grossir.
+   L'origine (transform-origin) est posée en JS sur le point cliqué, voir
+   animerOuvertureDialogue() dans app.js. */
+@keyframes dlg-gelatine {
+  0%   { transform: scale(.28, .28); opacity: 0; }
+  25%  { transform: scale(1.04, .92); opacity: 1; }
+  45%  { transform: scale(.95, 1.06); }
+  62%  { transform: scale(1.03, .975); }
+  78%  { transform: scale(.985, 1.015); }
+  90%  { transform: scale(1.006, .995); }
+  100% { transform: scale(1, 1); }
+}
+@keyframes dlg-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.dlg-open-anim {
+  animation: dlg-gelatine .58s cubic-bezier(.34, .8, .3, 1) both;
+  /* will-change : prévient le compositeur qu'il s'agit d'une animation de
+     transformation, ce qui évite le léger crénelage du texte pendant la
+     mise à l'échelle sur certains navigateurs. */
+  will-change: transform;
+}
+.dlg-open-anim::backdrop { animation: dlg-backdrop-in .28s ease both; }
+
+/* Certains utilisateurs demandent explicitement moins d'animation (réglage
+   système) : on respecte, la boîte apparaît simplement. */
+@media (prefers-reduced-motion: reduce) {
+  .dlg-open-anim { animation: none; }
+  .dlg-open-anim::backdrop { animation: none; }
+}
 
 /* Les deux fenêtres de note (édition complète et édition simple) s'ouvrent
    toujours à la même taille, quel que soit le contenu (30% plus bas que la
