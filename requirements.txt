@@ -3,3 +3,4 @@ uvicorn[standard]==0.34.0
 sqlmodel==0.0.22
 pydantic==2.10.4
 PyJWT==2.10.1
+python-multipart==0.0.9

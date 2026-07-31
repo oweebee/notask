@@ -192,6 +192,29 @@ async function decryptField(value) {
   }
 }
 
+/* Chiffrement binaire des pièces jointes — même DEK (encKey) et même
+   principe que encryptField()/decryptField(), mais sur des octets bruts
+   plutôt que du texte, et sans le préfixe "e1:" ni le passage par base64
+   (inutile : le blob part directement dans un FormData, pas dans du JSON).
+   Format du blob envoyé au serveur : iv (12 octets) + texte chiffré. */
+async function encryptBinary(buffer) {
+  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, buffer);
+  const combined = new Uint8Array(iv.length + ct.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ct), iv.length);
+  return combined;
+}
+
+async function decryptBinary(buffer) {
+  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  const bytes = new Uint8Array(buffer);
+  const iv = bytes.slice(0, 12);
+  const ct = bytes.slice(12);
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, encKey, ct);
+}
+
 /* Déchiffre en place les champs sensibles d'une note reçue de l'API, avant
    de l'exposer au reste de l'app — qui manipule ensuite toujours du texte
    en clair, exactement comme avant l'introduction du chiffrement. */
@@ -201,6 +224,15 @@ async function decryptNote(n) {
   n.content = await decryptField(n.content);
   if (n.items) {
     for (const it of n.items) it.text = await decryptField(it.text);
+  }
+  if (n.attachments) {
+    for (const a of n.attachments) {
+      try {
+        a.meta = JSON.parse(await decryptField(a.enc_meta) || '{}');
+      } catch {
+        a.meta = { name: 'Fichier', mime: 'application/octet-stream' };
+      }
+    }
   }
   return n;
 }
@@ -265,6 +297,95 @@ async function api(path, options = {}) {
   return data;
 }
 
+/* Envoi multipart (pièces jointes) : pas de Content-Type manuel — le
+   navigateur doit fixer lui-même la frontière ("boundary") du FormData,
+   sinon le serveur ne peut pas parser le corps de la requête. */
+async function apiUpload(path, formData) {
+  const t = token();
+  const res = await fetch('/api' + path, {
+    method: 'POST',
+    headers: t ? { Authorization: 'Bearer ' + t } : {},
+    body: formData,
+  });
+  if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.detail) || 'Erreur ' + res.status);
+  return data;
+}
+
+/* Récupère des octets bruts (contenu chiffré d'une pièce jointe) — api()
+   ne convient pas ici, elle force un parsing JSON de la réponse. */
+async function apiFetchBytes(path) {
+  const t = token();
+  const res = await fetch('/api' + path, {
+    headers: t ? { Authorization: 'Bearer ' + t } : {},
+    cache: 'no-store',
+  });
+  if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
+  if (!res.ok) throw new Error('Erreur ' + res.status);
+  return res.arrayBuffer();
+}
+
+/* ------------------------- Pièces jointes ------------------------- */
+/* 8 Mo de fichier d'origine — un peu de marge est laissée côté serveur pour
+   l'overhead d'AES-GCM (voir MAX_ATTACHMENT_BYTES dans attachments.py),
+   mais la limite annoncée à l'utilisateur porte sur le fichier d'origine. */
+const MAX_ATTACHMENT_MB = 8;
+const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+
+// Cache mémoire des pièces jointes déjà déchiffrées (id -> {blob, name, mime}
+// -> aussi url, générée à la demande). Une pièce jointe est immuable une
+// fois créée (pas d'édition, seulement ajout/suppression) : aucune raison
+// d'invalidation autre que la suppression elle-même.
+const attachmentCache = new Map();
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+}
+
+/* Chiffre et envoie un fichier choisi (bouton, presse-papier ou
+   glisser-déposer) — vérifie la taille avant de chiffrer, pour ne pas
+   gaspiller du temps CPU sur un fichier de toute façon refusé. */
+async function uploadAttachment(noteId, file) {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`« ${file.name} » dépasse ${MAX_ATTACHMENT_MB} Mo (${formatFileSize(file.size)})`);
+  }
+  const buffer = await file.arrayBuffer();
+  const encrypted = await encryptBinary(buffer);
+  const meta = await encryptField(JSON.stringify({
+    name: file.name || 'Fichier',
+    mime: file.type || 'application/octet-stream',
+  }));
+
+  const form = new FormData();
+  form.append('file', new Blob([encrypted]), 'blob');
+  form.append('meta', meta);
+  return apiUpload(`/notes/${noteId}/attachments`, form);
+}
+
+async function deleteAttachment(attachmentId) {
+  await api('/attachments/' + attachmentId, { method: 'DELETE' });
+  attachmentCache.delete(attachmentId);
+}
+
+/* Télécharge et déchiffre une pièce jointe (une seule fois, mise en cache
+   ensuite). Retourne {blob, url, name, mime} — `url` est une object URL
+   valable pour toute la session de page (jamais révoquée explicitement :
+   l'app ne recharge pas assez de pièces jointes différentes pour que ça
+   pèse sur la mémoire d'un onglet). */
+async function loadAttachment(att) {
+  if (attachmentCache.has(att.id)) return attachmentCache.get(att.id);
+  const raw = await apiFetchBytes('/attachments/' + att.id);
+  const plain = await decryptBinary(raw);
+  const meta = att.meta || { name: 'Fichier', mime: 'application/octet-stream' };
+  const blob = new Blob([plain], { type: meta.mime || 'application/octet-stream' });
+  const result = { blob, url: URL.createObjectURL(blob), name: meta.name || 'Fichier', mime: meta.mime || '' };
+  attachmentCache.set(att.id, result);
+  return result;
+}
+
 /* ---------------------------- Utilitaires ---------------------------- */
 
 function msg(el, text, kind = 'error') {
@@ -308,6 +429,9 @@ const ICONS = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3.5 12 9 17.5"/><path d="M15 6.5 20.5 12 15 17.5"/></svg>',
+  attach: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8.5 9.5 16a3 3 0 0 1-4.2-4.2l8-8a4.5 4.5 0 0 1 6.4 6.4l-8.1 8.1a2 2 0 0 1-2.8-2.8l7-7"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -983,6 +1107,19 @@ function renderNotes() {
       if (noms) inner += `<div class="label-chips">${noms}</div>`;
     }
 
+    if (n.attachments && n.attachments.length) {
+      const images = n.attachments.filter((a) => (a.meta && a.meta.mime || '').startsWith('image/'));
+      const files = n.attachments.filter((a) => !(a.meta && a.meta.mime || '').startsWith('image/'));
+      inner += '<div class="note-attachments">';
+      for (const a of images) {
+        inner += `<img class="note-attach-thumb" data-att="${a.id}" alt="">`;
+      }
+      if (files.length) {
+        inner += `<div class="note-attach-files">${ICONS.file}<span>${files.length} fichier${files.length > 1 ? 's' : ''}</span></div>`;
+      }
+      inner += '</div>';
+    }
+
     inner += `<div class="palette" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
@@ -994,6 +1131,14 @@ function renderNotes() {
       </div>`;
 
     el.innerHTML = inner;
+
+    // Déchiffrement paresseux des miniatures — chaque image n'est décodée
+    // qu'une fois (voir le cache dans loadAttachment()), donc un ré-rendu
+    // de la grille ne recoûte rien pour les pièces jointes déjà vues.
+    el.querySelectorAll('.note-attach-thumb').forEach((img) => {
+      const att = (n.attachments || []).find((a) => String(a.id) === img.dataset.att);
+      if (att) loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
+    });
 
     el.querySelector('[data-act=edit]').onclick = () => openNoteDialog(n);
     el.querySelector('[data-act=pin]').onclick = async () => {
@@ -1488,12 +1633,122 @@ $('#dlg-note').addEventListener('click', (e) => {
    (titre, contenu ou cases à cocher) — pas de couleur, pas de libellé, pas
    d'échéance, pas de bascule de mode. Toute fermeture enregistre. */
 
+/* -------------------- Pièces jointes, édition simple -------------------- *
+ * Upload/suppression immédiats (pas de bouton Enregistrer sur cette boîte
+ * de dialogue) : contrairement au titre/contenu, une pièce jointe n'a rien
+ * à faire dans le PATCH envoyé à la fermeture, ce sont des appels REST à
+ * part entière — voir uploadAttachment()/deleteAttachment(). */
+
+$('#dns-attach-btn').innerHTML = ICONS.attach;
+
+function renderAttachmentsSimple() {
+  const box = $('#dns-attachments');
+  const list = (state.editingNote && state.editingNote.attachments) || [];
+  box.hidden = list.length === 0;
+  box.innerHTML = '';
+
+  for (const att of list) {
+    const isImage = (att.meta && att.meta.mime || '').startsWith('image/');
+    const chip = document.createElement('div');
+    chip.className = 'dns-attach-chip' + (isImage ? ' is-image' : '');
+
+    if (isImage) {
+      chip.innerHTML = `<img class="dns-attach-thumb" alt="${escapeHtml(att.meta.name || '')}">
+        <button type="button" class="dns-attach-remove" title="Supprimer">${ICONS.close}</button>`;
+      const img = chip.querySelector('img');
+      loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {
+        chip.classList.add('is-broken');
+      });
+      img.addEventListener('click', () => loadAttachment(att).then((r) => window.open(r.url, '_blank')));
+    } else {
+      const name = (att.meta && att.meta.name) || 'Fichier';
+      chip.innerHTML = `<span class="dns-attach-icon">${ICONS.file}</span>
+        <span class="dns-attach-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+        <span class="dns-attach-size">${formatFileSize(att.size)}</span>
+        <button type="button" class="dns-attach-remove" title="Supprimer">${ICONS.close}</button>`;
+      chip.querySelector('.dns-attach-name').addEventListener('click', async () => {
+        try {
+          const r = await loadAttachment(att);
+          const a = document.createElement('a');
+          a.href = r.url; a.download = r.name;
+          a.click();
+        } catch (err) { alert(err.message); }
+      });
+    }
+
+    chip.querySelector('.dns-attach-remove').addEventListener('click', async () => {
+      if (!confirm('Supprimer définitivement cette pièce jointe ?')) return;
+      try {
+        await deleteAttachment(att.id);
+        state.editingNote.attachments = state.editingNote.attachments.filter((a) => a.id !== att.id);
+        renderAttachmentsSimple();
+      } catch (err) { alert(err.message); }
+    });
+
+    box.appendChild(chip);
+  }
+}
+
+async function handleIncomingAttachments(fileList) {
+  const note = state.editingNote;
+  if (!note || !fileList || !fileList.length) return;
+  for (const file of Array.from(fileList)) {
+    try {
+      const created = await uploadAttachment(note.id, file);
+      created.meta = JSON.parse(await decryptField(created.enc_meta) || '{}');
+      note.attachments.push(created);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+  renderAttachmentsSimple();
+}
+
+$('#dns-attach-btn').addEventListener('click', () => $('#dns-attach-input').click());
+$('#dns-attach-input').addEventListener('change', (e) => {
+  handleIncomingAttachments(e.target.files);
+  e.target.value = ''; // permet de rechoisir le même fichier ensuite
+});
+
+// Coller une image (capture d'écran, image copiée) directement dans la
+// note. Le preventDefault ne se déclenche que s'il y a effectivement un
+// fichier dans le presse-papier, pour laisser le collage de texte normal
+// intact partout ailleurs.
+$('#dlg-note-simple').addEventListener('paste', (e) => {
+  const files = Array.from(e.clipboardData ? e.clipboardData.items : [])
+    .filter((it) => it.kind === 'file')
+    .map((it) => it.getAsFile())
+    .filter(Boolean);
+  if (!files.length) return;
+  e.preventDefault();
+  handleIncomingAttachments(files);
+});
+
+// Glisser-déposer un fichier sur la carte en édition simple.
+const dnsCard = document.querySelector('#dlg-note-simple .dns-card');
+['dragenter', 'dragover'].forEach((evt) => dnsCard.addEventListener(evt, (e) => {
+  e.preventDefault();
+  dnsCard.classList.add('drag-over');
+  $('#dns-dropzone-hint').hidden = false;
+}));
+['dragleave', 'dragend'].forEach((evt) => dnsCard.addEventListener(evt, () => {
+  dnsCard.classList.remove('drag-over');
+  $('#dns-dropzone-hint').hidden = true;
+}));
+dnsCard.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dnsCard.classList.remove('drag-over');
+  $('#dns-dropzone-hint').hidden = true;
+  handleIncomingAttachments(e.dataTransfer.files);
+});
+
 function openNoteSimpleDialog(note) {
   state.editingNote = note;
   state.editingIsChecklist = note.is_checklist;
   state.editingNoteItems = note.items.map((i) => ({
     text: i.text, checked: i.checked, due_at: i.due_at,
   }));
+  if (!state.editingNote.attachments) state.editingNote.attachments = [];
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
@@ -1505,6 +1760,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-due').value = note.due_at || '';
   renderNoteDueBtnSimple();
   renderNoteItemsSimple();
+  renderAttachmentsSimple();
   applyDialogColor($('#dlg-note-simple'), note.color);
   $('#dlg-note-simple').showModal();
 }

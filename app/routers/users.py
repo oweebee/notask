@@ -10,6 +10,7 @@ from app.deps import get_current_admin
 from app.models import (
     Label,
     Note,
+    NoteAttachment,
     NoteItem,
     User,
     UserCreate,
@@ -17,6 +18,7 @@ from app.models import (
     UserSettings,
     UserUpdate,
 )
+from app.routers.attachments import ATTACH_DIR
 from app.security import generate_enc_salt, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -111,6 +113,11 @@ def delete_user(
     note_ids = session.exec(select(Note.id).where(Note.user_id == user_id)).all()
     for item in session.exec(select(NoteItem).where(NoteItem.note_id.in_(note_ids))).all() if note_ids else []:
         session.delete(item)
+    for att in session.exec(select(NoteAttachment).where(NoteAttachment.note_id.in_(note_ids))).all() if note_ids else []:
+        path = ATTACH_DIR / att.storage_name
+        if path.exists():
+            path.unlink()
+        session.delete(att)
     for note in session.exec(select(Note).where(Note.user_id == user_id)).all():
         session.delete(note)
     for s in session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).all():

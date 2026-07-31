@@ -220,6 +220,11 @@
     <div class="field" id="dns-items-field" hidden>
       <div id="dns-items"></div>
     </div>
+    <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
+         la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
+         l'envoi (voir uploadAttachment() dans app.js). -->
+    <div class="dns-attachments" id="dns-attachments" hidden></div>
+    <div class="dns-dropzone-hint" id="dns-dropzone-hint" hidden>Déposer pour joindre</div>
   </div>
   <div class="dns-bottom-bar">
     <div class="fmt-toolbar" id="dns-fmt-toolbar">
@@ -231,6 +236,8 @@
     </div>
     <div class="field-actions-row">
       <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
+      <button type="button" class="cal-btn" id="dns-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
+      <input type="file" id="dns-attach-input" multiple hidden>
       <div class="due-row">
         <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
         <span id="dns-due-label" class="due-label">Aucune échéance</span>

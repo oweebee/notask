@@ -167,6 +167,10 @@ class Note(NoteBase, table=True):
         back_populates="note",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "NoteItem.position"},
     )
+    attachments: List["NoteAttachment"] = Relationship(
+        back_populates="note",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "NoteAttachment.created_at"},
+    )
 
 
 class NoteItem(SQLModel, table=True):
@@ -225,6 +229,44 @@ class NoteUpdate(SQLModel):
     position: Optional[float] = None
 
 
+# ============================= Pièces jointes =============================
+# Fichier arbitraire (image, document...) rattaché à une note. Comme le
+# reste du contenu, il est chiffré de bout en bout côté client avant l'envoi
+# (voir encryptBinary()/apiUpload() dans app.js) : le serveur ne stocke que
+# des octets opaques et un petit champ `enc_meta` (nom + type MIME, chiffré
+# de la même façon que title/description via encryptField). Il ne connaît
+# jamais le nom réel ni le contenu du fichier.
+#
+# Les octets chiffrés vivent sur disque (DATA_DIR/attachments), pas en base
+# — un blob de plusieurs Mo n'a rien à faire dans une colonne SQLite. Seul
+# le nom de stockage (un UUID généré serveur, jamais le nom d'origine) est
+# conservé ici pour retrouver le fichier.
+
+class NoteAttachment(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    note_id: int = Field(foreign_key="note.id", index=True)
+    # Nom de fichier sur disque (DATA_DIR/attachments/<storage_name>) —
+    # généré côté serveur (uuid4), sans rapport avec le nom d'origine.
+    storage_name: str = Field(max_length=64)
+    # JSON {"name": ..., "mime": ...} chiffré côté client, même format que
+    # les autres champs texte (préfixe "e1:" généré par encryptField).
+    enc_meta: str = Field(max_length=2000)
+    # Taille en octets du blob chiffré stocké sur disque. Non sensible (ne
+    # révèle pas le contenu), conservée en clair pour l'affichage ("2,3 Mo")
+    # sans avoir à déchiffrer ni à relire le fichier.
+    size: int = 0
+    created_at: datetime = Field(default_factory=utcnow)
+
+    note: Optional[Note] = Relationship(back_populates="attachments")
+
+
+class AttachmentOut(SQLModel):
+    id: int
+    enc_meta: str
+    size: int
+    created_at: datetime
+
+
 class NoteOut(NoteBase):
     id: int
     done: bool
@@ -234,6 +276,7 @@ class NoteOut(NoteBase):
     created_at: datetime
     updated_at: datetime
     items: List[NoteItemOut] = []
+    attachments: List[AttachmentOut] = []
 
 
 # ================================ Libellés ================================

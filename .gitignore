@@ -13,3 +13,7 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Journal de travail avec l'assistant IA — usage local uniquement, jamais
+# poussé sur GitHub (le dépôt est public, voir README « Déploiement »).
+ClaudeProject/

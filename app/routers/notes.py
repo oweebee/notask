@@ -14,6 +14,7 @@ from app.deps import get_current_user
 from app.models import (
     Label,
     Note,
+    NoteAttachment,
     NoteCreate,
     NoteItem,
     NoteItemIn,
@@ -24,6 +25,7 @@ from app.models import (
     User,
     utcnow,
 )
+from app.routers.attachments import ATTACH_DIR
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
@@ -187,6 +189,11 @@ def delete_note(
     note = _owned_note(note_id, user, session)
     for item in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
         session.delete(item)
+    for att in session.exec(select(NoteAttachment).where(NoteAttachment.note_id == note.id)).all():
+        path = ATTACH_DIR / att.storage_name
+        if path.exists():
+            path.unlink()
+        session.delete(att)
     session.delete(note)
     session.commit()
 

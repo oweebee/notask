@@ -1205,3 +1205,121 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   word-break: break-word;
 }
 .dns-content-editable .note-code-block { white-space: pre-wrap; }
+
+/* ============================ Pièces jointes ============================
+   Deux contextes : sur la carte (aperçu seul, lecture) et dans l'édition
+   simple (miniatures + suppression, voir renderAttachmentsSimple() dans
+   app.js). Les images sont chargées et déchiffrées de façon paresseuse —
+   la balise <img> existe avant que sa source ne soit connue, d'où le fond
+   neutre le temps du décodage. */
+.note-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+  margin-top: .625rem;
+}
+.note-attach-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--shape-xs);
+  background: rgba(0,0,0,.18);
+}
+.note-attach-files {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .3rem .6rem;
+  border-radius: var(--shape-full);
+  background: rgba(0,0,0,.18);
+  color: var(--md-on-surface-variant);
+  font-size: .75rem;
+}
+.note-attach-files svg { width: 15px; height: 15px; }
+
+.dns-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: 1rem;
+  padding-top: .875rem;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.dns-attach-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: rgba(0,0,0,.18);
+  border-radius: var(--shape-sm);
+  padding: .4rem .5rem;
+  max-width: 220px;
+}
+.dns-attach-chip.is-image {
+  padding: 0;
+  overflow: hidden;
+  width: 88px;
+  height: 88px;
+}
+.dns-attach-thumb {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  display: block;
+  cursor: zoom-in;
+  background: rgba(0,0,0,.18);
+}
+.dns-attach-chip.is-broken { opacity: .5; }
+.dns-attach-icon { flex: none; display: flex; color: var(--md-on-surface-variant); }
+.dns-attach-icon svg { width: 18px; height: 18px; }
+.dns-attach-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .8125rem;
+  color: var(--md-on-surface);
+  cursor: pointer;
+}
+.dns-attach-name:hover { text-decoration: underline; }
+.dns-attach-size {
+  flex: none;
+  font-size: .6875rem;
+  color: var(--md-on-surface-variant);
+}
+.dns-attach-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  background: transparent;
+}
+.dns-attach-chip.is-image .dns-attach-remove {
+  position: absolute;
+  top: .25rem;
+  right: .25rem;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+}
+.dns-attach-remove:hover { background: rgba(242,184,181,.25); color: var(--md-error); }
+.dns-attach-remove svg { width: 13px; height: 13px; }
+
+/* Glisser-déposer un fichier sur la carte en édition simple. */
+.dns-card.drag-over {
+  outline: 2px dashed var(--md-primary);
+  outline-offset: -2px;
+}
+.dns-dropzone-hint {
+  flex: none;
+  text-align: center;
+  padding: .5rem;
+  margin-top: .5rem;
+  border-radius: var(--shape-sm);
+  border: 2px dashed var(--md-primary);
+  color: var(--md-primary);
+  font-size: .8125rem;
+}
