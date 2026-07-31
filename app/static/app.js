@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-zone-archive-49';
+const BUILD_VERSION = '2026-08-01-archive-cadre-blanc-effacer-50';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -17,7 +17,7 @@ const COLORS = [
   'default', 'red', 'coral', 'orange', 'amber', 'yellow', 'lime',
   'green', 'emerald', 'teal', 'cyan', 'blue', 'indigo', 'violet',
   'purple', 'magenta', 'pink', 'rose', 'brown', 'slate', 'grey',
-  'navy', 'olive', 'plum',
+  'navy', 'olive', 'white',
 ];
 
 // Mêmes teintes que les classes .c-* de style.css, dupliquées ici pour
@@ -29,7 +29,7 @@ const LABEL_COLOR_HEX = {
   teal: '#146b6a', cyan: '#12607a', blue: '#1d548f', indigo: '#364196',
   violet: '#5138a3', purple: '#68318f', magenta: '#7d2c7d', pink: '#8a2c61',
   rose: '#8a2c44', brown: '#664a37', slate: '#3f4b5a', grey: '#4b4b52',
-  navy: '#1e3a5f', olive: '#5d6b2f', plum: '#4e2a52',
+  navy: '#1e3a5f', olive: '#5d6b2f', white: '#ffffff',
 };
 
 // Même alpha que le composeur/la recherche (.55), pour une couleur de
@@ -504,6 +504,10 @@ const ICONS = {
   // traitements de texte. La barre prend la couleur courante via
   // currentColor, donc elle suit la teinte du bouton.
   textColor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15.5 9.5 5l4.5 10.5"/><path d="M6.6 12.5h5.8"/><rect x="15.5" y="5" width="4" height="11" rx="1"/><path d="M4 20h16" stroke-width="2.4"/></svg>',
+
+  // Effacer la mise en forme : un "T" (texte) barré en diagonale, lecture
+  // immédiate même sans connaître l'icône à l'avance.
+  clearFormat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14"/><path d="M12 5.5V17"/><path d="M9 17h6"/><path d="M4.5 20 19.5 4"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -3103,9 +3107,25 @@ const FMT_ENVELOPPES = {
   italic: 'em, i',
   underline: 'u',
   code: 'code',
-  archive: 'span.note-archive-zone',
+  // Bloc (plusieurs lignes) ou en ligne (une phrase/un mot) — même
+  // distinction que le code, voir wrapSelectionRich().
+  archive: 'div.note-archive-zone, span.note-archive-zone',
   color: 'span[style*="color"]',
 };
+
+/* Icône décorative de la zone d'archive : purement informative, jamais un
+   bouton. contenteditable="false" pour ne pas devenir éditable/déplaçable
+   dans la zone de saisie ; pointer-events:none en CSS pour qu'un clic
+   dessus retombe sur ce qu'il y a en dessous, sans jamais rien déclencher.
+   Insérée une seconde fois par clonerEnveloppe() : cloneNode(false) copie
+   l'enveloppe à plat, sans ses enfants, donc chaque moitié issue d'une
+   bascule partielle doit recevoir sa propre icône.
+   Balise <span>, pas <i> : richToText() lit <i> comme de l'italique
+   (case 'em': case 'i'), ce qui aurait glissé un "**" fantôme dans le
+   texte enregistré à chaque zone d'archive. Un <span> sans le style
+   `color` ni la classe note-archive-zone retombe déjà, dans ce même
+   switch, sur inner() — vide ici puisqu'un SVG n'a aucun nœud de texte. */
+const ARCHIVE_ICON_HTML = `<span class="archive-icon-mark" contenteditable="false">${ICONS.archive}</span>`;
 
 function trouverEnveloppe(el, range, kind) {
   const depart = range.commonAncestorContainer;
@@ -3131,6 +3151,12 @@ function clonerEnveloppe(source, texte) {
     copie.appendChild(code);
   } else {
     copie.textContent = texte;
+    // L'icône de la zone d'archive n'est pas un enfant récupéré par le
+    // cloneNode(false) ci-dessus (il ne clone que l'élément lui-même) : il
+    // faut la reposer à l'identique sur chaque moitié issue du partage.
+    if (copie.classList.contains('note-archive-zone')) {
+      copie.insertAdjacentHTML('beforeend', ARCHIVE_ICON_HTML);
+    }
   }
   return copie;
 }
@@ -3192,9 +3218,15 @@ function wrapSelectionRich(el, kind, couleur) {
 
   let wrapper;
   if (kind === 'archive') {
-    wrapper = document.createElement('span');
-    wrapper.className = 'note-archive-zone';
+    // Bloc si la s\u00e9lection contient un saut de ligne, sinon simple chip en
+    // ligne \u2014 m\u00eame distinction que le code (voir plus bas), pour un cadre
+    // qui ait du sens : un passage de plusieurs lignes m\u00e9rite un vrai
+    // rectangle, un mot ou une phrase reste dans le fil du texte.
+    const bloc = text.includes('\n');
+    wrapper = document.createElement(bloc ? 'div' : 'span');
+    wrapper.className = 'note-archive-zone' + (bloc ? ' note-archive-block' : ' note-archive-inline');
     wrapper.textContent = text || '\u200b';
+    wrapper.insertAdjacentHTML('beforeend', ARCHIVE_ICON_HTML);
   } else if (kind === 'color') {
     wrapper = document.createElement('span');
     wrapper.style.color = couleur;
@@ -3231,7 +3263,15 @@ function wrapSelectionRich(el, kind, couleur) {
      Quand il n'y avait rien de sélectionné, on place simplement le curseur
      dans le marqueur vide qui vient d'être créé, pour taper dedans. */
   const newRange = document.createRange();
-  newRange.selectNodeContents(wrapper);
+  if (kind === 'archive') {
+    // L'enveloppe porte aussi l'icône décorative (dernier enfant) : la
+    // resélection ne doit couvrir que le texte, sinon un effet enchaîné
+    // (gras, couleur…) sur ce même passage engloberait l'icône avec.
+    newRange.setStart(wrapper, 0);
+    newRange.setEnd(wrapper, wrapper.childNodes.length - 1);
+  } else {
+    newRange.selectNodeContents(wrapper);
+  }
   sel.removeAllRanges();
   sel.addRange(newRange);
   // En tout dernier : le focus et le repositionnement du curseur ci-dessus
@@ -3266,6 +3306,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
     if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
     if (btn.dataset.fmt === 'color') btn.innerHTML = ICONS.textColor;
     if (btn.dataset.fmt === 'archive') btn.innerHTML = ICONS.archive;
+    if (btn.dataset.fmt === 'clear') btn.innerHTML = ICONS.clearFormat;
     // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
     // la zone contenteditable au mousedown et efface la sélection avant même
     // que le click ne se déclenche (constaté à la vérification : le texte
@@ -3273,9 +3314,41 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
       if (btn.dataset.fmt === 'color') basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel);
+      else if (btn.dataset.fmt === 'clear') effacerMiseEnForme($(editableSel));
       else wrapSelectionRich($(editableSel), btn.dataset.fmt);
     });
   });
+}
+
+/* Retire toute mise en forme (gras/italique/souligné/couleur/code/archive)
+   de la sélection, quelle qu'elle soit, pour revenir au texte brut — celui
+   d'une notask tapée à la main sans toucher un seul bouton. Contrairement
+   aux autres effets, qui visent une enveloppe précise (voir
+   trouverEnveloppe), on ne sait pas à l'avance QUELLE mise en forme est
+   présente, ni si plusieurs sont imbriquées : Range.toString() donne déjà
+   le texte NU de la sélection (tout balisage ignoré), et le réinsérer tel
+   quel via deleteContents()/insertNode() éclate proprement toute enveloppe
+   partiellement sélectionnée au passage — le même mécanisme natif que
+   n'importe quelle édition de texte riche. */
+function effacerMiseEnForme(el) {
+  const retablirDefilement = memoriserDefilements(el);
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { retablirDefilement(); return; }
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return; }
+  const text = range.toString();
+  if (!text) { retablirDefilement(); return; }
+
+  range.deleteContents();
+  const nu = document.createTextNode(text);
+  range.insertNode(nu);
+
+  const newRange = document.createRange();
+  newRange.selectNodeContents(nu);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+  retablirDefilement();
 }
 
 brancherBarreFormat('#dns-fmt-toolbar', '#dns-content', '#dns-text-colors', '#dns-colors');
@@ -3303,7 +3376,10 @@ function richToText(root) {
       // URL temporaire — voir NOTE_IMG_MARK et hydrateInlineImages().
       case 'img': return node.dataset.att ? `![att:${node.dataset.att}]` : '';
       // Texte coloré : conservé sous forme de marqueur, comme le gras ou le
-      // code — voir NOTE_COLOR_MARK et renderFormatted().
+      // code — voir NOTE_COLOR_MARK et renderFormatted(). L'icône
+      // décorative de la zone d'archive (ARCHIVE_ICON_HTML) est aussi un
+      // <span> ici : elle n'a ni cette classe ni un style.color, donc elle
+      // retombe sans risque sur inner() — vide, un SVG n'a pas de texte.
       case 'span': {
         if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
         const hex = cssColorToHex(node.style.color);
@@ -3312,7 +3388,15 @@ function richToText(root) {
       // Éléments d'interface injectés dans le rendu (pastille de copie des
       // blocs de code) : ils ne font pas partie du texte de la notask.
       case 'button': return '';
-      case 'div': case 'p': return '\n' + inner();
+      // Variante BLOC de la zone d'archive (sélection contenant un saut de
+      // ligne, voir wrapSelectionRich) : même marqueur que la variante en
+      // ligne, sans le '\n' préfixé qu'un <div> normal reçoit ci-dessous —
+      // le contenu porte déjà ses propres retours à la ligne.
+      case 'div': {
+        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
+        return '\n' + inner();
+      }
+      case 'p': return '\n' + inner();
       default: return inner();
     }
   }
@@ -3435,7 +3519,11 @@ function renderFormatted(text) {
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
-  html = html.replace(NOTE_ARCHIVE_MARK, (m, contenu) => `<span class="note-archive-zone">${contenu}</span>`);
+  html = html.replace(NOTE_ARCHIVE_MARK, (m, contenu) => {
+    const bloc = /\n/.test(contenu);
+    const tag = bloc ? 'div' : 'span';
+    return `<${tag} class="note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
+  });
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');

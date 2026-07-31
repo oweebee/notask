@@ -43,7 +43,7 @@ COLORS = {
     "default", "red", "coral", "orange", "amber", "yellow", "lime",
     "green", "emerald", "teal", "cyan", "blue", "indigo", "violet",
     "purple", "magenta", "pink", "rose", "brown", "slate", "grey",
-    "navy", "olive", "plum",
+    "navy", "olive", "white",
 }
 
 # Jeu fixe d'icônes proposées à gauche du titre, à la création comme à

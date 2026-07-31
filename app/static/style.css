@@ -1019,7 +1019,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    et dans COLORS de app/routers/notes.py. */
 .c-navy    { background: #1e3a5f; --note-color: #1e3a5f; }
 .c-olive   { background: #5d6b2f; --note-color: #5d6b2f; }
-.c-plum    { background: #4e2a52; --note-color: #4e2a52; }
+/* Blanc pur : à la place de plum (retiré), pour pouvoir remettre du texte
+   en blanc — seule teinte claire du nuancier, le reste est volontairement
+   sombre pour rester lisible sur le thème. Un léger liseré distingue la
+   pastille du fond de la palette quand elle est blanche elle aussi. */
+.c-white   { background: #ffffff; --note-color: #ffffff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
 
 /* ============================== Tâches ============================== */
 
@@ -1911,7 +1915,8 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
 .fmt-toolbar button[data-fmt="code"] svg,
 .fmt-toolbar button[data-fmt="color"] svg,
-.fmt-toolbar button[data-fmt="archive"] svg { width: 18px; height: 18px; }
+.fmt-toolbar button[data-fmt="archive"] svg,
+.fmt-toolbar button[data-fmt="clear"] svg { width: 18px; height: 18px; }
 
 /* La couleur du texte n'utilise plus de popover flottant : c'est la même
    palette dépliante que la couleur de note (.palette / #dns-text-colors,
@@ -1949,23 +1954,65 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Zone d'archive : repère purement VISUEL pour mettre un passage de côté.
    Aucun rapport avec les notasks archivées (vue Archives) — c'est une mise
    en forme du texte, comme le gras ou le code.
-   Miroir de la zone de code : là où le code s'éclaircit, l'archive
-   s'assombrit, et là où le code est en chasse fixe, l'archive prend une
-   écriture manuscrite. Pas de pastille de copie ici : le but est de
-   ranger, pas de réutiliser. Pile de polices manuscrites courantes, avec
-   `cursive` en dernier recours — aucune n'est garantie sur toutes les
-   machines. */
+   Miroir de la zone de code : même cadre propre (rectangle à coins
+   arrondis, var(--shape-xs), comme .note-code-block) mais plus sombre au
+   lieu de plus clair, et en écriture manuscrite au lieu de la chasse fixe.
+   Bloc (note-archive-block) ou en ligne (note-archive-inline) selon que la
+   sélection contenait un saut de ligne ou non — même distinction que le
+   code (voir wrapSelectionRich() et note-code-block/note-code-inline).
+   Pile de polices manuscrites courantes, avec `cursive` en dernier
+   recours — aucune n'est garantie sur toutes les machines. */
 .note-archive-zone {
   font-family: "Segoe Script", "Bradley Hand", "Brush Script MT",
                "Comic Sans MS", cursive;
   font-size: .95em;
-  background: rgba(0, 0, 0, .28);
-  padding: .1rem .4rem;
-  border-radius: 4px;
+  background: rgba(0, 0, 0, .34);
+  border-radius: var(--shape-xs);
   /* Liseré discret : sur une carte déjà sombre, l'assombrissement seul
      ne suffit pas toujours à délimiter la zone. */
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
 }
+.note-archive-block {
+  display: block;
+  padding: .5rem .625rem;
+  margin: .375rem 0;
+  white-space: pre-wrap;
+}
+.note-archive-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .1rem .4rem;
+}
+/* Icône archive : purement informative, jamais un bouton (voir
+   ARCHIVE_ICON_HTML dans app.js). pointer-events:none pour qu'un clic
+   dessus retombe sur le texte en dessous — dans la carte (lecture), ça
+   revient à cliquer la carte ; dans l'édition, ça place le curseur, sans
+   jamais copier ni rien déclencher de spécifique à l'icône elle-même. */
+.archive-icon-mark { pointer-events: none; opacity: .8; }
+.note-archive-block .archive-icon-mark {
+  position: sticky;
+  top: .35rem;
+  float: right;
+  margin-left: .5rem;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .4);
+  color: var(--md-on-surface);
+}
+.note-archive-block .archive-icon-mark svg { width: 14px; height: 14px; display: block; }
+.note-archive-inline .archive-icon-mark {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--md-on-surface);
+}
+.note-archive-inline .archive-icon-mark svg { width: 12px; height: 12px; display: block; }
 
 .note-code-block {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
