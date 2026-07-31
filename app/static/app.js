@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-recherche-profondeur-19';
+const BUILD_VERSION = '2026-07-31-recherche-scroll-effacer-20';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -1281,8 +1281,11 @@ window.addEventListener('resize', () => {
    extrait de 3 lignes avant et 3 lignes après l'occurrence, navigation
    entre occurrences d'une même notask. */
 
-// Nombre de lignes de contexte affichées de part et d'autre de l'occurrence.
-const HIT_CONTEXT_LINES = 3;
+/* Lignes de contexte visibles de part et d'autre de l'occurrence. Ce n'est
+   qu'un CADRAGE par défaut : la notask entière est rendue, la hauteur
+   visible est bornée à 2×n+1 lignes (voir --hit-lines en CSS) et le reste
+   se fait défiler au survol, sans que la carte change de taille. */
+const HIT_CONTEXT_LINES = 4;
 
 /* Texte d'une notask ramené à une liste de lignes, tous champs confondus :
    c'est sur cette liste que portent la recherche ET le découpage en
@@ -1319,16 +1322,18 @@ function findHits(n, terme) {
   return { lignes, hits };
 }
 
-/* Rend un extrait : les lignes autour de l'occurrence courante, avec
-   toutes les occurrences visibles surlignées — celle qui est sélectionnée
-   en bleu cuillère, les autres en jaune cuillère. */
+/* Rend la notask ENTIÈRE, toutes occurrences surlignées — celle qui est
+   sélectionnée en bleu cuillère, les autres en jaune cuillère. La hauteur
+   visible est bornée en CSS à 2×HIT_CONTEXT_LINES + 1 lignes, et le bloc
+   est recadré sur l'occurrence courante après insertion
+   (voir cadrerExtrait) : on voit donc par défaut HIT_CONTEXT_LINES lignes
+   au-dessus et autant en dessous, mais on peut faire défiler le reste au
+   survol sans que la carte ne change de taille. */
 function renderHitExtract(lignes, hits, courant) {
   const cible = hits[courant];
-  const debut = Math.max(0, cible.ligne - HIT_CONTEXT_LINES);
-  const fin = Math.min(lignes.length - 1, cible.ligne + HIT_CONTEXT_LINES);
 
   let html = '';
-  for (let i = debut; i <= fin; i++) {
+  for (let i = 0; i < lignes.length; i++) {
     const ligne = lignes[i] || '';
     // Occurrences de CETTE ligne. On garde leur rang global (idx) pour
     // savoir laquelle est celle qui est sélectionnée.
@@ -1351,6 +1356,24 @@ function renderHitExtract(lignes, hits, courant) {
     html += `<div class="hit-line${i === cible.ligne ? ' hit-line-current' : ''}">${morceau || '&nbsp;'}</div>`;
   }
   return html;
+}
+
+/* Recadre l'extrait sur l'occurrence sélectionnée : elle doit être au
+   milieu de la zone visible, avec son contexte de part et d'autre.
+   Nécessaire parce qu'on rend la notask entière (pour pouvoir la faire
+   défiler au survol) et non le seul extrait. */
+function cadrerExtrait(extrait) {
+  if (!extrait) return;
+  // Hauteur visible posée depuis JS plutôt qu'en dur dans la feuille de
+  // style : HIT_CONTEXT_LINES reste la seule valeur à changer, les deux ne
+  // peuvent pas diverger.
+  extrait.style.setProperty('--hit-lines', HIT_CONTEXT_LINES * 2 + 1);
+  const cible = extrait.querySelector('.hit-line-current');
+  if (!cible) return;
+  extrait.scrollTop = Math.max(
+    0,
+    cible.offsetTop - (extrait.clientHeight - cible.offsetHeight) / 2,
+  );
 }
 
 /* Remplace la mosaïque par les résultats de la recherche en profondeur. */
@@ -1400,11 +1423,16 @@ function renderSearchHits() {
 
     // Clic ailleurs sur la carte : ouvre la notask, comme dans la mosaïque.
     el.addEventListener('click', (e) => {
+      // Ni la navigation entre occurrences, ni un simple défilement de
+      // l'extrait ne doivent ouvrir la notask.
       if (e.target.closest('.hit-nav')) return;
       openNoteSimpleDialog(n);
     });
 
     grid.appendChild(el);
+    // Après insertion seulement : les hauteurs ne sont mesurables qu'une
+    // fois l'élément dans le document.
+    cadrerExtrait(el.querySelector('.hit-extract'));
   }
 
   layoutMosaic();
@@ -2071,10 +2099,34 @@ $('#nc-add').addEventListener('click', async () => {
 
 renderComposer();
 
+/* Croix d'effacement des deux barres : masquée tant que le champ est vide,
+   pour ne pas encombrer une barre inutilisée. Le clic vide le champ,
+   relance la recherche correspondante et redonne le focus — on efface
+   presque toujours pour retaper autre chose. */
+function brancherEffacementRecherche(inputSel, btnSel, onClear) {
+  const input = $(inputSel);
+  const btn = $(btnSel);
+  btn.innerHTML = ICONS.close;
+  const sync = () => { btn.hidden = !input.value; };
+  input.addEventListener('input', sync);
+  btn.addEventListener('click', () => {
+    input.value = '';
+    sync();
+    onClear();
+    input.focus();
+  });
+  sync();
+}
+
 let searchTimer;
 $('#notes-search').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.search = e.target.value.trim(); loadNotes(); }, 250);
+});
+brancherEffacementRecherche('#notes-search', '#notes-search-clear', () => {
+  clearTimeout(searchTimer);
+  state.search = '';
+  loadNotes();
 });
 
 /* Seconde barre : recherche en profondeur, qui ne filtre pas la mosaïque
@@ -2090,6 +2142,12 @@ $('#notes-deep-search').addEventListener('input', (e) => {
     state.deepCursor = {};
     renderNotes();
   }, 250);
+});
+brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', () => {
+  clearTimeout(deepSearchTimer);
+  state.deepSearch = '';
+  state.deepCursor = {};
+  renderNotes();
 });
 
 /* Les archives sont désormais une entrée du menu latéral, pas un bouton. */
