@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-palette-partagee-24-couleurs-32';
+const BUILD_VERSION = '2026-07-31-bulle-copie-dans-dialog-33';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -766,9 +766,29 @@ function afficherBulleCopie(x, y, texte) {
   const bulle = document.createElement('div');
   bulle.className = 'copy-bubble';
   bulle.textContent = texte;
-  bulle.style.left = `${x}px`;
-  bulle.style.top = `${y}px`;
-  document.body.appendChild(bulle);
+
+  /* Même piège que le nuancier de couleurs : une <dialog> modale rend le
+     reste du document inerte et le masque derrière son voile sombre. Une
+     bulle ajoutée à document.body était donc invisible dès qu'on copiait
+     depuis l'édition rapide ou l'éditeur d'image. On la place dans la
+     boîte ouverte la plus haute quand il y en a une.
+     Positionnement en `absolute` relatif à cette boîte, et non `fixed` :
+     un ancêtre animé/transformé redéfinit le repère du positionnement
+     fixe, les coordonnées écran ne seraient plus fiables. */
+  const boites = [...document.querySelectorAll('dialog[open]')];
+  const hote = boites.length ? boites[boites.length - 1] : document.body;
+
+  if (hote !== document.body) {
+    const r = hote.getBoundingClientRect();
+    bulle.style.position = 'absolute';
+    bulle.style.left = `${x - r.left}px`;
+    bulle.style.top = `${y - r.top}px`;
+  } else {
+    bulle.style.left = `${x}px`;
+    bulle.style.top = `${y}px`;
+  }
+
+  hote.appendChild(bulle);
   setTimeout(() => bulle.remove(), 1400);
 }
 

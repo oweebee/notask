@@ -1602,10 +1602,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
      étapes ci-dessus. Une courbe d'accélération viendrait s'ajouter au
      rebond déjà calculé et le déformerait. */
   animation: dlg-gelatine 1s linear both;
-  /* will-change : prévient le compositeur qu'il s'agit d'une animation de
-     transformation, ce qui évite le léger crénelage du texte pendant la
-     mise à l'échelle sur certains navigateurs. */
-  will-change: transform;
+  /* Pas de will-change ici : laissé en permanence sur la boîte, il en fait
+     un repère de positionnement pour ses descendants en `position: fixed`,
+     dont les coordonnées écran cesseraient d'être fiables (bulle "Copié",
+     popovers…). Le gain visuel ne valait pas cet effet de bord. */
 }
 .dlg-open-anim::backdrop { animation: dlg-backdrop-in .35s ease both; }
 
