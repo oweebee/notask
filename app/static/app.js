@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-terminal-fallout-41';
+const BUILD_VERSION = '2026-07-31-titres-sans-majuscules-44';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -3129,13 +3129,16 @@ function wrapSelectionRich(el, kind, couleur) {
   range.deleteContents();
   range.insertNode(wrapper);
 
+  /* La sélection est REPOSÉE sur le texte qu'on vient d'habiller, au lieu
+     d'être repliée juste après : on enchaîne très souvent deux effets sur
+     le même passage (gras puis couleur, par exemple), et devoir le
+     resélectionner à chaque fois était pénible. Les effets s'imbriquent
+     alors proprement — `**[c:e53935]texte[/c]**` — et richToText comme
+     renderFormatted savent déjà lire cette imbrication.
+     Quand il n'y avait rien de sélectionné, on place simplement le curseur
+     dans le marqueur vide qui vient d'être créé, pour taper dedans. */
   const newRange = document.createRange();
-  if (text) {
-    newRange.setStartAfter(wrapper);
-    newRange.collapse(true);
-  } else {
-    newRange.selectNodeContents(wrapper);
-  }
+  newRange.selectNodeContents(wrapper);
   sel.removeAllRanges();
   sel.addRange(newRange);
   // En tout dernier : le focus et le repositionnement du curseur ci-dessus

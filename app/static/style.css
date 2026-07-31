@@ -234,23 +234,25 @@ header.topbar .who {
 .who-jaune { color: #ffd54f; }
 .who-bleu  { color: #42a5f5; }
 
-/* Entrées Profil / Outils : boutons texte Material — pas de cadre, texte
-   blanc comme partout ailleurs dans l'app, fond seulement au survol. Les
-   teintes jaune/bleue restent réservées au pseudo et au menu de gauche ;
-   les mettre ici aussi finissait par tout colorer et ne repérait plus
-   rien. */
+/* Entrées Profil / Outils : pastilles Material, sans cadre — texte BLANC
+   comme partout dans l'app, sur un fond teinté qui reprend les deux
+   couleurs du logo (jaune pour la première, bleue pour la seconde). La
+   couleur est portée par la pastille, pas par le texte : c'est ce qui
+   permet de garder la lisibilité du blanc tout en gardant le repère. */
 .top-entry {
   border: none;
-  background: transparent;
   color: var(--md-on-surface);
   font-size: 1rem;
   font-weight: 500;
-  padding: .35rem .7rem;
+  padding: .4rem .9rem;
   border-radius: var(--shape-full);
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, box-shadow .15s;
 }
-.top-entry:hover { background: rgba(255,255,255,.10); }
+.top-entry-yellow { background: rgba(255, 213, 79, .28); }
+.top-entry-yellow:hover { background: rgba(255, 213, 79, .45); }
+.top-entry-blue { background: rgba(66, 165, 245, .30); }
+.top-entry-blue:hover { background: rgba(66, 165, 245, .48); }
 
 /* ---- Boîtes Profil et Outils ---- */
 .profil-infos {
@@ -301,13 +303,14 @@ header.topbar .who {
   overflow-y: auto;
 }
 
+/* Comme les autres titres de section : casse respectée, pas de majuscules
+   forcées (voir .agenda-group h2 et .tasks-group). */
 .drawer-section {
   margin: .75rem 0 .25rem;
   padding-left: 1.5rem;
-  font-size: .6875rem;
+  font-size: .875rem;
   font-weight: 500;
-  letter-spacing: .8px;
-  text-transform: uppercase;
+  letter-spacing: .01em;
   color: var(--md-on-surface-variant);
 }
 
@@ -440,11 +443,13 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   padding: 1.5rem 0 3rem;
 }
 .agenda-group + .agenda-group { margin-top: 1.25rem; }
+/* Titres de section : pas de majuscules forcées, un peu plus gros à la
+   place. On garde partout la casse telle qu'elle est écrite — comme le
+   titre "notask" de l'en-tête et les entrées du menu de gauche. */
 .agenda-group h2 {
-  font-size: .6875rem;
+  font-size: .9375rem;
   font-weight: 600;
-  letter-spacing: .5px;
-  text-transform: uppercase;
+  letter-spacing: .01em;
   color: var(--md-on-surface-variant);
   margin: 0 0 .5rem;
 }
@@ -1016,12 +1021,13 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 /* ============================== Tâches ============================== */
 
+/* Même traitement que les titres de la colonne d'échéances : casse
+   respectée, taille un peu plus généreuse plutôt que des majuscules. */
 .tasks-group {
   margin: 1.5rem 0 .625rem;
-  font-size: .8125rem;
+  font-size: 1rem;
   font-weight: 500;
-  letter-spacing: .5px;
-  text-transform: uppercase;
+  letter-spacing: .01em;
   color: var(--md-on-surface-variant);
 }
 .tasks-group:first-child { margin-top: 0; }
