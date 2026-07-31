@@ -300,11 +300,13 @@ async function api(path, options = {}) {
 
 /* Envoi multipart (pièces jointes) : pas de Content-Type manuel — le
    navigateur doit fixer lui-même la frontière ("boundary") du FormData,
-   sinon le serveur ne peut pas parser le corps de la requête. */
-async function apiUpload(path, formData) {
+   sinon le serveur ne peut pas parser le corps de la requête. `method`
+   passé à 'PUT' pour remplacer une pièce jointe existante (voir
+   openImageEditor()), 'POST' par défaut pour en créer une nouvelle. */
+async function apiUpload(path, formData, method = 'POST') {
   const t = token();
   const res = await fetch('/api' + path, {
-    method: 'POST',
+    method,
     headers: t ? { Authorization: 'Bearer ' + t } : {},
     body: formData,
   });
@@ -335,9 +337,11 @@ const MAX_ATTACHMENT_MB = 8;
 const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
 
 // Cache mémoire des pièces jointes déjà déchiffrées (id -> {blob, name, mime}
-// -> aussi url, générée à la demande). Une pièce jointe est immuable une
-// fois créée (pas d'édition, seulement ajout/suppression) : aucune raison
-// d'invalidation autre que la suppression elle-même.
+// -> aussi url, générée à la demande). Une image reste modifiable via
+// l'éditeur d'image (voir openImageEditor() plus bas), qui remplace son
+// contenu sans changer son id : dans ce cas précis, l'entrée est retirée du
+// cache pour forcer un rechargement des octets à jour — c'est la seule
+// autre raison d'invalidation que la suppression elle-même.
 const attachmentCache = new Map();
 
 function formatFileSize(bytes) {
@@ -434,6 +438,14 @@ const ICONS = {
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.5H5.5A2 2 0 0 0 3.5 5.5v6l9.6 9.6a2 2 0 0 0 2.8 0l5.8-5.8a2 2 0 0 0 0-2.8z"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/></svg>',
+
+  /* Outils de l'éditeur d'image (voir openImageEditor() plus bas). */
+  imgRect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg>',
+  imgEllipse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>',
+  imgHighlight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14 14 6l4 4-8 8H6z"/><path d="M6 14 4 20l6-2"/></svg>',
+  imgText: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14"/><path d="M12 6.5V19"/><path d="M9 19h6"/></svg>',
+  imgMosaic: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8.5H4.5V5"/><path d="M4.5 8.5a8 8 0 1 1-2 5.3"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -1142,15 +1154,6 @@ function renderNotes() {
       </div>`;
     }
 
-    if (n.label_ids && n.label_ids.length) {
-      const noms = n.label_ids
-        .map((id) => state.labels.find((l) => l.id === id))
-        .filter(Boolean)
-        .map((l) => `<span class="label-chip">${escapeHtml(l.name)}</span>`)
-        .join('');
-      if (noms) inner += `<div class="label-chips">${noms}</div>`;
-    }
-
     if (n.attachments && n.attachments.length) {
       const images = n.attachments.filter((a) => (a.meta && a.meta.mime || '').startsWith('image/'));
       const files = n.attachments.filter((a) => !(a.meta && a.meta.mime || '').startsWith('image/'));
@@ -1165,16 +1168,16 @@ function renderNotes() {
     }
 
     inner += `<div class="palette" hidden></div>
-      <div class="label-picker" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
-        <button data-act="labels" title="Libellés" aria-label="Libellés">${ICONS.tag}</button>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
         <span class="sep"></span>
         <button data-act="delete" title="Supprimer" aria-label="Supprimer">${ICONS.trash}</button>
-      </div>`;
+      </div>
+      <div class="note-labels"></div>
+      <div class="label-add-picker" hidden></div>`;
 
     el.innerHTML = inner;
 
@@ -1183,7 +1186,12 @@ function renderNotes() {
     // de la grille ne recoûte rien pour les pièces jointes déjà vues.
     el.querySelectorAll('.note-attach-thumb').forEach((img) => {
       const att = (n.attachments || []).find((a) => String(a.id) === img.dataset.att);
-      if (att) loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
+      if (!att) return;
+      loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
+      img.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openImageEditor(att, n, 'card');
+      });
     });
 
     el.querySelector('[data-act=edit]').onclick = () => openNoteDialog(n);
@@ -1227,34 +1235,12 @@ function renderNotes() {
       palette.hidden = !palette.hidden;
     };
 
-    // Libellés dépliables, même principe que la palette — bascule immédiate
-    // (PATCH + rechargement à chaque clic), pas de bouton Enregistrer : la
-    // carte n'a pas de moment de fermeture où différer l'envoi, contrairement
-    // aux boîtes de dialogue (voir renderNoteLabelChips[Simple]()).
-    const labelPicker = el.querySelector('.label-picker');
-    el.querySelector('[data-act=labels]').onclick = () => {
-      if (!labelPicker.dataset.filled) {
-        if (!state.labels.length) {
-          labelPicker.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
-        } else {
-          for (const l of state.labels) {
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'label-chip' + ((n.label_ids || []).includes(l.id) ? ' active' : '');
-            chip.textContent = l.name;
-            chip.onclick = async () => {
-              const ids = n.label_ids || [];
-              const nextIds = ids.includes(l.id) ? ids.filter((id) => id !== l.id) : [...ids, l.id];
-              await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
-              loadNotes();
-            };
-            labelPicker.appendChild(chip);
-          }
-        }
-        labelPicker.dataset.filled = '1';
-      }
-      labelPicker.hidden = !labelPicker.hidden;
-    };
+    // Rangée de libellés en bas de la carte : PATCH + rechargement immédiat
+    // à chaque clic, pas de bouton Enregistrer — même logique que la
+    // palette de couleur ci-dessus, la carte n'a pas de moment de fermeture
+    // où différer l'envoi (contrairement aux boîtes de dialogue, voir
+    // renderNoteLabelChips[Simple]()).
+    renderCardLabels(el, n);
 
     el.querySelectorAll('ul.check li').forEach((li) => {
       li.querySelector('input').onchange = async (ev) => {
@@ -1271,7 +1257,7 @@ function renderNotes() {
     // exclus, pas les espaces vides autour (le séparateur, la marge) — un
     // clic là doit ouvrir la carte comme n'importe où ailleurs.
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.pin-btn, .actions button, .palette, .label-picker, input, .label-chips')) return;
+      if (e.target.closest('.pin-btn, .actions button, .palette, .note-labels, .label-add-picker, .note-attachments, input')) return;
       openNoteSimpleDialog(n);
     });
 
@@ -1281,7 +1267,7 @@ function renderNotes() {
     if (dragOk) {
       el.draggable = true;
       el.addEventListener('dragstart', (e) => {
-        if (e.target.closest('.pin-btn, .actions, .palette, .label-picker, input, .label-chips')) {
+        if (e.target.closest('.pin-btn, .actions, .palette, .note-labels, .label-add-picker, .note-attachments, input')) {
           e.preventDefault();
           return;
         }
@@ -1297,6 +1283,90 @@ function renderNotes() {
   }
 
   layoutMosaic();
+}
+
+/* Rangée de libellés en bas de la carte (mosaïque) : uniquement ceux déjà
+   assignés à cette notask, colorés avec la couleur propre du libellé
+   (celle choisie dans le menu latéral via openLabelEditPopup — pas la
+   couleur de la note), pas un aplat générique comme avant. Survol d'une
+   puce = petite croix à droite pour la retirer ; après la dernière puce,
+   un bouton + ouvre la liste des libellés pas encore posés sur cette
+   notask (`.label-add-picker`, même case-à-côté que .palette). Couleur en
+   style inline plutôt qu'en classe .c-* : `.label-chip:hover` a la même
+   spécificité et écraserait sinon la couleur au survol (même piège que
+   celui déjà rencontré et corrigé sur .drawer-item, voir
+   renderLabelsDrawer()). */
+function renderCardLabels(el, n) {
+  const box = el.querySelector('.note-labels');
+  const picker = el.querySelector('.label-add-picker');
+  if (!box || !picker) return;
+  box.innerHTML = '';
+  picker.innerHTML = '';
+  picker.hidden = true;
+
+  const assigned = (n.label_ids || [])
+    .map((id) => state.labels.find((l) => l.id === id))
+    .filter(Boolean);
+
+  for (const l of assigned) {
+    const chip = document.createElement('span');
+    chip.className = 'label-chip label-chip-card';
+    if (l.color && LABEL_COLOR_HEX[l.color]) {
+      chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+    }
+    const name = document.createElement('span');
+    name.className = 'label-chip-name';
+    name.textContent = l.name;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'label-chip-x';
+    x.setAttribute('aria-label', `Retirer le libellé ${l.name}`);
+    x.innerHTML = ICONS.close;
+    x.onclick = async (e) => {
+      e.stopPropagation();
+      const nextIds = (n.label_ids || []).filter((id) => id !== l.id);
+      await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
+      loadNotes();
+    };
+    chip.append(name, x);
+    box.appendChild(chip);
+  }
+
+  const remaining = state.labels.filter((l) => !(n.label_ids || []).includes(l.id));
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'label-add-btn';
+  addBtn.title = 'Ajouter un libellé';
+  addBtn.setAttribute('aria-label', 'Ajouter un libellé');
+  addBtn.innerHTML = ICONS.plus;
+  addBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!picker.hidden) { picker.hidden = true; return; }
+    picker.innerHTML = '';
+    if (!remaining.length) {
+      picker.innerHTML = '<span class="hint">Aucun libellé disponible — créez-en un dans le menu latéral.</span>';
+    } else {
+      for (const l of remaining) {
+        const opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = 'label-chip';
+        if (l.color && LABEL_COLOR_HEX[l.color]) {
+          opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+        }
+        opt.textContent = l.name;
+        opt.onclick = async (e2) => {
+          e2.stopPropagation();
+          const nextIds = [...(n.label_ids || []), l.id];
+          await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
+          loadNotes();
+        };
+        picker.appendChild(opt);
+      }
+    }
+    picker.hidden = false;
+  };
+  box.appendChild(addBtn);
 }
 
 /* Pendant le survol, on déplace en direct la carte glissée juste avant ou
@@ -1359,6 +1429,13 @@ async function commitNoteOrder() {
    qu'on coche l'option, chaque ligne devient une case, comme dans Keep. */
 let composerChecklist = false;
 let composerItems = [{ text: '', checked: false }];
+// Couleur/libellés/échéance : mêmes réglages que sur une notask existante,
+// disponibles dès la création (voir la barre d'outils secondaire ci-dessous).
+let composerColor = 'default';
+let composerLabelIds = [];
+// Barre d'outils secondaire masquée tant qu'on n'a pas touché au titre ou
+// au corps — voir composerExpand() et les écouteurs "focus" plus bas.
+let composerExpanded = false;
 
 /* Redimensionnement vertical maison d'une zone de texte, au clic-glissé sur
    sa poignée (voir le commentaire CSS sur .ta-resize-handle : le natif
@@ -1390,11 +1467,26 @@ function resetComposer() {
   $('#nc-content').value = '';
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
+  composerColor = 'default';
+  composerLabelIds = [];
+  composerExpanded = false;
+  $('#nc-due').value = '';
+  renderNcDueBtn();
+  $('#nc-colors').hidden = true;
+  $('#nc-label-chips').hidden = true;
   state.composerIcon = null;
   renderIconBtn($('#nc-icon-btn'), null);
   renderComposer();
   msg($('#composer-msg'), '');
 }
+
+function composerExpand() {
+  if (composerExpanded) return;
+  composerExpanded = true;
+  renderComposer();
+}
+$('#nc-title').addEventListener('focus', composerExpand);
+$('#nc-content').addEventListener('focus', composerExpand);
 
 renderIconBtn($('#nc-icon-btn'), null);
 $('#nc-icon-btn').addEventListener('click', () => {
@@ -1408,8 +1500,9 @@ function renderComposer() {
   $('#nc-content').hidden = composerChecklist;
   $('#nc-items').hidden = !composerChecklist;
   $('#nc-add-item').hidden = !composerChecklist;
-  $('#nc-toggle-checklist').classList.toggle('active-toggle', composerChecklist);
-  $('#nc-cancel').hidden = !composerChecklist;
+  renderComposerChecklistBtn();
+  $('#nc-tools-row').hidden = !composerExpanded;
+  $('#nc-cancel').hidden = !composerExpanded;
   if (!composerChecklist) return;
 
   const box = $('#nc-items');
@@ -1442,7 +1535,19 @@ function renderComposer() {
   });
 }
 
+// Même icône dynamique (crayon/liste) que #dns-toggle-checklist dans
+// l'édition simple, pour rester cohérent d'un bout à l'autre de l'app.
+function renderComposerChecklistBtn() {
+  const btn = $('#nc-toggle-checklist');
+  btn.innerHTML = composerChecklist ? ICONS.pencil : ICONS.tasks;
+  const label = composerChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.classList.toggle('active-toggle', composerChecklist);
+}
+
 $('#nc-toggle-checklist').addEventListener('click', () => {
+  composerExpand();
   if (!composerChecklist) {
     // Bascule depuis le texte libre : chaque ligne déjà tapée devient un élément.
     const lignes = $('#nc-content').value.split('\n').filter((l) => l.trim());
@@ -1453,6 +1558,79 @@ $('#nc-toggle-checklist').addEventListener('click', () => {
   composerChecklist = !composerChecklist;
   renderComposer();
 });
+
+// Couleur : mêmes swatches .c-* que partout ailleurs, reconstruites à
+// chaque ouverture (liste courte, pas besoin de mise en cache — évite
+// aussi d'avoir à re-synchroniser une pastille active restée périmée
+// après un resetComposer()).
+const ncColorsBox = $('#nc-colors');
+$('#nc-color-btn').innerHTML = ICONS.palette;
+$('#nc-color-btn').addEventListener('click', () => {
+  composerExpand();
+  if ($('#nc-label-chips').hidden === false) $('#nc-label-chips').hidden = true;
+  if (!ncColorsBox.hidden) { ncColorsBox.hidden = true; return; }
+  ncColorsBox.innerHTML = '';
+  for (const c of COLORS) {
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch c-' + c + (c === composerColor ? ' active' : '');
+    s.title = c;
+    s.onclick = () => {
+      composerColor = c;
+      ncColorsBox.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+    };
+    ncColorsBox.appendChild(s);
+  }
+  ncColorsBox.hidden = false;
+});
+
+// Libellés : liste complète en cases à cocher (une nouvelle notask n'a pas
+// encore de libellés "déjà posés" à afficher différemment, contrairement à
+// la rangée dédiée sur une carte existante — voir renderCardLabels()).
+const ncLabelChipsBox = $('#nc-label-chips');
+$('#nc-labels-btn').innerHTML = ICONS.tag;
+function renderComposerLabelChips() {
+  ncLabelChipsBox.innerHTML = '';
+  if (!state.labels.length) {
+    ncLabelChipsBox.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
+    return;
+  }
+  for (const l of state.labels) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'label-chip' + (composerLabelIds.includes(l.id) ? ' active' : '');
+    chip.textContent = l.name;
+    chip.onclick = () => {
+      composerLabelIds = composerLabelIds.includes(l.id)
+        ? composerLabelIds.filter((id) => id !== l.id)
+        : [...composerLabelIds, l.id];
+      renderComposerLabelChips();
+    };
+    ncLabelChipsBox.appendChild(chip);
+  }
+}
+$('#nc-labels-btn').addEventListener('click', () => {
+  composerExpand();
+  if ($('#nc-colors').hidden === false) $('#nc-colors').hidden = true;
+  if (!ncLabelChipsBox.hidden) { ncLabelChipsBox.hidden = true; return; }
+  renderComposerLabelChips();
+  ncLabelChipsBox.hidden = false;
+});
+
+// Échéance : même bouton + popover calendrier que sur une notask existante
+// (voir renderDueBtn()/openCalPopup(), partagés avec dn-due-btn/dns-due-btn).
+function renderNcDueBtn() {
+  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null);
+}
+$('#nc-due-btn').addEventListener('click', () => {
+  composerExpand();
+  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso) => {
+    $('#nc-due').value = iso || '';
+    renderNcDueBtn();
+  });
+});
+renderNcDueBtn();
 
 // Bouton explicite, indépendant du raccourci Entrée — toujours visible et fiable.
 $('#nc-add-item').addEventListener('click', () => {
@@ -1480,6 +1658,9 @@ $('#nc-add').addEventListener('click', async () => {
         ? await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })))
         : [],
       icon: state.composerIcon,
+      color: composerColor,
+      due_at: $('#nc-due').value || null,
+      label_ids: composerLabelIds,
     };
     await api('/notes', { method: 'POST', body });
     resetComposer();
@@ -1740,7 +1921,7 @@ function renderAttachmentsSimple() {
       loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {
         chip.classList.add('is-broken');
       });
-      img.addEventListener('click', () => loadAttachment(att).then((r) => window.open(r.url, '_blank')));
+      img.addEventListener('click', () => openImageEditor(att, state.editingNote, 'dns'));
     } else {
       const name = (att.meta && att.meta.name) || 'Fichier';
       chip.innerHTML = `<span class="dns-attach-icon">${ICONS.file}</span>
@@ -2070,6 +2251,352 @@ $('#dlg-note-simple').addEventListener('click', (e) => {
   if (e.target === $('#dlg-note-simple')) $('#dlg-note-simple').close();
 });
 
+/* ---------------------------- Éditeur d'image ----------------------------
+   Visualiseuse + outil de marquage pour les pièces jointes image, ouverte
+   au clic sur une vignette (carte ou édition simple) à la place d'un
+   nouvel onglet. Cinq outils : rectangle, ellipse (contours), surlignage
+   (aplat semi-transparent), texte, mosaïque (pour cacher une zone) — plus
+   une palette de couleurs qui reprend telle quelle celle des notes/
+   libellés (COLORS, .c-* et LABEL_COLOR_HEX), pour rester dans le thème déjà
+   en place plutôt que d'inventer une nouvelle gamme de couleurs.
+
+   Tout se dessine directement sur #img-editor-canvas, à la résolution
+   naturelle de l'image (pas celle, réduite, à laquelle il est affiché à
+   l'écran — voir canvasPoint() pour la conversion). "Enregistrer" aplatit
+   le canvas en PNG, le chiffre (encryptBinary(), comme à la création) et
+   remplace le contenu de la pièce jointe via PUT /api/attachments/{id} —
+   même id, donc même vignette partout où elle apparaît déjà. Fermer par
+   tout autre moyen (Échap, clic à côté, bouton "Fermer sans enregistrer")
+   abandonne les annotations sans rien envoyer au serveur. */
+
+const imgEditor = {
+  att: null,       // pièce jointe en cours d'édition
+  note: null,       // note propriétaire (pour rafraîchir la bonne vue après enregistrement)
+  source: null,     // 'card' | 'dns' — qui a ouvert l'éditeur
+  tool: 'rect',
+  color: LABEL_COLOR_HEX.red,
+  history: [],      // pile d'ImageData ; le dernier élément = état affiché
+  strokeBase: null, // clone de l'état courant, pris au pointerdown, restauré à chaque pointermove pour prévisualiser sans laisser de trace
+  drawing: false,
+  startX: 0,
+  startY: 0,
+};
+
+const IMG_EDITOR_TOOL_ICONS = {
+  rect: 'imgRect', ellipse: 'imgEllipse', highlight: 'imgHighlight',
+  text: 'imgText', mosaic: 'imgMosaic',
+};
+
+function imgEditorCanvas() { return $('#img-editor-canvas'); }
+
+$('#img-editor-undo').innerHTML = ICONS.undo;
+$$('#img-editor-tools .img-tool-btn').forEach((b) => {
+  b.innerHTML = ICONS[IMG_EDITOR_TOOL_ICONS[b.dataset.tool]];
+  b.classList.toggle('active', b.dataset.tool === imgEditor.tool);
+  b.onclick = () => {
+    imgEditor.tool = b.dataset.tool;
+    $$('#img-editor-tools .img-tool-btn').forEach((x) => x.classList.toggle('active', x === b));
+    imgEditorCanvas().classList.toggle('tool-text', imgEditor.tool === 'text');
+  };
+});
+
+// Palette de couleurs de l'éditeur : construite une seule fois (elle ne
+// dépend d'aucune note en particulier), "default" exclu comme pour
+// label-color-grid — un gris quasi invisible ne sert à rien comme couleur
+// de marquage.
+(function buildImgEditorColors() {
+  const box = $('#img-editor-colors');
+  for (const c of COLORS.filter((x) => x !== 'default')) {
+    const hex = LABEL_COLOR_HEX[c];
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch c-' + c + (hex === imgEditor.color ? ' active' : '');
+    s.title = c;
+    s.onclick = () => {
+      imgEditor.color = hex;
+      box.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+    };
+    box.appendChild(s);
+  }
+})();
+
+async function openImageEditor(att, note, source) {
+  if (!att || !((att.meta && att.meta.mime) || '').startsWith('image/')) return;
+  let loaded;
+  try {
+    loaded = await loadAttachment(att);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+
+  imgEditor.att = att;
+  imgEditor.note = note;
+  imgEditor.source = source;
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = imgEditorCanvas();
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+    $('#dlg-image-editor').showModal();
+  };
+  img.onerror = () => alert("Impossible d'afficher cette image.");
+  img.src = loaded.url;
+}
+
+// Conversion écran -> coordonnées du canvas : celui-ci est affiché à une
+// taille réduite (max-width/max-height en CSS) mais dessiné à sa résolution
+// naturelle, souvent bien plus grande — sans cette conversion, les tracés
+// atterriraient au mauvais endroit dès que l'image dépasse la place
+// disponible à l'écran.
+function canvasPoint(e) {
+  const canvas = imgEditorCanvas();
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height),
+  };
+}
+
+function imgEditorStrokeWidth(canvas) { return Math.max(3, Math.round(canvas.width * 0.006)); }
+
+function imgEditorPushHistory() {
+  const canvas = imgEditorCanvas();
+  imgEditor.history.push(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height));
+  // Limite raisonnable : au-delà, on oublie les tout premiers états plutôt
+  // que de laisser grandir indéfiniment la mémoire (chaque état est une
+  // copie complète des pixels de l'image).
+  if (imgEditor.history.length > 40) imgEditor.history.shift();
+}
+
+function imgEditorUndo() {
+  if (imgEditor.history.length < 2) return;
+  imgEditor.history.pop();
+  const last = imgEditor.history[imgEditor.history.length - 1];
+  imgEditorCanvas().getContext('2d').putImageData(last, 0, 0);
+}
+$('#img-editor-undo').addEventListener('click', imgEditorUndo);
+
+function imgEditorRestoreStrokeBase() {
+  imgEditorCanvas().getContext('2d').putImageData(imgEditor.strokeBase, 0, 0);
+}
+
+/* Dessine la forme en cours de geste (rectangle/ellipse/surlignage) ou un
+   simple cadre pointillé de prévisualisation (mosaïque, dont le calcul
+   réel n'a lieu qu'au relâchement — voir imgEditorCommitShape() — le
+   recalculer à chaque déplacement de souris serait coûteux pour rien tant
+   que la zone n'est pas fixée). Repart toujours de strokeBase pour ne
+   jamais laisser de trace du tracé précédent pendant le glisser. */
+function imgEditorDrawPreview(x0, y0, x1, y1) {
+  imgEditorRestoreStrokeBase();
+  const canvas = imgEditorCanvas();
+  const ctx = canvas.getContext('2d');
+  const x = Math.min(x0, x1), y = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+
+  if (imgEditor.tool === 'rect') {
+    ctx.lineWidth = imgEditorStrokeWidth(canvas);
+    ctx.strokeStyle = imgEditor.color;
+    ctx.strokeRect(x, y, w, h);
+  } else if (imgEditor.tool === 'ellipse') {
+    ctx.lineWidth = imgEditorStrokeWidth(canvas);
+    ctx.strokeStyle = imgEditor.color;
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (imgEditor.tool === 'highlight') {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = imgEditor.color;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+  } else if (imgEditor.tool === 'mosaic') {
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+}
+
+/* Pixellise une zone du canvas par blocs (réduction puis agrandissement
+   sans lissage, la technique la plus simple pour "cacher" une zone sans
+   dépendance externe). Taille de bloc proportionnelle à la zone choisie :
+   une petite sélection a besoin de blocs plus petits, sinon elle
+   disparaît entièrement en un seul carré uni. */
+function imgEditorPixelate(ctx, x, y, w, h) {
+  const canvas = ctx.canvas;
+  x = Math.max(0, Math.round(x));
+  y = Math.max(0, Math.round(y));
+  w = Math.min(Math.round(w), canvas.width - x);
+  h = Math.min(Math.round(h), canvas.height - y);
+  if (w <= 0 || h <= 0) return;
+
+  const blockSize = Math.max(6, Math.round(Math.min(w, h) / 12));
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(w / blockSize));
+  small.height = Math.max(1, Math.round(h / blockSize));
+  const sctx = small.getContext('2d');
+  sctx.drawImage(canvas, x, y, w, h, 0, 0, small.width, small.height);
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, small.width, small.height, x, y, w, h);
+  ctx.imageSmoothingEnabled = true;
+}
+
+function imgEditorCommitShape(x0, y0, x1, y1) {
+  imgEditorRestoreStrokeBase();
+  const canvas = imgEditorCanvas();
+  const ctx = canvas.getContext('2d');
+  const x = Math.min(x0, x1), y = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  if (w < 2 || h < 2) return; // clic sans glisser : rien à enregistrer
+
+  if (imgEditor.tool === 'rect') {
+    ctx.lineWidth = imgEditorStrokeWidth(canvas);
+    ctx.strokeStyle = imgEditor.color;
+    ctx.strokeRect(x, y, w, h);
+  } else if (imgEditor.tool === 'ellipse') {
+    ctx.lineWidth = imgEditorStrokeWidth(canvas);
+    ctx.strokeStyle = imgEditor.color;
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (imgEditor.tool === 'highlight') {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = imgEditor.color;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+  } else if (imgEditor.tool === 'mosaic') {
+    imgEditorPixelate(ctx, x, y, w, h);
+  }
+  imgEditorPushHistory();
+}
+
+/* Outil texte : un clic pose un <input> flottant pile à l'endroit cliqué
+   (converti en coordonnées écran, pas celles du canvas) plutôt qu'un
+   prompt() natif — reste dans le style de l'app et prévisualise la
+   couleur choisie pendant la frappe. Entrée/perte de focus = valider,
+   Échap = annuler. */
+function imgEditorOpenTextInput(e, p) {
+  const input = $('#img-editor-text-input');
+  const wrap = $('#img-editor-canvas-wrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  input.value = '';
+  input.style.left = (e.clientX - wrapRect.left + wrap.scrollLeft) + 'px';
+  input.style.top = (e.clientY - wrapRect.top + wrap.scrollTop - 14) + 'px';
+  input.style.color = imgEditor.color;
+  input.hidden = false;
+  input.focus();
+
+  const commit = () => {
+    input.hidden = true;
+    input.removeEventListener('blur', commit);
+    input.removeEventListener('keydown', onKey);
+    const text = input.value.trim();
+    if (!text) return;
+    const canvas = imgEditorCanvas();
+    const ctx = canvas.getContext('2d');
+    const fontSize = Math.max(18, Math.round(canvas.width * 0.028));
+    ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+    ctx.fillStyle = imgEditor.color;
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, p.x, p.y);
+    imgEditorPushHistory();
+  };
+  const onKey = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+    if (ev.key === 'Escape') { input.value = ''; input.blur(); }
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', onKey);
+}
+
+imgEditorCanvas().addEventListener('pointerdown', (e) => {
+  if (!imgEditor.att) return;
+  const p = canvasPoint(e);
+  if (imgEditor.tool === 'text') {
+    imgEditorOpenTextInput(e, p);
+    return;
+  }
+  imgEditor.drawing = true;
+  imgEditor.startX = p.x;
+  imgEditor.startY = p.y;
+  const canvas = imgEditorCanvas();
+  imgEditor.strokeBase = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+  canvas.setPointerCapture(e.pointerId);
+});
+imgEditorCanvas().addEventListener('pointermove', (e) => {
+  if (!imgEditor.drawing) return;
+  const p = canvasPoint(e);
+  imgEditorDrawPreview(imgEditor.startX, imgEditor.startY, p.x, p.y);
+});
+imgEditorCanvas().addEventListener('pointerup', (e) => {
+  if (!imgEditor.drawing) return;
+  imgEditor.drawing = false;
+  const p = canvasPoint(e);
+  imgEditorCommitShape(imgEditor.startX, imgEditor.startY, p.x, p.y);
+});
+imgEditorCanvas().addEventListener('pointercancel', () => { imgEditor.drawing = false; });
+
+// Fermeture sans enregistrer : bouton dédié, clic sur le fond, ou Échap
+// (événement natif "cancel" d'un <dialog>) — les trois abandonnent les
+// annotations. Seul le bouton "Enregistrer" ci-dessous envoie quoi que ce
+// soit au serveur.
+$('#img-editor-cancel').addEventListener('click', () => $('#dlg-image-editor').close());
+$('#dlg-image-editor').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-image-editor')) $('#dlg-image-editor').close();
+});
+
+$('#img-editor-save').addEventListener('click', async () => {
+  const att = imgEditor.att;
+  if (!att) return;
+  const saveBtn = $('#img-editor-save');
+  saveBtn.disabled = true;
+  try {
+    const canvas = imgEditorCanvas();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error("Impossible d'enregistrer l'image.");
+    const buffer = await blob.arrayBuffer();
+    const encrypted = await encryptBinary(buffer);
+
+    // Toujours réenregistrée en PNG (le format du canvas) : le nom garde
+    // son extension d'origine si on ne peut pas la remplacer proprement,
+    // par simple prudence, mais le mime, lui, est systématiquement à jour.
+    const originalName = (att.meta && att.meta.name) || 'image.png';
+    const pngName = /\.[a-z0-9]+$/i.test(originalName)
+      ? originalName.replace(/\.[a-z0-9]+$/i, '.png')
+      : originalName + '.png';
+    const meta = await encryptField(JSON.stringify({ name: pngName, mime: 'image/png' }));
+
+    const form = new FormData();
+    form.append('file', new Blob([encrypted]), 'blob');
+    form.append('meta', meta);
+    const updated = await apiUpload('/attachments/' + att.id, form, 'PUT');
+    updated.meta = { name: pngName, mime: 'image/png' };
+
+    // Les octets sur disque ont changé sous le même id : la version mise
+    // en cache (l'ancienne image) est maintenant fausse.
+    attachmentCache.delete(att.id);
+    const list = (imgEditor.note && imgEditor.note.attachments) || [];
+    const idx = list.findIndex((a) => a.id === att.id);
+    if (idx !== -1) list[idx] = { ...list[idx], ...updated };
+
+    $('#dlg-image-editor').close();
+    if (imgEditor.source === 'dns') renderAttachmentsSimple();
+    else loadNotes();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    saveBtn.disabled = false;
+  }
+});
+
 /* -------------------------------- Tâches --------------------------------
    Aucune création ici : une tâche est une note datée, ou une ligne à cocher
    datée à l'intérieur d'une note. On ne fait que les lister et les cocher. */
@@ -2130,9 +2657,19 @@ function renderTasks() {
         </div>`;
 
       card.querySelector('input').onchange = async (e) => {
+        e.stopPropagation();
         await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
         loadTasks(TASK_VIEWS[state.view]);
       };
+
+      // Clic n'importe où sur la carte (hors case à cocher) = ouvrir la
+      // notask d'origine en édition rapide. Le bouton .task-origin fait la
+      // même chose (voir plus bas) : exclu ici pour ne pas déclencher
+      // l'ouverture deux fois d'affilée.
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('input, .task-origin')) return;
+        ouvrirNoteParId(t.note_id);
+      });
 
       const lien = card.querySelector('.task-origin');
       if (lien) lien.onclick = () => ouvrirNoteParId(t.note_id);
@@ -2143,10 +2680,15 @@ function renderTasks() {
   }
 }
 
+// Ouvre la notask d'origine d'une tâche (menu de gauche ou colonne agenda
+// à droite) directement en édition rapide, pas la boîte "Modifier" complète
+// — c'est ce que demande l'utilisateur pour un clic depuis une liste de
+// tâches. decryptNote() hydrate déjà items/attachments/label_ids, tout ce
+// dont openNoteSimpleDialog() a besoin.
 async function ouvrirNoteParId(noteId) {
   const note = await api('/notes/' + noteId);
   await decryptNote(note);
-  openNoteDialog(note);
+  openNoteSimpleDialog(note);
 }
 
 /* Petits ronds de comptage dans le menu de gauche (nav-late/today/upcoming/

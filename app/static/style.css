@@ -527,6 +527,20 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   border-color: transparent;
 }
 
+/* Barre d'outils secondaire du composeur (couleur/libellés/case à cocher/
+   échéance) : masquée tant que le titre ou le corps n'a pas été touché
+   (voir composerExpand() dans app.js), marge plus resserrée qu'un
+   .toolbar normal puisqu'elle est intercalée entre le contenu et la
+   rangée Ajouter/Annuler plutôt qu'isolée. */
+.composer-tools-row { margin: .5rem 0 .25rem; }
+.note-composer .palette {
+  display: flex;
+  gap: .375rem;
+  flex-wrap: wrap;
+  padding: .25rem 0 .5rem;
+}
+.note-composer .label-chips { padding-bottom: .25rem; }
+
 /* Lignes du composeur en mode liste : identiques aux cases des notes,
    mais éditables en direct — Entrée sur la dernière ligne en ouvre une autre. */
 #nc-items { margin-top: .25rem; }
@@ -684,13 +698,6 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   flex-wrap: wrap;
   padding: .5rem 0 .25rem;
 }
-.note .label-picker {
-  display: flex;
-  gap: .375rem;
-  flex-wrap: wrap;
-  padding: .5rem 0 .25rem;
-}
-.note .label-picker .label-chip { cursor: pointer; }
 
 .note ul.check { list-style: none; }
 /* Padding minimal : une liste à cocher ne doit pas prendre plus de hauteur
@@ -740,13 +747,6 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 /* ============================== Tâches ============================== */
 
-/* Rappel du principe, sous le titre de la vue */
-.tasks-hint {
-  margin: -.5rem 0 1.25rem;
-  font-size: .8125rem;
-  color: var(--md-on-surface-variant);
-}
-
 .tasks-group {
   margin: 1.5rem 0 .625rem;
   font-size: .8125rem;
@@ -756,7 +756,12 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   color: var(--md-on-surface-variant);
 }
 .tasks-group:first-child { margin-top: 0; }
+/* Mêmes couleurs que les en-têtes de la colonne agenda à droite
+   (.agenda-group.late/.today/.upcoming h2) — un seul code couleur pour
+   repérer un bucket d'échéance, qu'on le voie ici ou à droite. */
 .tasks-group.late { color: var(--md-error); }
+.tasks-group.today { color: var(--md-success); }
+.tasks-group.upcoming { color: #42a5f5; }
 
 .task-cards {
   display: grid;
@@ -766,13 +771,18 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 }
 
 /* Carte de tâche : même langage visuel que la note, en plus compact */
+/* Pas de `background` fixe ici : la couleur vient de la classe .c-* posée
+   par JS juste à côté de .task-card (voir renderTasks()), exactement
+   comme .note — sans ça, .task-card gagnerait sur .c-* (il est déclaré
+   après dans ce fichier, même spécificité) et la couleur de la notask
+   n'apparaîtrait jamais sur sa tâche. */
 .task-card {
   display: flex;
   gap: .75rem;
   align-items: flex-start;
   padding: .875rem 1rem;
   border-radius: var(--shape-sm);
-  background: var(--md-surface-2);
+  cursor: pointer;
   transition: box-shadow .18s ease;
 }
 .task-card:hover { box-shadow: var(--elev-2); }
@@ -1057,7 +1067,8 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 .label-new-row button { flex: none; opacity: .7; }
 .label-new-row button:hover { opacity: 1; }
 
-/* Chips de libellés, sur une carte de note ou dans le dialogue d'édition */
+/* Chips de libellés dans le dialogue d'édition (complet ou simple) — liste
+   complète, coche/décoche à cocher, voir renderLabelChipsInto(). */
 .label-chips { display: flex; gap: .375rem; flex-wrap: wrap; margin-top: .5rem; }
 .label-chip {
   display: inline-flex;
@@ -1077,8 +1088,66 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
 }
-.note .label-chips { pointer-events: none; }
-.note .label-chip { cursor: default; padding: .1rem .55rem; }
+
+/* Rangée de libellés en bas d'une carte de note (mosaïque) — voir
+   renderCardLabels() dans app.js. Toujours visible (contrairement à
+   .actions, qui n'apparaît qu'au survol) : ce sont les libellés déjà
+   posés sur la notask, pas un réglage secondaire. */
+.note-labels {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  flex-wrap: wrap;
+  margin-top: .625rem;
+}
+/* Couleur posée en style inline par JS (voir renderCardLabels()), pas en
+   classe .c-* : un style inline gagne toujours, même sur .label-chip:hover
+   ci-dessus — même piège déjà rencontré et corrigé sur .drawer-item (voir
+   renderLabelsDrawer()), qui utilise la même technique. */
+.note .label-chip-card {
+  cursor: default;
+  padding: .2rem .3rem .2rem .7rem;
+  color: var(--md-on-surface);
+}
+.label-chip-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .12s ease, background .12s ease;
+}
+.label-chip-x svg { width: 12px; height: 12px; display: block; }
+.label-chip-card:hover .label-chip-x,
+.label-chip-card:focus-within .label-chip-x { opacity: .8; }
+.label-chip-x:hover { opacity: 1 !important; background: rgba(0,0,0,.2); }
+.label-add-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,.16);
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+}
+.label-add-btn svg { width: 14px; height: 14px; display: block; }
+.label-add-btn:hover { background: rgba(0,0,0,.28); color: var(--md-on-surface); }
+.label-add-picker {
+  display: flex;
+  gap: .375rem;
+  flex-wrap: wrap;
+  padding: .5rem 0 0;
+}
+.label-add-picker .hint { font-size: .75rem; color: var(--md-on-surface-variant); }
 
 /* ============================= Comptes ============================= */
 
@@ -1485,3 +1554,102 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   color: var(--md-primary);
   font-size: .8125rem;
 }
+
+/* ========================= Éditeur d'image ========================= *
+ * Visualiseuse/éditeur ouverte au clic sur une pièce jointe image (carte
+ * ou édition simple) — voir openImageEditor() dans app.js. Grande boîte
+ * de dialogue occupant l'essentiel de l'écran (pas un nouvel onglet),
+ * dans le même langage visuel que le reste de l'app : .btn/.swatch/.c-*
+ * réutilisés tels quels pour la palette de couleurs, cohérente avec les
+ * couleurs de notes et de libellés déjà présentes ailleurs. */
+.img-editor-dlg {
+  width: 94vw;
+  max-width: 1150px;
+  height: 90vh;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.img-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .625rem .875rem;
+  background: var(--md-surface-2);
+  border-bottom: 1px solid var(--md-outline-variant);
+  flex: none;
+}
+.img-editor-tools { display: flex; gap: .125rem; }
+.img-tool-btn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+}
+.img-tool-btn svg { width: 19px; height: 19px; display: block; }
+.img-tool-btn:hover { background: rgba(230,224,233,.10); color: var(--md-on-surface); }
+.img-tool-btn.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+.img-editor-colors {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  flex-wrap: wrap;
+  padding-left: .5rem;
+  border-left: 1px solid var(--md-outline-variant);
+}
+.img-editor-colors .swatch { width: 22px; height: 22px; }
+
+.img-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-left: auto;
+}
+.img-editor-actions .sep { width: 1px; height: 24px; background: var(--md-outline-variant); }
+
+.img-editor-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: #000;
+  padding: 1.25rem;
+  position: relative;
+}
+#img-editor-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  box-shadow: var(--elev-2);
+}
+#img-editor-canvas.tool-text { cursor: text; }
+#img-editor-canvas:not(.tool-text) { cursor: crosshair; }
+
+/* Saisie de texte flottante, positionnée en JS pile sur le point cliqué
+   (voir l'outil "texte" dans openImageEditor()) — un <input> plutôt qu'un
+   prompt() natif, pour rester dans le style de l'app et prévisualiser la
+   couleur choisie pendant la frappe. */
+.img-editor-text-input {
+  position: absolute;
+  z-index: 5;
+  background: rgba(0,0,0,.55);
+  border: 1px dashed #fff;
+  color: #fff;
+  padding: .15rem .4rem;
+  font-size: 20px;
+  min-width: 60px;
+  border-radius: 4px;
+}
+.img-editor-text-input:focus { outline: none; }

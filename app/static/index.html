@@ -119,8 +119,26 @@
           </div>
           <div id="nc-items" hidden></div>
           <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
+
+          <!-- Barre d'outils secondaire : masquée par défaut, révélée au clic
+               dans le titre ou le corps (voir composerExpand() dans app.js).
+               Mêmes réglages que sur une notask existante — couleur,
+               libellés, échéance, bascule case à cocher — pour pouvoir créer
+               une carte complète sans repasser ensuite par une boîte de
+               dialogue. -->
+          <div class="toolbar composer-tools-row" id="nc-tools-row" hidden>
+            <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
+            <button type="button" class="cal-btn" id="nc-labels-btn" title="Libellés" aria-label="Libellés"></button>
+            <button type="button" class="cal-btn" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
+            <span class="fmt-sep"></span>
+            <button type="button" class="cal-btn" id="nc-due-btn" title="Régler l'échéance" aria-label="Échéance"></button>
+            <span id="nc-due-label" class="due-label">Aucune échéance</span>
+            <input type="hidden" id="nc-due">
+          </div>
+          <div class="palette" id="nc-colors" hidden></div>
+          <div class="label-chips" id="nc-label-chips" hidden></div>
+
           <div class="toolbar" style="margin: .6rem 0 0;">
-            <button class="btn ghost sm" id="nc-toggle-checklist" type="button">Liste à cocher</button>
             <span class="spacer" style="flex:1"></span>
             <button class="btn ghost sm" id="nc-cancel" type="button" hidden>Annuler</button>
             <button class="btn sm" id="nc-add">Ajouter</button>
@@ -140,9 +158,6 @@
       <div class="toolbar">
         <strong id="tasks-title" style="flex:1"></strong>
       </div>
-      <p class="tasks-hint">
-        Une tâche naît toujours d'une notask : datez une notask, ou l'une de ses cases à cocher.
-      </p>
       <div class="tasks-grid" id="tasks-grid"></div>
       <div class="empty" id="tasks-empty" hidden>Aucune tâche.</div>
     </section>
@@ -266,6 +281,36 @@
         <input type="hidden" id="dns-due">
       </div>
     </div>
+  </div>
+</dialog>
+
+<!-- Éditeur d'image : ouvert au clic sur une pièce jointe image (carte ou
+     édition simple), affiche la photo en grand dans la même fenêtre avec
+     des outils de marquage (rectangle, ellipse, surlignage, texte,
+     mosaïque). Les annotations sont dessinées à même le canvas puis
+     « aplaties » dans le fichier au moment d'Enregistrer — voir
+     openImageEditor() dans app.js. Aucune nouvelle pièce jointe créée :
+     PUT /api/attachments/{id} remplace le contenu de celle éditée. -->
+<dialog id="dlg-image-editor" class="img-editor-dlg">
+  <div class="img-editor-toolbar">
+    <div class="img-editor-tools" id="img-editor-tools">
+      <button type="button" class="img-tool-btn" data-tool="rect" title="Rectangle" aria-label="Rectangle"></button>
+      <button type="button" class="img-tool-btn" data-tool="ellipse" title="Ellipse" aria-label="Ellipse"></button>
+      <button type="button" class="img-tool-btn" data-tool="highlight" title="Surligner" aria-label="Surligner"></button>
+      <button type="button" class="img-tool-btn" data-tool="text" title="Texte" aria-label="Texte"></button>
+      <button type="button" class="img-tool-btn" data-tool="mosaic" title="Cacher (mosaïque)" aria-label="Cacher (mosaïque)"></button>
+    </div>
+    <div class="img-editor-colors" id="img-editor-colors"></div>
+    <div class="img-editor-actions">
+      <button type="button" class="img-tool-btn" id="img-editor-undo" title="Annuler" aria-label="Annuler"></button>
+      <span class="sep"></span>
+      <button type="button" class="btn ghost sm" id="img-editor-cancel">Fermer sans enregistrer</button>
+      <button type="button" class="btn sm" id="img-editor-save">Enregistrer</button>
+    </div>
+  </div>
+  <div class="img-editor-canvas-wrap" id="img-editor-canvas-wrap">
+    <canvas id="img-editor-canvas"></canvas>
+    <input type="text" id="img-editor-text-input" class="img-editor-text-input" hidden>
   </div>
 </dialog>
 

@@ -8,8 +8,9 @@ jamais savoir ce que contient le fichier.
 
 Pas de préfixe commun sur ce routeur : l'upload est imbriqué sous la note
 (`/api/notes/{note_id}/attachments`, pour vérifier la propriété de la note à
-la création), mais le téléchargement et la suppression n'ont besoin que de
-l'identifiant de la pièce jointe elle-même (`/api/attachments/{id}`).
+la création), mais le téléchargement, le remplacement et la suppression
+n'ont besoin que de l'identifiant de la pièce jointe elle-même
+(`/api/attachments/{id}`).
 """
 
 import uuid
@@ -87,6 +88,39 @@ async def upload_attachment(
         enc_meta=meta,
         size=len(content),
     )
+    session.add(att)
+    session.commit()
+    session.refresh(att)
+    return att
+
+
+@router.put("/api/attachments/{attachment_id}", response_model=AttachmentOut)
+async def replace_attachment(
+    attachment_id: int,
+    file: UploadFile = File(...),
+    meta: str = Form(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Remplace le contenu d'une pièce jointe existante (même id, même
+    storage_name) — utilisé par l'éditeur d'image (annotations/mosaïque
+    dessinées puis « aplaties » dans le fichier). Contrairement à
+    upload_attachment(), il n'y a pas de nouvelle ligne en base : seuls les
+    octets sur disque et enc_meta/size sont mis à jour."""
+    att = _owned_attachment(attachment_id, user, session)
+
+    if len(meta) > MAX_META_CHARS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Métadonnées trop longues")
+
+    content = await file.read()
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Fichier trop volumineux (8 Mo maximum)"
+        )
+
+    (ATTACH_DIR / att.storage_name).write_bytes(content)
+    att.enc_meta = meta
+    att.size = len(content)
     session.add(att)
     session.commit()
     session.refresh(att)
