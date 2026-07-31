@@ -411,6 +411,12 @@ class Label(LabelBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
+    # Ordre manuel (glisser-déposer dans le menu latéral). Plus grand = plus
+    # haut dans la liste — même convention que Note.position. Les libellés
+    # déjà en base avant cette colonne reçoivent 0 via la migration et
+    # retombent alors sur le tri par nom (repli secondaire, voir
+    # list_labels() dans labels.py), donc aucun libellé existant ne "saute".
+    position: float = Field(default_factory=time.time)
 
 
 class LabelCreate(LabelBase):
@@ -420,11 +426,13 @@ class LabelCreate(LabelBase):
 class LabelUpdate(SQLModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=50)
     color: Optional[str] = None
+    position: Optional[float] = None
 
 
 class LabelOut(LabelBase):
     id: int
     created_at: datetime
+    position: float = 0.0
 
 
 # ================================ Tâches ================================

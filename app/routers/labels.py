@@ -30,8 +30,12 @@ def list_labels(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    # Ordre manuel (glisser-déposer, voir Label.position) d'abord ; les
+    # libellés qui partagent encore la même position (jamais réordonnés,
+    # ou créés avant cette colonne) retombent sur l'ordre alphabétique —
+    # même repli que pour les notes (voir list_notes() dans notes.py).
     return session.exec(
-        select(Label).where(Label.user_id == user.id).order_by(Label.name)
+        select(Label).where(Label.user_id == user.id).order_by(Label.position.desc(), Label.name)
     ).all()
 
 
@@ -80,6 +84,8 @@ def update_label(
     if "color" in data:
         _check_color(data["color"])
         label.color = data["color"]
+    if "position" in data:
+        label.position = data["position"]
 
     session.add(label)
     session.commit()

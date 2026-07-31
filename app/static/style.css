@@ -1108,6 +1108,7 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
    overlay à droite — le bouton lui-même reste inchangé (pilule collée à
    gauche, arrondie à droite, couleur propre en fond permanent si réglée). */
 .label-row { position: relative; margin-bottom: 4px; }
+.label-row.dragging { opacity: .4; }
 .label-edit-btn {
   position: absolute;
   right: .5rem;

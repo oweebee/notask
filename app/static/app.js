@@ -964,6 +964,7 @@ function renderLabelsDrawer() {
 
     const btn = document.createElement('button');
     btn.className = 'drawer-item label-item' + (state.labelFilter === l.id ? ' active' : '');
+    btn.dataset.id = l.id;
     // Couleur en style inline plutôt qu'en classe .c-* : une classe a la même
     // spécificité CSS que .drawer-item:hover, qui l'écrasait donc au survol
     // (la couleur ne restait visible qu'en dehors du survol). Un style inline
@@ -994,7 +995,59 @@ function renderLabelsDrawer() {
     edit.onclick = (e) => { e.stopPropagation(); openLabelEditPopup(edit, l); };
 
     row.append(btn, edit);
+
+    // Glisser-déposer pour réordonner manuellement — même mécanique que la
+    // mosaïque de notes (voir getDropTarget()/commitNoteOrder() plus bas),
+    // juste scopée à '.label-row' au lieu de '.note'. Le crayon (édition)
+    // ne doit pas déclencher le geste, sous peine de gêner son propre clic.
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => {
+      if (e.target.closest('.label-edit-btn')) { e.preventDefault(); return; }
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      commitLabelOrder();
+    });
+
     box.appendChild(row);
+  }
+}
+
+$('#labels-list').addEventListener('dragover', (e) => {
+  const dragging = $('#labels-list').querySelector('.label-row.dragging');
+  if (!dragging) return;
+  e.preventDefault();
+  const target = getDropTarget($('#labels-list'), e.clientX, e.clientY, '.label-row');
+  if (!target || target.el === dragging) return;
+  if (target.before) target.el.before(dragging);
+  else target.el.after(dragging);
+});
+
+/* Comme commitNoteOrder() : l'ordre visuel du DOM fait foi une fois le
+   geste terminé, on ne PATCH que les libellés dont la position a changé. */
+async function commitLabelOrder() {
+  const ids = [...$('#labels-list').querySelectorAll('.label-row')].map((row) => {
+    const btn = row.querySelector('.label-item');
+    return btn ? Number(btn.dataset.id) : null;
+  }).filter((id) => id !== null);
+  const total = ids.length;
+  const updates = [];
+  ids.forEach((id, idx) => {
+    const label = state.labels.find((x) => x.id === id);
+    if (!label) return;
+    const newPos = (total - idx) * 1000;
+    if (Math.round(label.position || 0) !== newPos) {
+      updates.push(api('/labels/' + id, { method: 'PATCH', body: { position: newPos } }));
+    }
+  });
+  if (!updates.length) return;
+  try {
+    await Promise.all(updates);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    loadLabels();
   }
 }
 
@@ -1462,8 +1515,10 @@ $('#notes-grid').addEventListener('dragover', (e) => {
   else target.el.after(dragging);
 });
 
-function getDropTarget(container, x, y) {
-  const els = [...container.querySelectorAll('.note:not(.dragging)')];
+// `itemSelector` par défaut à '.note' : seul le réordonnancement des
+// libellés (voir plus bas, renderLabelsDrawer()) passe '.label-row'.
+function getDropTarget(container, x, y, itemSelector = '.note') {
+  const els = [...container.querySelectorAll(itemSelector + ':not(.dragging)')];
   let best = null;
   let bestDist = Infinity;
   let before = true;

@@ -37,17 +37,31 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-async def no_cache_api(request: Request, call_next):
-    """Les réponses de l'API ne doivent jamais être mises en cache.
+async def no_cache(request: Request, call_next):
+    """Aucune réponse ne doit être resservie depuis le cache du navigateur
+    sans revalidation auprès du serveur.
 
-    Sans cela, un navigateur peut resservir un ancien /api/auth/status et
-    réafficher l'écran de configuration alors que le compte existe déjà.
+    Pour l'API (/api/*) : sans ça, un navigateur peut resservir un ancien
+    /api/auth/status et réafficher l'écran de configuration alors que le
+    compte existe déjà.
+
+    Pour le HTML/JS/CSS (/, /static/*) : ni StaticFiles ni FileResponse ne
+    posent de Cache-Control par défaut, seulement un ETag/Last-Modified.
+    Un navigateur peut alors resservir app.js/style.css/index.html depuis
+    son cache local SANS même revalider auprès du serveur (mise en cache
+    heuristique, RFC 7234), même après un rechargement simple — un
+    redéploiement côté serveur reste alors invisible tant que l'utilisateur
+    ne force pas un rechargement complet. `no-cache` (pas `no-store`) force
+    la revalidation à chaque chargement tout en gardant les 304 bon marché
+    quand le fichier n'a pas changé.
     """
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+    else:
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
