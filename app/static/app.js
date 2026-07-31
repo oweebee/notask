@@ -446,6 +446,8 @@ const ICONS = {
   imgText: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14"/><path d="M12 6.5V19"/><path d="M9 19h6"/></svg>',
   imgMosaic: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8.5H4.5V5"/><path d="M4.5 8.5a8 8 0 1 1-2 5.3"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5a8 8 0 1 1 .8 6.2"/><path d="M4.5 4.5v5h5"/><path d="M12 8v4.5l3 2"/></svg>',
 };
 
 /* Icônes facultatives associables à une note, à la création comme à
@@ -468,6 +470,15 @@ const ICON_CHOICES = {
   gift: '<svg viewBox="0 0 24 24"><rect x="4" y="9.5" width="16" height="10.5" rx="1" fill="#f06292"/><rect x="4" y="6.5" width="16" height="3.5" rx="1" fill="#f48fb1"/><rect x="11" y="6.5" width="2" height="13.5" fill="#fff"/></svg>',
   money: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#66bb6a"/><path d="M14.5 8.7a4.3 4.3 0 1 0 0 6.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M8.3 10.8h5M8.3 13.2h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg>',
   music: '<svg viewBox="0 0 24 24"><circle cx="7" cy="17.5" r="2.6" fill="#9575cd"/><circle cx="16" cy="15.5" r="2.6" fill="#9575cd"/><path d="M9.6 17.5V5.5L18.6 4v11" fill="none" stroke="#9575cd" stroke-width="1.6"/></svg>',
+
+  /* Mêmes cuillères que le logo (#brand-logo/ICONS.spoon[Blue]), redessinées
+     dans le viewBox 0 0 24 24 commun à ce jeu d'icônes plutôt que le viewBox
+     resserré des originales (6 1 12 20) — sinon elles apparaîtraient bien
+     plus grandes que les autres choix une fois mises côte à côte dans le
+     sélecteur. */
+  spoonyellow: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
+  spoonblue: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></svg>',
+  spoons: '<svg viewBox="0 0 24 24"><g transform="translate(1.5,1) scale(0.62)"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></g><g transform="translate(9,1) scale(0.62)"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></g></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -741,11 +752,10 @@ function enterApp() {
 
   // Icônes du menu latéral et logo
   $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
-  $('#nav-notes').innerHTML =
-    `<span class="spoon-pair">${ICONS.spoon}${ICONS.spoonBlue}</span><span class="label">Notasks</span>`;
+  $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notasks</span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
-  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes les notasks</span><span class="nav-count" id="count-tasks" hidden></span>';
+  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">Toutes les notasks</span><span class="nav-count" id="count-tasks" hidden></span>';
   $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span><span class="nav-count" id="count-late" hidden></span>';
   $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span><span class="nav-count" id="count-today" hidden></span>';
   $('#nav-upcoming').innerHTML = ICONS.calendar + `<span class="label">${BUCKET_LABELS.upcoming}</span><span class="nav-count" id="count-upcoming" hidden></span>`;
@@ -939,7 +949,7 @@ function openLabelEditPopup(anchor, label) {
       ).join('')}
     </div>
     <div class="cal-popup-actions">
-      <button type="button" class="btn ghost sm label-delete-btn" data-act="delete">Supprimer</button>
+      <button type="button" class="label-delete-btn" data-act="delete" title="Supprimer le libellé" aria-label="Supprimer le libellé">${ICONS.close}</button>
       <span class="cal-popup-actions-spacer"></span>
       <button type="button" class="btn ghost sm" data-act="close">Fermer</button>
       <button type="button" class="btn sm" data-act="save">Enregistrer</button>
@@ -1686,6 +1696,9 @@ $('#notes-search').addEventListener('input', (e) => {
 
 function openNoteDialog(note) {
   state.editingNote = note;
+  // Comparé à l'enregistrement pour décider si un instantané d'historique
+  // est nécessaire — voir noteSnapshotFromNote()/snapshotNoteVersion().
+  state.editingNoteOriginal = noteSnapshotFromNote(note);
   state.editingIsChecklist = note.is_checklist;
   state.editingNoteItems = note.items.map((i) => ({
     text: i.text, checked: i.checked, due_at: i.due_at,
@@ -1853,6 +1866,29 @@ $('#dn-cancel').addEventListener('click', () => $('#dlg-note').close());
 async function saveNoteDialog() {
   const n = state.editingNote;
   try {
+    // Instantané d'historique seulement si quelque chose a réellement
+    // changé depuis l'ouverture (comparaison en clair, seule fiable) —
+    // sinon fermer/rouvrir la boîte sans rien toucher grignoterait les 10
+    // versions disponibles pour rien.
+    const currentItemsForDiff = state.editingIsChecklist
+      ? state.editingNoteItems.filter((i) => i.text.trim())
+        .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }))
+      : [];
+    const currentForDiff = {
+      title: $('#dn-title').value,
+      description: $('#dn-description').value,
+      content: state.editingIsChecklist ? '' : $('#dn-content').value,
+      color: n.color,
+      due_at: $('#dn-due').value || null,
+      is_checklist: state.editingIsChecklist,
+      icon: state.editingIcon,
+      label_ids: state.editingLabelIds,
+      items: currentItemsForDiff,
+    };
+    if (!notePlainStateEqual(state.editingNoteOriginal, currentForDiff)) {
+      await snapshotNoteVersion(n.id);
+    }
+
     const body = {
       title: await encryptField($('#dn-title').value),
       description: await encryptField($('#dn-description').value),
@@ -1941,6 +1977,10 @@ function renderAttachmentsSimple() {
     chip.querySelector('.dns-attach-remove').addEventListener('click', async () => {
       if (!confirm('Supprimer définitivement cette pièce jointe ?')) return;
       try {
+        // Suppression irréversible côté serveur (le fichier est effacé du
+        // disque) : un instantané avant coup est le seul moyen de la
+        // rattraper depuis l'historique.
+        await snapshotNoteVersion(state.editingNote.id);
         await deleteAttachment(att.id);
         state.editingNote.attachments = state.editingNote.attachments.filter((a) => a.id !== att.id);
         renderAttachmentsSimple();
@@ -2055,6 +2095,7 @@ $('#dns-toggle-checklist').addEventListener('click', () => {
 
 function openNoteSimpleDialog(note) {
   state.editingNote = note;
+  state.editingNoteOriginal = noteSnapshotFromNote(note);
   state.editingIsChecklist = note.is_checklist;
   state.editingNoteItems = note.items.map((i) => ({
     text: i.text, checked: i.checked, due_at: i.due_at,
@@ -2214,6 +2255,29 @@ async function saveNoteSimpleDialog() {
   await Promise.allSettled(pendingAttachmentUploads);
   pendingAttachmentUploads = [];
   try {
+    // Même logique que saveNoteDialog() : instantané seulement si quelque
+    // chose a réellement changé. L'icône n'est pas éditable depuis cette
+    // boîte : on reprend telle quelle celle de l'état chargé, pour qu'elle
+    // ne déclenche jamais elle-même un faux positif ici.
+    const currentItemsForDiff = state.editingIsChecklist
+      ? state.editingNoteItems.filter((i) => i.text.trim())
+        .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }))
+      : [];
+    const currentForDiff = {
+      title: $('#dns-title').value,
+      description: $('#dns-description').value,
+      content: state.editingIsChecklist ? '' : richToText($('#dns-content')),
+      color: n.color,
+      due_at: $('#dns-due').value || null,
+      is_checklist: state.editingIsChecklist,
+      icon: (state.editingNoteOriginal && state.editingNoteOriginal.icon) || null,
+      label_ids: state.editingLabelIds,
+      items: currentItemsForDiff,
+    };
+    if (!notePlainStateEqual(state.editingNoteOriginal, currentForDiff)) {
+      await snapshotNoteVersion(n.id);
+    }
+
     const body = {
       title: await encryptField($('#dns-title').value),
       description: await encryptField($('#dns-description').value),
@@ -2290,6 +2354,7 @@ const IMG_EDITOR_TOOL_ICONS = {
 function imgEditorCanvas() { return $('#img-editor-canvas'); }
 
 $('#img-editor-undo').innerHTML = ICONS.undo;
+$('#img-editor-download').innerHTML = ICONS.download;
 $$('#img-editor-tools .img-tool-btn').forEach((b) => {
   b.innerHTML = ICONS[IMG_EDITOR_TOOL_ICONS[b.dataset.tool]];
   b.classList.toggle('active', b.dataset.tool === imgEditor.tool);
@@ -2553,48 +2618,330 @@ $('#dlg-image-editor').addEventListener('click', (e) => {
   if (e.target === $('#dlg-image-editor')) $('#dlg-image-editor').close();
 });
 
-$('#img-editor-save').addEventListener('click', async () => {
+/* Aplatit le canvas et l'envoie au serveur (PUT, même id) — utilisé à la
+   fois par "Enregistrer" et par "Télécharger" (qui enregistre d'abord la
+   dernière version avant de la proposer en téléchargement, plutôt que de
+   permettre de télécharger des annotations jamais persistées). Retourne
+   le blob PNG déjà en clair (pas la peine de le redemander/déchiffrer au
+   serveur juste après l'avoir chiffré nous-mêmes) et le nom de fichier à
+   utiliser, pour que l'appelant puisse aussi déclencher un téléchargement
+   sans repasser par le réseau. */
+async function imgEditorPersist() {
   const att = imgEditor.att;
-  if (!att) return;
+  if (!att) throw new Error('Aucune image chargée.');
+
+  // Écraser les octets d'une pièce jointe est irréversible côté serveur
+  // (voir PUT /api/attachments/{id}) : un instantané avant coup est le
+  // seul moyen de retrouver l'image telle qu'elle était avant l'annotation.
+  if (imgEditor.note) await snapshotNoteVersion(imgEditor.note.id);
+
+  const canvas = imgEditorCanvas();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error("Impossible d'enregistrer l'image.");
+  const buffer = await blob.arrayBuffer();
+  const encrypted = await encryptBinary(buffer);
+
+  // Toujours réenregistrée en PNG (le format du canvas) : le nom garde
+  // son extension d'origine si on ne peut pas la remplacer proprement,
+  // par simple prudence, mais le mime, lui, est systématiquement à jour.
+  const originalName = (att.meta && att.meta.name) || 'image.png';
+  const pngName = /\.[a-z0-9]+$/i.test(originalName)
+    ? originalName.replace(/\.[a-z0-9]+$/i, '.png')
+    : originalName + '.png';
+  const meta = await encryptField(JSON.stringify({ name: pngName, mime: 'image/png' }));
+
+  const form = new FormData();
+  form.append('file', new Blob([encrypted]), 'blob');
+  form.append('meta', meta);
+  const updated = await apiUpload('/attachments/' + att.id, form, 'PUT');
+  updated.meta = { name: pngName, mime: 'image/png' };
+
+  // Les octets sur disque ont changé sous le même id : la version mise en
+  // cache (l'ancienne image) est maintenant fausse.
+  attachmentCache.delete(att.id);
+  const list = (imgEditor.note && imgEditor.note.attachments) || [];
+  const idx = list.findIndex((a) => a.id === att.id);
+  if (idx !== -1) list[idx] = { ...list[idx], ...updated };
+
+  return { blob, name: pngName };
+}
+
+function imgEditorRefreshCaller() {
+  if (imgEditor.source === 'dns') renderAttachmentsSimple();
+  else loadNotes();
+}
+
+$('#img-editor-save').addEventListener('click', async () => {
   const saveBtn = $('#img-editor-save');
   saveBtn.disabled = true;
   try {
-    const canvas = imgEditorCanvas();
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error("Impossible d'enregistrer l'image.");
-    const buffer = await blob.arrayBuffer();
-    const encrypted = await encryptBinary(buffer);
-
-    // Toujours réenregistrée en PNG (le format du canvas) : le nom garde
-    // son extension d'origine si on ne peut pas la remplacer proprement,
-    // par simple prudence, mais le mime, lui, est systématiquement à jour.
-    const originalName = (att.meta && att.meta.name) || 'image.png';
-    const pngName = /\.[a-z0-9]+$/i.test(originalName)
-      ? originalName.replace(/\.[a-z0-9]+$/i, '.png')
-      : originalName + '.png';
-    const meta = await encryptField(JSON.stringify({ name: pngName, mime: 'image/png' }));
-
-    const form = new FormData();
-    form.append('file', new Blob([encrypted]), 'blob');
-    form.append('meta', meta);
-    const updated = await apiUpload('/attachments/' + att.id, form, 'PUT');
-    updated.meta = { name: pngName, mime: 'image/png' };
-
-    // Les octets sur disque ont changé sous le même id : la version mise
-    // en cache (l'ancienne image) est maintenant fausse.
-    attachmentCache.delete(att.id);
-    const list = (imgEditor.note && imgEditor.note.attachments) || [];
-    const idx = list.findIndex((a) => a.id === att.id);
-    if (idx !== -1) list[idx] = { ...list[idx], ...updated };
-
+    await imgEditorPersist();
     $('#dlg-image-editor').close();
-    if (imgEditor.source === 'dns') renderAttachmentsSimple();
-    else loadNotes();
+    imgEditorRefreshCaller();
   } catch (err) {
     alert(err.message);
   } finally {
     saveBtn.disabled = false;
   }
+});
+
+// Télécharger : toujours la dernière version, modifiée ou non — on
+// enregistre donc d'abord (même chemin que le bouton "Enregistrer") avant
+// de proposer le fichier, sinon on risquerait de télécharger des
+// annotations jamais réellement sauvegardées côté serveur. Ne ferme pas
+// le dialogue : on peut vouloir continuer à annoter juste après.
+$('#img-editor-download').addEventListener('click', async () => {
+  const btn = $('#img-editor-download');
+  btn.disabled = true;
+  try {
+    const { blob, name } = await imgEditorPersist();
+    imgEditorRefreshCaller();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ------------------------------- Historique -------------------------------
+   Jusqu'à 10 instantanés par notask, pris côté client juste avant un
+   changement potentiellement destructeur (voir snapshotNoteVersion() plus
+   bas, appelée depuis saveNoteDialog()/saveNoteSimpleDialog() quand le
+   contenu a réellement changé, avant une suppression de pièce jointe, et
+   avant un enregistrement dans l'éditeur d'image). Liste -> détail d'une
+   version -> restauration, dans #dlg-history, ouvert depuis dlg-note ou
+   dlg-note-simple (bouton "Historique"/icône horloge). */
+
+const historyState = { note: null, versions: [], current: null };
+const versionAttachmentCache = new Map();
+
+/* Octets d'une pièce jointe telle que sauvegardée dans un instantané —
+   même principe que loadAttachment(), mais vers /version-attachments/{id}
+   et avec son propre cache : ce sont des ids d'une table différente, une
+   pièce jointe vivante et sa version historique ne doivent jamais être
+   confondues. */
+async function loadVersionAttachment(att) {
+  if (versionAttachmentCache.has(att.id)) return versionAttachmentCache.get(att.id);
+  const raw = await apiFetchBytes('/version-attachments/' + att.id);
+  const plain = await decryptBinary(raw);
+  const meta = att.meta || { name: 'Fichier', mime: 'application/octet-stream' };
+  const blob = new Blob([plain], { type: meta.mime || 'application/octet-stream' });
+  const result = { blob, url: URL.createObjectURL(blob), name: meta.name || 'Fichier', mime: meta.mime || '' };
+  versionAttachmentCache.set(att.id, result);
+  return result;
+}
+
+function formatHistoryDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/* Snapshot explicite côté client : voir le commentaire en tête de
+   NoteVersion dans app/models.py pour le pourquoi (le serveur ne peut pas
+   détecter par lui-même un changement dans un champ chiffré, IV aléatoire
+   à chaque chiffrement). Volontairement silencieuse en cas d'échec — un
+   instantané manqué ne doit jamais empêcher l'action réelle (sauvegarde,
+   suppression, édition d'image) de continuer. */
+async function snapshotNoteVersion(noteId) {
+  try {
+    await api('/notes/' + noteId + '/versions', { method: 'POST' });
+  } catch (err) {
+    console.warn('Instantané d\'historique non créé :', err.message);
+  }
+}
+
+/* État "en clair" d'une notask au moment de l'ouverture d'un dialogue —
+   comparé à sa version au moment de l'enregistrement (voir
+   notePlainStateEqual()) pour décider si un instantané d'historique est
+   nécessaire. Uniquement les champs qu'un dialogue peut effectivement
+   modifier ; label_ids trié pour qu'un simple réordonnancement ne compte
+   pas comme un changement. */
+function noteSnapshotFromNote(note) {
+  return {
+    title: note.title || '',
+    description: note.description || '',
+    content: note.content || '',
+    color: note.color,
+    due_at: note.due_at || null,
+    is_checklist: !!note.is_checklist,
+    icon: note.icon || null,
+    label_ids: [...(note.label_ids || [])].sort(),
+    items: (note.items || []).map((i) => ({ text: i.text || '', checked: !!i.checked, due_at: i.due_at || null })),
+  };
+}
+
+function notePlainStateEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.title !== b.title || a.description !== b.description || a.content !== b.content) return false;
+  if (a.color !== b.color || a.due_at !== b.due_at || a.is_checklist !== b.is_checklist || a.icon !== b.icon) return false;
+  const lb = [...b.label_ids].sort();
+  if (a.label_ids.length !== lb.length || a.label_ids.some((id, i) => id !== lb[i])) return false;
+  if (a.items.length !== b.items.length) return false;
+  for (let i = 0; i < a.items.length; i++) {
+    const x = a.items[i], y = b.items[i];
+    if (x.text !== y.text || x.checked !== y.checked || x.due_at !== y.due_at) return false;
+  }
+  return true;
+}
+
+function openHistoryDialog(note) {
+  historyState.note = note;
+  historyState.versions = [];
+  historyState.current = null;
+  $('#history-list').innerHTML = '';
+  $('#history-list').hidden = false;
+  $('#history-detail').hidden = true;
+  $('#history-footer').hidden = true;
+  $('#history-empty').hidden = true;
+  $('#dlg-history').showModal();
+  loadHistoryList();
+}
+
+async function loadHistoryList() {
+  const note = historyState.note;
+  if (!note) return;
+  let versions;
+  try {
+    versions = await api(`/notes/${note.id}/versions`);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  await Promise.all(versions.map(async (v) => { v.title = await decryptField(v.title); }));
+  historyState.versions = versions;
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const box = $('#history-list');
+  box.innerHTML = '';
+  $('#history-empty').hidden = historyState.versions.length > 0;
+  for (const v of historyState.versions) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'history-item c-' + v.color;
+    btn.innerHTML = `<span class="history-item-title">${escapeHtml(v.title || 'Sans titre')}</span>
+      <span class="history-item-date">${formatHistoryDate(v.created_at)}</span>`;
+    btn.onclick = () => openHistoryDetail(v.id);
+    box.appendChild(btn);
+  }
+}
+
+async function openHistoryDetail(versionId) {
+  const note = historyState.note;
+  if (!note) return;
+  let v;
+  try {
+    v = await api(`/notes/${note.id}/versions/${versionId}`);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+
+  v.title = await decryptField(v.title);
+  v.description = await decryptField(v.description);
+  v.content = await decryptField(v.content);
+  for (const it of v.items) it.text = await decryptField(it.text);
+  for (const a of v.attachments) {
+    try {
+      a.meta = JSON.parse(await decryptField(a.enc_meta) || '{}');
+    } catch {
+      a.meta = { name: 'Fichier', mime: 'application/octet-stream' };
+    }
+  }
+  historyState.current = v;
+
+  let html = `<h3>${escapeHtml(v.title || 'Sans titre')}</h3>`;
+  if (v.description) html += `<p class="history-detail-desc">${escapeHtml(v.description)}</p>`;
+  if (v.is_checklist) {
+    html += '<ul class="history-detail-items">' + v.items.map((it) =>
+      `<li class="${it.checked ? 'done' : ''}">${escapeHtml(it.text || '')}</li>`
+    ).join('') + '</ul>';
+  } else if (v.content) {
+    html += `<div class="history-detail-body">${escapeHtml(v.content)}</div>`;
+  }
+  if (v.due_at) html += `<div class="history-detail-due">${ICONS.clock}${formatDue(v.due_at)}</div>`;
+  $('#history-detail-content').innerHTML = html;
+
+  if (v.attachments.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'history-detail-attachments';
+    for (const a of v.attachments) {
+      const isImage = ((a.meta && a.meta.mime) || '').startsWith('image/');
+      if (isImage) {
+        const img = document.createElement('img');
+        img.className = 'history-attach-thumb';
+        loadVersionAttachment(a).then((r) => { img.src = r.url; }).catch(() => {});
+        wrap.appendChild(img);
+      } else {
+        const chip = document.createElement('div');
+        chip.className = 'history-attach-file';
+        chip.innerHTML = `${ICONS.file}<span>${escapeHtml((a.meta && a.meta.name) || 'Fichier')}</span>`;
+        wrap.appendChild(chip);
+      }
+    }
+    $('#history-detail-content').appendChild(wrap);
+  }
+
+  $('#history-list').hidden = true;
+  $('#history-detail').hidden = false;
+  $('#history-footer').hidden = false;
+}
+
+$('#history-back').addEventListener('click', () => {
+  historyState.current = null;
+  $('#history-detail').hidden = true;
+  $('#history-footer').hidden = true;
+  $('#history-list').hidden = false;
+});
+
+$('#history-close').innerHTML = ICONS.close;
+$('#history-close').addEventListener('click', () => $('#dlg-history').close());
+$('#dlg-history').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-history')) $('#dlg-history').close();
+});
+
+$('#history-restore').addEventListener('click', async () => {
+  const note = historyState.note;
+  const v = historyState.current;
+  if (!note || !v) return;
+  if (!confirm('Restaurer cette version ? L’état actuel sera d’abord sauvegardé dans l’historique.')) return;
+  try {
+    await api(`/notes/${note.id}/versions/${v.id}/restore`, { method: 'POST' });
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  $('#dlg-history').close();
+  // Les deux boîtes d'édition peuvent afficher des champs périmés après une
+  // restauration (elles ne rechargent pas leur contenu en direct) : on les
+  // referme plutôt que de tenter de resynchroniser chaque champ un par un.
+  // close() sur une <dialog> déjà fermée ne fait rien (pas d'erreur).
+  // IMPORTANT : dlg-note-simple enregistre à CHAQUE fermeture, y compris
+  // native (voir plus haut : addEventListener('close', saveNoteSimpleDialog))
+  // — fermer sans vider state.editingNote aurait renvoyé un PATCH avec les
+  // anciennes valeurs du formulaire et écrasé la restauration qu'on vient
+  // de faire. saveNoteSimpleDialog() retourne immédiatement si editingNote
+  // est vide, avant de toucher au réseau.
+  state.editingNote = null;
+  $('#dlg-note-simple').close();
+  $('#dlg-note').close();
+  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
+  else loadNotes();
+});
+
+$('#dn-history-btn').addEventListener('click', () => {
+  if (state.editingNote) openHistoryDialog(state.editingNote);
+});
+$('#dns-history-btn').innerHTML = ICONS.history;
+$('#dns-history-btn').addEventListener('click', () => {
+  if (state.editingNote) openHistoryDialog(state.editingNote);
 });
 
 /* -------------------------------- Tâches --------------------------------
@@ -2776,8 +3123,15 @@ function renderAgenda(items) {
       // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
       btn.className = 'agenda-item c-' + t.color;
       const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
-      btn.innerHTML = `<span class="agenda-item-text">${escapeHtml(label)}</span>
-        <span class="agenda-item-due">${formatDue(t.due_at)}</span>`;
+      // Icône toujours affichée dans un rond : celle de la notask si elle en
+      // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
+      // texte est ainsi toujours décalé de la même largeur.
+      const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
+      btn.innerHTML = `<span class="agenda-item-icon">${icon}</span>
+        <span class="agenda-item-body">
+          <span class="agenda-item-text">${escapeHtml(label)}</span>
+          <span class="agenda-item-due">${formatDue(t.due_at)}</span>
+        </span>`;
       btn.addEventListener('click', () => ouvrirNoteParId(t.note_id));
       section.appendChild(btn);
     }

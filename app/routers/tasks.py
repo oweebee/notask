@@ -76,6 +76,7 @@ def list_tasks(
             due_at=n.due_at,
             done=n.done,
             color=n.color,
+            icon=n.icon,
             bucket=_bucket(n.due_at, n.done, now),
         ))
 
@@ -96,6 +97,7 @@ def list_tasks(
                 due_at=it.due_at,
                 done=it.checked,
                 color=parent.color,
+                icon=parent.icon,
                 bucket=_bucket(it.due_at, it.checked, now),
             ))
 
@@ -135,7 +137,7 @@ def set_done(
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
             text=note.title, due_at=note.due_at, done=note.done,
-            color=note.color, bucket=_bucket(note.due_at, note.done, now),
+            color=note.color, icon=note.icon, bucket=_bucket(note.due_at, note.done, now),
         )
 
     if kind == "item":
@@ -156,7 +158,7 @@ def set_done(
         return TaskOut(
             kind="item", id=item.id, note_id=parent.id, note_title=parent.title,
             text=item.text, due_at=item.due_at, done=item.checked,
-            color=parent.color, bucket=_bucket(item.due_at, item.checked, now),
+            color=parent.color, icon=parent.icon, bucket=_bucket(item.due_at, item.checked, now),
         )
 
     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Type de tâche inconnu")

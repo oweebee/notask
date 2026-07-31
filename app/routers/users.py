@@ -19,6 +19,7 @@ from app.models import (
     UserUpdate,
 )
 from app.routers.attachments import ATTACH_DIR
+from app.routers.note_versions import delete_all_versions
 from app.security import generate_enc_salt, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -118,6 +119,8 @@ def delete_user(
         if path.exists():
             path.unlink()
         session.delete(att)
+    for nid in note_ids:
+        delete_all_versions(nid, session)
     for note in session.exec(select(Note).where(Note.user_id == user_id)).all():
         session.delete(note)
     for s in session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).all():

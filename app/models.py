@@ -171,6 +171,10 @@ class Note(NoteBase, table=True):
         back_populates="note",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "NoteAttachment.created_at"},
     )
+    versions: List["NoteVersion"] = Relationship(
+        back_populates="note",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "NoteVersion.created_at"},
+    )
 
 
 class NoteItem(SQLModel, table=True):
@@ -279,6 +283,109 @@ class NoteOut(NoteBase):
     attachments: List[AttachmentOut] = []
 
 
+# =============================== Historique ================================
+# Instantané complet d'une notask (champs + lignes + pièces jointes) pris
+# juste avant un changement qui pourrait faire perdre quelque chose :
+# modification de contenu réellement différente, suppression d'une pièce
+# jointe, remplacement d'une image via l'éditeur (voir POST
+# /notes/{id}/versions dans app/routers/note_versions.py). Déclenché par le
+# client, pas automatiquement à chaque PATCH : le serveur ne peut pas savoir
+# si le contenu chiffré a réellement changé (chaque chiffrement produit un
+# texte différent même à plaintext égal, IV aléatoire), seul le client a le
+# texte en clair pour comparer avant/après de façon fiable.
+#
+# Chaque note ne garde que ses 10 derniers instantanés (voir _prune_versions
+# dans le routeur) — au-delà, le plus ancien est supprimé, fichiers de
+# sauvegarde de pièces jointes compris.
+
+class NoteVersion(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    note_id: int = Field(foreign_key="note.id", index=True)
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+
+    title: str = Field(default="", max_length=2000)
+    description: str = Field(default="", max_length=2000)
+    content: str = ""
+    color: str = Field(default="default", max_length=20)
+    is_checklist: bool = False
+    due_at: Optional[datetime] = None
+    icon: Optional[str] = Field(default=None, max_length=40)
+    label_ids: List[int] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
+
+    note: Optional[Note] = Relationship(back_populates="versions")
+    items: List["NoteVersionItem"] = Relationship(
+        back_populates="version",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    attachments: List["NoteVersionAttachment"] = Relationship(
+        back_populates="version",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+
+class NoteVersionItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    version_id: int = Field(foreign_key="noteversion.id", index=True)
+    text: str = Field(default="", max_length=3000)
+    checked: bool = False
+    due_at: Optional[datetime] = None
+
+    version: Optional[NoteVersion] = Relationship(back_populates="items")
+
+
+class NoteVersionAttachment(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    version_id: int = Field(foreign_key="noteversion.id", index=True)
+    # Pièce jointe vivante dont ceci était la copie au moment de
+    # l'instantané — sert à décider, à la restauration, s'il faut écraser
+    # une pièce jointe existante (même id encore présent) ou en recréer une
+    # (id disparu depuis, supprimée ou jamais réassociée). Ne référence pas
+    # une ligne réelle (pas de foreign_key) : cette pièce jointe a pu être
+    # supprimée depuis sans que l'instantané n'en soit affecté.
+    original_attachment_id: Optional[int] = None
+    # Copie des octets chiffrés au moment de l'instantané, sous
+    # DATA_DIR/attachment_versions/<storage_name> — un fichier séparé de
+    # DATA_DIR/attachments, jamais modifié après coup, contrairement à la
+    # pièce jointe vivante qui peut être réécrite par l'éditeur d'image.
+    storage_name: str = Field(max_length=64)
+    enc_meta: str = Field(max_length=2000)
+    size: int = 0
+
+    version: Optional[NoteVersion] = Relationship(back_populates="attachments")
+
+
+class NoteVersionListItem(SQLModel):
+    """Résumé affiché dans la liste de l'historique — pas le détail complet
+    (contenu/items/pièces jointes), volontairement léger."""
+    id: int
+    created_at: datetime
+    title: str
+    color: str
+    icon: Optional[str] = None
+
+
+class NoteVersionAttachmentOut(SQLModel):
+    id: int
+    enc_meta: str
+    size: int
+
+
+class NoteVersionItemOut(SQLModel):
+    text: str
+    checked: bool
+    due_at: Optional[datetime] = None
+
+
+class NoteVersionDetail(NoteVersionListItem):
+    description: str
+    content: str
+    is_checklist: bool
+    due_at: Optional[datetime] = None
+    label_ids: List[int] = []
+    items: List[NoteVersionItemOut] = []
+    attachments: List[NoteVersionAttachmentOut] = []
+
+
 # ================================ Libellés ================================
 # Catégories façon Keep : un nom, affiché dans le menu latéral. Une note peut
 # en porter plusieurs (via Note.label_ids).
@@ -324,6 +431,10 @@ class TaskOut(SQLModel):
     due_at: datetime
     done: bool
     color: str
+    # Icône de la note d'origine (même pour une tâche issue d'une ligne à
+    # cocher) — affichée dans la colonne d'échéances (voir renderAgenda()
+    # dans app.js), None si la note n'en a pas.
+    icon: Optional[str] = None
     bucket: str          # "late" | "today" | "upcoming" | "done"
 
 

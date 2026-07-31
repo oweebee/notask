@@ -194,16 +194,6 @@ header.topbar .logo {
 }
 header.topbar .logo svg { height: 100%; width: auto; display: block; flex: none; }
 
-/* Paire de cuillères réutilisable partout ailleurs que le logo d'en-tête
-   (drawer, favicon-like usages…) : même écart resserré de 4px. */
-.spoon-pair {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  flex: none;
-}
-.spoon-pair svg { height: 100%; width: auto; display: block; flex: none; }
 header.topbar .spacer { flex: 1; }
 header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 
@@ -211,7 +201,10 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 
 .shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  /* 288px plutôt que les 260px d'origine : "Toutes les notasks" (le plus
+     long intitulé du menu) était tronqué avec des points de suspension à
+     260px. */
+  grid-template-columns: 288px minmax(0, 1fr);
   align-items: start;
 }
 /* Colonne d'échéances (voir #agenda-col) : classe posée par JS (switchView)
@@ -219,7 +212,7 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
    une 3e piste de grille qui n'existe carrément pas quand elle est absente,
    pas une piste minmax(0, …) dont le calcul de taille avec un contenu
    display:none serait plus difficile à garantir stable. */
-.shell.has-agenda { grid-template-columns: 260px minmax(0, 1fr) 280px; }
+.shell.has-agenda { grid-template-columns: 288px minmax(0, 1fr) 280px; }
 /* Les marges de la mosaïque se resserrent d'autant pour financer la
    colonne, plutôt que de rétrécir la grille de notes elle-même (demande
    explicite : gratter dans les marges, pas dans la zone centrale). */
@@ -282,8 +275,6 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 .drawer-item.label-item[style].active { outline: 2px solid #42a5f5; outline-offset: -2px; }
 .drawer-item.label-item[style] { color: var(--md-on-surface); }
 .drawer-item svg { width: 22px; height: 22px; flex: none; }
-.drawer-item .spoon-pair { height: 22px; }
-.drawer-item .spoon-pair svg { width: auto; height: 100%; }
 .drawer-item .label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -387,19 +378,34 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    reconnaître la note, pas juste "une tâche". */
 .agenda-item {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: center;
+  gap: .625rem;
   width: 100%;
   min-height: 44px;
   text-align: left;
   border: none;
   border-radius: var(--shape-full) 0 0 var(--shape-full);
-  padding: .5rem .875rem;
+  padding: .375rem .875rem .375rem .375rem;
   margin-bottom: .375rem;
   color: var(--md-on-surface);
   font-size: .8125rem;
 }
 .agenda-item:hover { filter: brightness(1.12); }
+/* Icône de la notask, toujours affichée dans un rond — celle choisie sur
+   la carte (ICON_CHOICES), ou la cuillère bleue par défaut si la notask
+   n'en a pas (voir renderAgenda() dans app.js). Le texte est ainsi
+   toujours décalé de la même largeur, icône présente ou non. */
+.agenda-item-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.22);
+  display: grid;
+  place-items: center;
+}
+.agenda-item-icon svg { width: 17px; height: 17px; display: block; }
+.agenda-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .agenda-item .agenda-item-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -937,8 +943,27 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    plutôt que de compter sur justify-content:space-between (qui répartirait
    les 4 boutons à intervalles égaux, collant "Fermer" au milieu). */
 .cal-popup-actions-spacer { flex: 1; }
-.label-delete-btn { color: var(--md-error); }
+/* Petit rond avec une croix plutôt qu'un troisième bouton texte "Supprimer"
+   — à côté de "Fermer"/"Enregistrer" dans une largeur de popup aussi
+   réduite, un bouton texte plein débordait du cadre. */
+.label-delete-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(230,224,233,.08);
+  color: var(--md-error);
+  cursor: pointer;
+}
+.label-delete-btn svg { width: 15px; height: 15px; display: block; }
 .label-delete-btn:hover { background: var(--md-error-container); }
+/* Popup d'édition de libellé : un peu plus large que la base .cal-popup
+   (240px, pensée pour le calendrier) pour laisser respirer les trois
+   actions côte à côte. */
+.label-edit-popup { width: 270px; }
 
 /* Ligne date + heure + minutes (menus déroulants maison, minutes limitées à
    00/15/30/45 — voir openCalPopup dans app.js). */
@@ -1562,7 +1587,15 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
  * dans le même langage visuel que le reste de l'app : .btn/.swatch/.c-*
  * réutilisés tels quels pour la palette de couleurs, cohérente avec les
  * couleurs de notes et de libellés déjà présentes ailleurs. */
-.img-editor-dlg {
+/* [open] est indispensable ici, pas juste cosmétique : un <dialog> est
+   display:none par défaut tant qu'il n'a pas cet attribut (posé par
+   showModal()), mais seulement via la feuille de style du navigateur —
+   un display:flex posé sans condition sur la classe l'aurait emporté sur
+   cette règle native et affiché la boîte en permanence, à même la page
+   (bug constaté : l'éditeur apparaissait sous la mosaïque de l'accueil
+   sans qu'aucune image n'ait été cliquée). Même précaution déjà prise
+   pour #dlg-note[open]/#dlg-note-simple[open] plus bas. */
+.img-editor-dlg[open] {
   width: 94vw;
   max-width: 1150px;
   height: 90vh;
@@ -1653,3 +1686,89 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   border-radius: 4px;
 }
 .img-editor-text-input:focus { outline: none; }
+
+/* ========================= Historique des versions ========================= */
+/* [open] obligatoire ici — un display:flex posé sans condition afficherait
+   la boîte en permanence, même fermée (piège déjà rencontré et corrigé sur
+   .img-editor-dlg, voir son commentaire). */
+.history-dlg[open] {
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--md-outline-variant);
+  flex: none;
+}
+.history-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: .75rem 1rem;
+}
+.history-footer {
+  padding: .875rem 1.25rem;
+  border-top: 1px solid var(--md-outline-variant);
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+}
+/* Pas de background ici : posé par la classe .c-* ajoutée à côté en JS
+   (renderHistoryList()), déjà définie plus haut dans ce fichier — même
+   mécanisme que .task-card/.agenda-item (voir leurs commentaires respectifs
+   pour le piège de spécificité déjà rencontré deux fois). */
+.history-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--shape-sm);
+  padding: .625rem .875rem;
+  margin-bottom: .5rem;
+  color: var(--md-on-surface);
+  cursor: pointer;
+}
+.history-item:hover { filter: brightness(1.12); }
+.history-item-title {
+  font-weight: 500;
+  font-size: .875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-item-date {
+  font-size: .75rem;
+  color: var(--md-on-surface-variant);
+  margin-top: .125rem;
+}
+#history-back { margin-bottom: .75rem; }
+.history-detail-desc { font-style: italic; color: var(--md-on-surface-variant); margin: .25rem 0; }
+.history-detail-body { white-space: pre-wrap; font-size: .9375rem; margin: .5rem 0; }
+.history-detail-items { list-style: none; padding: 0; margin: .5rem 0; }
+.history-detail-items li { padding: .25rem 0; font-size: .9375rem; }
+.history-detail-items li.done { text-decoration: line-through; opacity: .6; }
+.history-detail-due {
+  display: inline-flex; align-items: center; gap: .375rem;
+  font-size: .8125rem; color: var(--md-on-surface-variant); margin-top: .5rem;
+}
+.history-detail-due svg { width: 15px; height: 15px; }
+.history-detail-attachments { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+.history-attach-thumb {
+  width: 72px; height: 72px; object-fit: cover;
+  border-radius: var(--shape-sm); display: block;
+}
+.history-attach-file {
+  display: flex; align-items: center; gap: .375rem;
+  padding: .375rem .625rem; border-radius: var(--shape-sm);
+  background: rgba(230,224,233,.08); font-size: .8125rem;
+}
+.history-attach-file svg { width: 16px; height: 16px; flex: none; }

@@ -71,7 +71,6 @@
            cuillères du logo), ne concerne que ce menu — les notes elles-
            mêmes gardent leur propre palette de 21 couleurs, inchangée. -->
       <div class="drawer-notes-group">
-        <p class="drawer-section">Notasks</p>
         <button class="drawer-item active" data-view="notes" id="nav-notes">Notasks</button>
         <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
         <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
@@ -79,7 +78,6 @@
 
       <hr class="drawer-sep">
       <div class="drawer-tasks-group">
-        <p class="drawer-section">Tâches</p>
         <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
         <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
         <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
@@ -233,6 +231,8 @@
     <div class="label-chips" id="dn-labels"></div>
   </div>
   <div class="dialog-actions">
+    <button class="btn ghost sm" id="dn-history-btn" type="button">Historique</button>
+    <span class="spacer" style="flex:1"></span>
     <button class="btn ghost" id="dn-cancel" type="button">Annuler</button>
     <button class="btn" id="dn-save" type="button">Enregistrer</button>
   </div>
@@ -275,6 +275,7 @@
       <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>
       <button type="button" class="cal-btn" id="dns-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
       <input type="file" id="dns-attach-input" multiple hidden>
+      <button type="button" class="cal-btn" id="dns-history-btn" title="Historique des versions" aria-label="Historique des versions"></button>
       <div class="due-row">
         <button type="button" class="cal-btn" id="dns-due-btn" title="Régler l'échéance"></button>
         <span id="dns-due-label" class="due-label">Aucune échéance</span>
@@ -303,6 +304,7 @@
     <div class="img-editor-colors" id="img-editor-colors"></div>
     <div class="img-editor-actions">
       <button type="button" class="img-tool-btn" id="img-editor-undo" title="Annuler" aria-label="Annuler"></button>
+      <button type="button" class="img-tool-btn" id="img-editor-download" title="Télécharger (enregistre d'abord la dernière version)" aria-label="Télécharger"></button>
       <span class="sep"></span>
       <button type="button" class="btn ghost sm" id="img-editor-cancel">Fermer sans enregistrer</button>
       <button type="button" class="btn sm" id="img-editor-save">Enregistrer</button>
@@ -311,6 +313,28 @@
   <div class="img-editor-canvas-wrap" id="img-editor-canvas-wrap">
     <canvas id="img-editor-canvas"></canvas>
     <input type="text" id="img-editor-text-input" class="img-editor-text-input" hidden>
+  </div>
+</dialog>
+
+<!-- Historique des versions d'une notask : jusqu'à 10 instantanés, pris
+     côté client juste avant un changement potentiellement destructeur
+     (voir snapshotNoteVersion() dans app.js). Liste -> détail d'une
+     version -> restauration. -->
+<dialog id="dlg-history" class="history-dlg">
+  <div class="history-header">
+    <strong>Historique</strong>
+    <button type="button" class="cal-btn" id="history-close" title="Fermer" aria-label="Fermer"></button>
+  </div>
+  <div class="history-body">
+    <div class="history-list" id="history-list"></div>
+    <div class="history-detail" id="history-detail" hidden>
+      <button type="button" class="btn ghost sm" id="history-back">&larr; Retour</button>
+      <div id="history-detail-content"></div>
+    </div>
+    <div class="empty" id="history-empty" hidden>Aucun historique pour cette notask.</div>
+  </div>
+  <div class="history-footer" id="history-footer" hidden>
+    <button type="button" class="btn" id="history-restore">Restaurer cette version</button>
   </div>
 </dialog>
 

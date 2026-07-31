@@ -26,6 +26,7 @@ from app.models import (
     utcnow,
 )
 from app.routers.attachments import ATTACH_DIR
+from app.routers.note_versions import delete_all_versions
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
@@ -40,6 +41,7 @@ COLORS = {
 ICON_KEYS = {
     "star", "home", "work", "shopping", "heart", "flag", "book",
     "idea", "travel", "gift", "money", "music",
+    "spoonyellow", "spoonblue", "spoons",
 }
 
 
@@ -194,6 +196,7 @@ def delete_note(
         if path.exists():
             path.unlink()
         session.delete(att)
+    delete_all_versions(note.id, session)
     session.delete(note)
     session.commit()
 
