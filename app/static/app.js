@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-outils-compact-46';
+const BUILD_VERSION = '2026-07-31-zone-archive-49';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -1104,7 +1104,12 @@ $('#btn-profil').addEventListener('click', () => {
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
 });
-$('#profil-close').addEventListener('click', () => fermerAvecAnimation($('#dlg-profil')));
+/* Clic sur le fond = fermeture, comme dans les boîtes de note : le bouton
+   "Fermer" dédié n'apportait rien. Échap passe par le même chemin, pour
+   garder l'animation de sortie. */
+$('#dlg-profil').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-profil')) fermerAvecAnimation($('#dlg-profil'));
+});
 $('#dlg-profil').addEventListener('cancel', (e) => {
   e.preventDefault();
   fermerAvecAnimation($('#dlg-profil'));
@@ -3090,6 +3095,72 @@ function memoriserDefilements(el) {
   return () => positions.forEach(([n, v]) => { n.scrollTop = v; });
 }
 
+/* Sélecteur de l'enveloppe correspondant à chaque effet. Sert à savoir si
+   la sélection est DÉJÀ habillée par cet effet, auquel cas le bouton le
+   retire au lieu de l'appliquer une seconde fois. */
+const FMT_ENVELOPPES = {
+  bold: 'strong, b',
+  italic: 'em, i',
+  underline: 'u',
+  code: 'code',
+  archive: 'span.note-archive-zone',
+  color: 'span[style*="color"]',
+};
+
+function trouverEnveloppe(el, range, kind) {
+  const depart = range.commonAncestorContainer;
+  const noeud = depart.nodeType === 1 ? depart : depart.parentNode;
+  if (!noeud || !el.contains(noeud)) return null;
+  // Bloc de code : on vise le <pre> englobant plutôt que le <code>
+  // intérieur, sinon le retrait ferait disparaître le bloc lui-même.
+  if (kind === 'code') {
+    const bloc = noeud.closest('pre.note-code-block');
+    if (bloc && el.contains(bloc)) return bloc;
+  }
+  const trouve = noeud.closest(FMT_ENVELOPPES[kind]);
+  return trouve && el.contains(trouve) ? trouve : null;
+}
+
+/* Copie l'enveloppe avec un autre texte. Un <pre> porte son texte dans un
+   <code> intérieur : le cloner à plat perdrait cette structure. */
+function clonerEnveloppe(source, texte) {
+  const copie = source.cloneNode(false);
+  if (source.tagName === 'PRE') {
+    const code = document.createElement('code');
+    code.textContent = texte;
+    copie.appendChild(code);
+  } else {
+    copie.textContent = texte;
+  }
+  return copie;
+}
+
+/* Retire l'effet sur la seule portion sélectionnée : ce qui précède et ce
+   qui suit restent habillés, chacun dans sa propre enveloppe. Sélectionner
+   le milieu d'un bloc de code et recliquer sur "code" donne donc bien deux
+   blocs séparés encadrant du texte redevenu normal.
+   Retourne le nœud de texte mis à nu, pour y reposer la sélection. */
+function retirerEnveloppe(range, enveloppe) {
+  const avant = document.createRange();
+  avant.selectNodeContents(enveloppe);
+  avant.setEnd(range.startContainer, range.startOffset);
+  const texteAvant = avant.toString();
+
+  const apres = document.createRange();
+  apres.selectNodeContents(enveloppe);
+  apres.setStart(range.endContainer, range.endOffset);
+  const texteApres = apres.toString();
+
+  const morceau = document.createDocumentFragment();
+  if (texteAvant) morceau.appendChild(clonerEnveloppe(enveloppe, texteAvant));
+  const nu = document.createTextNode(range.toString());
+  morceau.appendChild(nu);
+  if (texteApres) morceau.appendChild(clonerEnveloppe(enveloppe, texteApres));
+
+  enveloppe.parentNode.replaceChild(morceau, enveloppe);
+  return nu;
+}
+
 function wrapSelectionRich(el, kind, couleur) {
   const retablirDefilement = memoriserDefilements(el);
   el.focus();
@@ -3101,8 +3172,30 @@ function wrapSelectionRich(el, kind, couleur) {
   if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return; }
   const text = range.toString();
 
+  /* Bouton bascule : si la sélection est déjà habillée par cet effet, on
+     le RETIRE au lieu de l'empiler. Cas particulier de la couleur : tant
+     qu'on choisit une teinte, on veut recolorer, pas décolorer — seul le
+     rond "défaut" (couleur nulle) enlève la couleur. */
+  const bascule = kind !== 'color' || !couleur;
+  if (text && bascule) {
+    const enveloppe = trouverEnveloppe(el, range, kind);
+    if (enveloppe) {
+      const nu = retirerEnveloppe(range, enveloppe);
+      const r = document.createRange();
+      r.selectNodeContents(nu);
+      sel.removeAllRanges();
+      sel.addRange(r);
+      retablirDefilement();
+      return;
+    }
+  }
+
   let wrapper;
-  if (kind === 'color') {
+  if (kind === 'archive') {
+    wrapper = document.createElement('span');
+    wrapper.className = 'note-archive-zone';
+    wrapper.textContent = text || '\u200b';
+  } else if (kind === 'color') {
     wrapper = document.createElement('span');
     wrapper.style.color = couleur;
     wrapper.textContent = text || '​';
@@ -3172,6 +3265,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
   $(groupeSel).querySelectorAll('button[data-fmt]').forEach((btn) => {
     if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
     if (btn.dataset.fmt === 'color') btn.innerHTML = ICONS.textColor;
+    if (btn.dataset.fmt === 'archive') btn.innerHTML = ICONS.archive;
     // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
     // la zone contenteditable au mousedown et efface la sélection avant même
     // que le click ne se déclenche (constaté à la vérification : le texte
@@ -3211,6 +3305,7 @@ function richToText(root) {
       // Texte coloré : conservé sous forme de marqueur, comme le gras ou le
       // code — voir NOTE_COLOR_MARK et renderFormatted().
       case 'span': {
+        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
         const hex = cssColorToHex(node.style.color);
         return hex ? `[c:${hex}]${inner()}[/c]` : inner();
       }
@@ -3240,6 +3335,12 @@ const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
    avec lui et rendu à l'affichage. Hex sur 6 chiffres uniquement, pour ne
    pas laisser passer n'importe quelle valeur CSS dans un attribut style. */
 const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
+
+/* Zone d'archive : `[arch]texte[/arch]`. Purement VISUEL — écriture
+   manuscrite sur fond assombri, pour distinguer d'un coup d'œil un passage
+   mis de côté. Aucun rapport avec les notasks archivées (Note.archived),
+   qui sont une vue à part ; le nom est celui choisi par l'utilisateur. */
+const NOTE_ARCHIVE_MARK = /\[arch\]([\s\S]*?)\[\/arch\]/g;
 
 /* `element.style.color` rend "rgb(r, g, b)" : reconverti en hex pour le
    marqueur. Retourne null si la couleur est absente ou illisible, auquel
@@ -3334,6 +3435,7 @@ function renderFormatted(text) {
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
+  html = html.replace(NOTE_ARCHIVE_MARK, (m, contenu) => `<span class="note-archive-zone">${contenu}</span>`);
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
@@ -4905,7 +5007,9 @@ $('#btn-outils').addEventListener('click', () => {
   $('#dlg-outils').showModal();
   animerOuvertureDialogue($('#dlg-outils'));
 });
-$('#outils-close').addEventListener('click', () => fermerAvecAnimation($('#dlg-outils')));
+$('#dlg-outils').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-outils')) fermerAvecAnimation($('#dlg-outils'));
+});
 $('#dlg-outils').addEventListener('cancel', (e) => {
   e.preventDefault();
   fermerAvecAnimation($('#dlg-outils'));

@@ -171,6 +171,7 @@
                 <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
                 <span class="fmt-sep"></span>
                 <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+                <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
                 <span class="fmt-sep"></span>
               </span>
               <button type="button" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
@@ -365,6 +366,7 @@
         <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
         <span class="fmt-sep"></span>
         <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+        <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
         <span class="fmt-sep"></span>
       </span>
       <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
@@ -499,7 +501,6 @@
   <div class="dialog-actions">
     <button class="btn ghost" id="profil-password" type="button">Changer de mot de passe</button>
     <span class="spacer" style="flex:1"></span>
-    <button class="btn ghost" id="profil-close" type="button">Fermer</button>
     <button class="btn danger" id="profil-logout" type="button">Déconnexion</button>
   </div>
 </dialog>
@@ -526,10 +527,6 @@
     <input type="file" id="import-file" accept=".notask,application/octet-stream" hidden>
     <div id="outil-msg"></div>
   </section>
-
-  <div class="dialog-actions">
-    <button class="btn ghost" id="outils-close" type="button">Fermer</button>
-  </div>
 </dialog>
 
 <script src="/static/app.js"></script>

@@ -1910,7 +1910,8 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .fmt-toolbar button[data-fmt="italic"] { font-style: italic; }
 .fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
 .fmt-toolbar button[data-fmt="code"] svg,
-.fmt-toolbar button[data-fmt="color"] svg { width: 18px; height: 18px; }
+.fmt-toolbar button[data-fmt="color"] svg,
+.fmt-toolbar button[data-fmt="archive"] svg { width: 18px; height: 18px; }
 
 /* La couleur du texte n'utilise plus de popover flottant : c'est la même
    palette dépliante que la couleur de note (.palette / #dns-text-colors,
@@ -1945,6 +1946,27 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   flex: none;
 }
 .note-code-inline .code-copy-btn svg { width: 11px; height: 11px; }
+/* Zone d'archive : repère purement VISUEL pour mettre un passage de côté.
+   Aucun rapport avec les notasks archivées (vue Archives) — c'est une mise
+   en forme du texte, comme le gras ou le code.
+   Miroir de la zone de code : là où le code s'éclaircit, l'archive
+   s'assombrit, et là où le code est en chasse fixe, l'archive prend une
+   écriture manuscrite. Pas de pastille de copie ici : le but est de
+   ranger, pas de réutiliser. Pile de polices manuscrites courantes, avec
+   `cursive` en dernier recours — aucune n'est garantie sur toutes les
+   machines. */
+.note-archive-zone {
+  font-family: "Segoe Script", "Bradley Hand", "Brush Script MT",
+               "Comic Sans MS", cursive;
+  font-size: .95em;
+  background: rgba(0, 0, 0, .28);
+  padding: .1rem .4rem;
+  border-radius: 4px;
+  /* Liseré discret : sur une carte déjà sombre, l'assombrissement seul
+     ne suffit pas toujours à délimiter la zone. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+}
+
 .note-code-block {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
