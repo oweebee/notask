@@ -72,17 +72,14 @@
            mêmes gardent leur propre palette de 21 couleurs, inchangée. -->
       <div class="drawer-notes-group">
         <button class="drawer-item active" data-view="notes" id="nav-notes">Notasks</button>
+        <!-- Anciennement quatre entrées séparées (Toutes / En retard /
+             Aujourd'hui / À venir) : remplacées par cette seule entrée, qui
+             ouvre la même vue regroupée par échéance (les en-têtes
+             rouge/vert/bleu y distinguent déjà retard, jour et à venir). -->
+        <button class="drawer-item" data-view="tasks" id="nav-tasks">Notasks Prévues</button>
         <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
         <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
         <button class="drawer-item" data-view="trash" id="nav-trash">Corbeille</button>
-      </div>
-
-      <hr class="drawer-sep">
-      <div class="drawer-tasks-group">
-        <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
-        <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
-        <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
-        <button class="drawer-item" data-view="upcoming" id="nav-upcoming">À venir</button>
       </div>
 
       <hr class="drawer-sep">
@@ -128,17 +125,17 @@
                  vient de saisir une ligne. Idem en édition rapide
                  (#dns-add-item). -->
             <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
-            <!-- Libellés : rangée persistante + bouton "+", exactement comme
-                 en édition rapide (#dns-labels) — même fonction de rendu
-                 partagée, voir renderLabelChipsInto() dans app.js. -->
-            <div class="label-chips" id="nc-labels"></div>
-            <div class="label-add-picker" id="nc-labels-picker" hidden></div>
             <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
                  encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
                  rien n'est envoyé avant ce moment-là (voir
                  composerPendingFiles dans app.js) — juste un aperçu
                  local ici. -->
             <div class="dns-attachments" id="nc-attachments" hidden></div>
+            <!-- Libellés en dernier, sous les pièces jointes — même ordre
+                 partout (carte, édition rapide, création). Rangée
+                 persistante + bouton "+", voir renderLabelChipsInto(). -->
+            <div class="label-chips" id="nc-labels"></div>
+            <div class="label-add-picker" id="nc-labels-picker" hidden></div>
           </div>
 
           <!-- Bloc d'outils séparé : masqué par défaut, révélé au clic dans
@@ -321,13 +318,15 @@
          la barre du bas : c'est là qu'on l'attend après avoir saisi une
          ligne. Idem dans le composeur (#nc-add-item). -->
     <button class="btn ghost sm" id="dns-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
-    <div class="label-chips" id="dns-labels"></div>
-    <div class="label-add-picker" id="dns-labels-picker" hidden></div>
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
          la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
          l'envoi (voir uploadAttachment() dans app.js). -->
     <div class="dns-attachments" id="dns-attachments" hidden></div>
     <div class="dns-dropzone-hint" id="dns-dropzone-hint" hidden>Déposer pour joindre</div>
+    <!-- Les libellés ferment toujours la carte, sous les pièces jointes —
+         même ordre que sur la carte de la mosaïque. -->
+    <div class="label-chips" id="dns-labels"></div>
+    <div class="label-add-picker" id="dns-labels-picker" hidden></div>
   </div>
   <div class="dns-bottom-bar">
     <div class="fmt-toolbar" id="dns-fmt-toolbar">

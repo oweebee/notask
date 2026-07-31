@@ -282,7 +282,7 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 }
 .drawer-item.add { color: var(--md-on-surface-variant); }
 
-/* Rond de comptage (nav-late/today/upcoming/tasks) : poussé à droite par
+/* Rond de comptage (nav-tasks) : poussé à droite par
    margin-left:auto (indépendant du gap régulier entre icône/texte), avec
    une marge propre avant le bord — le bord droit de la pilule est arrondi
    (voir .drawer-item plus haut), le rond ne doit pas le toucher ni se faire
@@ -314,9 +314,12 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 .drawer-notes-group .drawer-item svg { color: #ffd54f; }
 .drawer-notes-group .drawer-item.active { background: rgba(255,213,79,.16); color: #ffd54f; }
 
-.drawer-tasks-group .drawer-section { color: #42a5f5; opacity: .85; }
-.drawer-tasks-group .drawer-item svg { color: #42a5f5; }
-.drawer-tasks-group .drawer-item.active { background: rgba(66,165,245,.16); color: #42a5f5; }
+/* "Notasks Prévues" vit désormais dans le groupe jaune (la section Tâches
+   séparée a été supprimée), mais garde le bleu de la seconde cuillère :
+   ces règles doivent donc l'emporter sur celles ci-dessus — d'où le
+   sélecteur par id, plus spécifique, et le placement juste après. */
+#nav-tasks svg { color: #42a5f5; }
+#nav-tasks.active { background: rgba(66,165,245,.16); color: #42a5f5; }
 
 /* Sous 860 px le menu passe au-dessus du contenu, en bandeau défilant ; la
    colonne d'échéances disparaît complètement, il n'y a plus la place pour
@@ -582,7 +585,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    bascule case à cocher sur une ligne, actions (pièce jointe, couleur,
    libellés, échéance) sur la suivante. */
 .nc-toolbar-block { display: flex; flex-direction: column; gap: .25rem; }
-.nc-toolbar-block .fmt-toolbar { margin: 0; }
+.nc-toolbar-block .fmt-toolbar { margin: 0; padding: 0; }
 /* Annuler/Ajouter, dernière ligne du bloc d'outils. */
 .nc-submit-row {
   display: flex;
@@ -1582,7 +1585,11 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   padding: .625rem 1rem;
   box-shadow: var(--elev-3);
 }
-.dns-bottom-bar .fmt-toolbar { margin: 0; }
+/* padding:0 en plus de margin:0 : le padding de .fmt-toolbar décalait la
+   première ligne vers la droite, si bien que le "B" ne tombait pas à la
+   verticale du trombone de la ligne du dessous. Les deux rangées partent
+   maintenant exactement du même bord. Idem dans le composeur. */
+.dns-bottom-bar .fmt-toolbar { margin: 0; padding: 0; }
 /* Palette de couleurs dépliable dans la barre basse : sur toute la largeur,
    sous les deux rangées d'outils (la barre est en flex-wrap, flex-basis
    100% force le retour à la ligne). Même comportement que #nc-colors dans
@@ -1637,6 +1644,18 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   word-break: break-word;
 }
 .dns-content-editable .note-code-block { white-space: pre-wrap; }
+
+/* Image insérée dans le corps d'une notask (dessin/tableau) — voir
+   NOTE_IMG_MARK et hydrateInlineImages() dans app.js. Même rendu dans la
+   carte, l'édition rapide et le composeur : pleine largeur disponible,
+   jamais déformée. */
+.note-inline-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--shape-xs);
+  margin: .4rem 0;
+}
 
 /* ============================ Pièces jointes ============================
    Deux contextes : sur la carte (aperçu seul, lecture) et dans l'édition

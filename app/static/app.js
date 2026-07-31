@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-tableau-pleine-surface-11';
+const BUILD_VERSION = '2026-07-31-dessin-dans-le-texte-13';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -778,13 +778,14 @@ function enterApp() {
   // BUILD_VERSION en haut du fichier).
   $('#brand-logo').title = 'build ' + BUILD_VERSION;
   $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notasks</span>';
+  // Entrée unique pour les notasks datées, juste sous "Notasks" : les
+  // anciennes entrées par échéance (En retard / Aujourd'hui / À venir) ont
+  // été retirées du menu, la vue les regroupe déjà avec des en-têtes de
+  // couleur. Le compteur reste celui du total.
+  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">Notasks Prévues</span><span class="nav-count" id="count-tasks" hidden></span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
   $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">Corbeille</span>';
-  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">Toutes les notasks</span><span class="nav-count" id="count-tasks" hidden></span>';
-  $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span><span class="nav-count" id="count-late" hidden></span>';
-  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span><span class="nav-count" id="count-today" hidden></span>';
-  $('#nav-upcoming').innerHTML = ICONS.calendar + `<span class="label">${BUCKET_LABELS.upcoming}</span><span class="nav-count" id="count-upcoming" hidden></span>`;
   $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
 
   loadLabels();
@@ -832,7 +833,7 @@ function switchView(view) {
   if (isTasks) {
     // Mêmes intitulés que le menu de gauche (BUCKET_LABELS), plus "tasks"
     // qui n'y figure pas (regroupement "Toutes", pas un bucket de tâches).
-    const titres = { tasks: 'Toutes les notasks', ...BUCKET_LABELS };
+    const titres = { tasks: 'Notasks Prévues', ...BUCKET_LABELS };
     $('#tasks-title').textContent = titres[view];
     loadTasks(TASK_VIEWS[view]);
   }
@@ -1298,6 +1299,9 @@ function renderNotes() {
       }
       inner += '</ul>';
     } else if (n.content) {
+      // Le contenu peut porter des images insérées dans le texte
+      // (`![att:ID]`) : le HTML sort avec des <img> sans src, hydratées
+      // plus bas une fois la carte dans le DOM.
       inner += `<div class="body">${renderFormatted(n.content)}</div>`;
     }
 
@@ -1342,6 +1346,7 @@ function renderNotes() {
     inner += `<div class="note-labels"></div>`;
 
     el.innerHTML = inner;
+    hydrateInlineImages(el, n);
 
     // Déchiffrement paresseux des miniatures — chaque image n'est décodée
     // qu'une fois (voir le cache dans loadAttachment()), donc un ré-rendu
@@ -1878,6 +1883,28 @@ $('#nc-add').addEventListener('click', async () => {
       if (failed.length) {
         alert(`${failed.length} pièce(s) jointe(s) n'ont pas pu être envoyées : ${failed[0].reason.message}`);
       }
+
+      // Les dessins insérés dans le texte portaient un marqueur provisoire
+      // (`![att:tmpN]`, N = rang dans la file) faute d'identifiant avant la
+      // création. Maintenant que le serveur les a attribués, on réécrit le
+      // contenu avec les vrais ids. Second appel assumé : impossible de
+      // connaître ces ids avant d'avoir créé la notask ET envoyé les
+      // fichiers.
+      let contenuFinal = content;
+      let remplace = false;
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return;
+        const marqueur = `![att:tmp${i}]`;
+        if (!contenuFinal.includes(marqueur)) return;
+        contenuFinal = contenuFinal.split(marqueur).join(`![att:${r.value.id}]`);
+        remplace = true;
+      });
+      if (remplace && !composerChecklist) {
+        await api('/notes/' + created.id, {
+          method: 'PATCH',
+          body: { content: await encryptField(contenuFinal) },
+        });
+      }
     }
 
     resetComposer();
@@ -2382,6 +2409,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
   $('#dns-content').innerHTML = renderFormatted(note.content || '');
+  hydrateInlineImages($('#dns-content'), note);
   renderDnsMode();
   $('#dns-due').value = note.due_at || '';
   renderNoteDueBtnSimple();
@@ -2470,6 +2498,10 @@ function richToText(root) {
       case 'u': return '__' + inner() + '__';
       case 'pre': return '```' + node.textContent.replace(/\u200b/g, '') + '```';
       case 'code': return '`' + node.textContent.replace(/\u200b/g, '') + '`';
+      // Image insérée dans le texte (dessin/tableau) : on ne garde qu'un
+      // marqueur avec l'id de la pièce jointe, jamais les octets ni une
+      // URL temporaire — voir NOTE_IMG_MARK et hydrateInlineImages().
+      case 'img': return node.dataset.att ? `![att:${node.dataset.att}]` : '';
       case 'div': case 'p': return '\n' + inner();
       default: return inner();
     }
@@ -2481,8 +2513,29 @@ function richToText(root) {
    notes en texte libre sur la carte — jamais sur du HTML non échappé
    (escapeHtml tourne toujours en premier, la mise en forme s'applique après
    coup sur le texte déjà échappé). */
+/* Marqueur d'image insérée dans le corps d'une notask : `![att:12]`, où 12
+   est l'id de la pièce jointe. Stocké tel quel dans le texte (donc chiffré
+   avec lui) ; l'image n'est déchiffrée et affichée qu'au rendu, par
+   hydrateInlineImages(). Ce détour évite de mettre une URL temporaire ou
+   des octets dans le contenu — seul l'identifiant voyage. */
+const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
+
+/* Remplace les <img data-att> d'un conteneur déjà rendu par leur vraie
+   source, déchiffrée à la demande. Appelé après chaque insertion de HTML
+   contenant du contenu de notask (carte ou édition rapide). */
+function hydrateInlineImages(root, note) {
+  const list = (note && note.attachments) || [];
+  root.querySelectorAll('img.note-inline-img[data-att]').forEach((img) => {
+    if (img.src) return;
+    const att = list.find((a) => String(a.id) === img.dataset.att);
+    if (!att) return;
+    loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
+  });
+}
+
 function renderFormatted(text) {
   let html = escapeHtml(text);
+  html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
@@ -2871,13 +2924,57 @@ function openWhiteboard(note, source) {
   });
 }
 
+/* Le dessin s'insère DANS le texte, à l'endroit où était le curseur avant
+   d'ouvrir l'outil — pas en pièce jointe reléguée en bas de carte. Le
+   curseur étant perdu dès que le focus part vers le bouton, on mémorise la
+   position au tout dernier moment utile : le mousedown du bouton, qui
+   précède le changement de focus. */
+let inlineDrawTarget = null;   // zone contenteditable visée
+let inlineDrawRange = null;    // position du curseur dedans
+
+function memoriserCurseur(editable) {
+  inlineDrawTarget = editable;
+  inlineDrawRange = null;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const r = sel.getRangeAt(0);
+  if (editable.contains(r.commonAncestorContainer)) inlineDrawRange = r.cloneRange();
+}
+
+/* Insère l'image à la position mémorisée (ou à la fin, si le curseur
+   n'était pas dans la zone de texte), suivie d'un saut de ligne pour
+   pouvoir continuer à écrire dessous. */
+function insererImageDansContenu(attId, apercuUrl) {
+  const editable = inlineDrawTarget;
+  if (!editable) return false;
+  const img = document.createElement('img');
+  img.className = 'note-inline-img';
+  img.dataset.att = String(attId);
+  // Aperçu immédiat depuis le blob qu'on vient de produire : inutile de
+  // redemander puis redéchiffrer la pièce jointe qu'on a déjà en main.
+  if (apercuUrl) img.src = apercuUrl;
+  const saut = document.createElement('br');
+
+  if (inlineDrawRange && editable.contains(inlineDrawRange.commonAncestorContainer)) {
+    inlineDrawRange.deleteContents();
+    inlineDrawRange.insertNode(saut);
+    inlineDrawRange.insertNode(img);
+  } else {
+    editable.append(img, saut);
+  }
+  inlineDrawRange = null;
+  return true;
+}
+
 // Icône pinceau (et non un écran) : c'est l'action "dessiner" qu'on veut
 // reconnaître, la même que la pointe pinceau de l'éditeur.
 $('#dns-board-btn').innerHTML = ICONS.imgBrush;
+$('#dns-board-btn').addEventListener('mousedown', () => memoriserCurseur($('#dns-content')));
 $('#dns-board-btn').addEventListener('click', () => {
   if (state.editingNote) openWhiteboard(state.editingNote, 'dns');
 });
 $('#nc-board-btn').innerHTML = ICONS.imgBrush;
+$('#nc-board-btn').addEventListener('mousedown', () => memoriserCurseur($('#nc-content')));
 $('#nc-board-btn').addEventListener('click', () => {
   composerExpand();
   openWhiteboard(null, 'nc');
@@ -3228,10 +3325,15 @@ async function imgEditorPersistBoard() {
   if (!blob) throw new Error("Impossible d'enregistrer le tableau.");
   const name = `tableau-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.png`;
   const file = new File([blob], name, { type: 'image/png' });
+  const apercu = URL.createObjectURL(blob);
 
   if (imgEditor.source === 'nc') {
+    // La notask n'existe pas encore : pas d'identifiant de pièce jointe à
+    // référencer. On pose un marqueur provisoire, remplacé par le vrai id
+    // juste après la création (voir le gestionnaire de #nc-add).
+    const idProvisoire = 'tmp' + composerPendingFiles.length;
     composerPendingFiles.push(file);
-    renderComposerAttachments();
+    insererImageDansContenu(idProvisoire, apercu);
     return { blob, name };
   }
 
@@ -3241,6 +3343,9 @@ async function imgEditorPersistBoard() {
   created.meta = { name, mime: 'image/png' };
   if (!note.attachments) note.attachments = [];
   note.attachments.push(created);
+  // Insérée dans le texte, à la position mémorisée — et pas seulement
+  // ajoutée à la liste des pièces jointes en bas de carte.
+  insererImageDansContenu(created.id, apercu);
   return { blob, name };
 }
 
@@ -3660,8 +3765,11 @@ async function ouvrirNoteParId(noteId) {
   openNoteSimpleDialog(note);
 }
 
-/* Petits ronds de comptage dans le menu de gauche (nav-late/today/upcoming/
-   tasks). Pas de déchiffrement ici : `bucket` est calculé côté serveur à
+/* Rond de comptage de "Notasks Prévues" dans le menu de gauche (les entrées
+   par échéance ont été retirées du menu ; les vues correspondantes existent
+   toujours, seuls leurs raccourcis ont disparu — d'où le garde-fou dans
+   set(), qui ignore simplement un compteur absent).
+   Pas de déchiffrement ici : `bucket` est calculé côté serveur à
    partir de due_at/done, jamais chiffré — on n'a besoin que de ce champ
    pour compter, inutile de déchiffrer texte/titre pour un simple nombre.
    Volontairement indépendant de loadAgenda() : le badge "à venir" doit
@@ -3684,9 +3792,6 @@ async function updateTaskBadges() {
     el.hidden = n === 0;
   };
   set('count-tasks', total);
-  set('count-late', counts.late);
-  set('count-today', counts.today);
-  set('count-upcoming', counts.upcoming);
 }
 
 /* --------------------------- Colonne d'échéances --------------------------
