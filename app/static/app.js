@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-gelatine-1s-26';
+const BUILD_VERSION = '2026-07-31-selection-copie-27';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -735,6 +735,53 @@ function renderIconBtn(btn, iconKey) {
   btn.innerHTML = iconKey && ICON_CHOICES[iconKey] ? ICON_CHOICES[iconKey] : ICONS.plus;
   btn.classList.toggle('has-icon', !!iconKey);
 }
+
+/* Vrai si le clic qu'on vient de recevoir termine une sélection de texte
+   faite dans `el`. Un glisser pour sélectionner se termine par un
+   "click" tout à fait normal : sans ce garde-fou, relâcher la souris après
+   avoir surligné du texte ouvre la notask et fait perdre la sélection —
+   impossible de copier quoi que ce soit. */
+function clicTermineUneSelection(el) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return false;
+  // La sélection doit bien appartenir à cet élément : une sélection
+  // laissée ailleurs sur la page ne doit pas bloquer l'ouverture.
+  const noeud = sel.anchorNode;
+  return !!noeud && el.contains(noeud.nodeType === 1 ? noeud : noeud.parentNode);
+}
+
+/* --------------------- Copie par clic droit + bulle ---------------------
+   Clic droit sur une sélection : copie immédiate, sans menu contextuel ni
+   sous-menu, avec une petite bulle éphémère de confirmation. */
+function afficherBulleCopie(x, y, texte) {
+  const bulle = document.createElement('div');
+  bulle.className = 'copy-bubble';
+  bulle.textContent = texte;
+  bulle.style.left = `${x}px`;
+  bulle.style.top = `${y}px`;
+  document.body.appendChild(bulle);
+  setTimeout(() => bulle.remove(), 1400);
+}
+
+document.addEventListener('contextmenu', async (e) => {
+  // Le menu latéral garde son propre raccourci au clic droit (suppression
+  // d'un libellé) : on ne le lui prend pas.
+  if (e.target.closest('.drawer')) return;
+
+  const sel = window.getSelection();
+  const texte = sel ? sel.toString() : '';
+  if (!texte.trim()) return;   // pas de sélection : menu contextuel normal
+
+  e.preventDefault();
+  try {
+    await navigator.clipboard.writeText(texte);
+    afficherBulleCopie(e.clientX, e.clientY, 'Copié');
+  } catch {
+    // Refus du navigateur (page non sécurisée, permission) : on le dit,
+    // plutôt que de laisser croire que la copie a eu lieu.
+    afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
+  }
+});
 
 /* ------------------ Animation d'ouverture des dialogues ------------------
    La boîte grandit depuis le point cliqué, avec un rebond de matière
@@ -1481,8 +1528,11 @@ function renderSearchHits() {
     // Clic ailleurs sur la carte : ouvre la notask, comme dans la mosaïque.
     el.addEventListener('click', (e) => {
       // Ni la navigation entre occurrences, ni un simple défilement de
-      // l'extrait ne doivent ouvrir la notask.
+      // l'extrait, ni la fin d'une sélection de texte ne doivent ouvrir la
+      // notask — c'est justement dans ces cartes qu'on vient lire et
+      // recopier un extrait.
       if (e.target.closest('.hit-nav')) return;
+      if (clicTermineUneSelection(el)) return;
       openNoteSimpleDialog(n);
     });
 
@@ -1670,6 +1720,7 @@ function renderNotes() {
       // aucun élément interactif dedans) : plus besoin de les exclure ici,
       // cliquer dessus ouvre l'édition rapide comme le reste de la carte.
       if (e.target.closest('.pin-btn, .actions button, .palette, .note-attachments, input')) return;
+      if (clicTermineUneSelection(el)) return;
       openNoteSimpleDialog(n);
     });
 
@@ -4176,6 +4227,7 @@ function renderTasks() {
       // l'ouverture deux fois d'affilée.
       card.addEventListener('click', (e) => {
         if (e.target.closest('input, .task-origin')) return;
+        if (clicTermineUneSelection(card)) return;
         ouvrirNoteParId(t.note_id);
       });
 

@@ -1551,6 +1551,46 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* Bulle "Copié" : même ressort gélatine que l'ouverture des fenêtres, en
+   plus court, suivie d'un effacement en fondu. Deux animations enchaînées
+   sur le même élément ; la seconde est en `forwards` et NON `both` — avec
+   `both` son remplissage arrière s'appliquerait dès l'instant 0 et
+   écraserait la transformation de la gélatine pendant tout le délai. */
+.copy-bubble {
+  position: fixed;
+  z-index: 4000;
+  transform: translate(-50%, -140%);
+  transform-origin: 50% 100%;
+  padding: .3rem .7rem;
+  border-radius: var(--shape-full);
+  background: #42a5f5;           /* bleu cuillère */
+  color: #0d1b2a;
+  font-size: .8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;          /* ne doit jamais gêner le clic suivant */
+  box-shadow: var(--elev-2);
+  animation: copy-bubble-in .7s linear both, copy-bubble-out .3s ease 1s forwards;
+}
+/* Reprend les étapes de dlg-gelatine, en conservant le décalage
+   translate(-50%, -140%) qui centre la bulle au-dessus du pointeur — une
+   animation de `transform` remplace la propriété entière, le décalage doit
+   donc être répété dans chaque étape. */
+@keyframes copy-bubble-in {
+  0%   { transform: translate(-50%, -140%) scale(0.25, 0.25); opacity: 0; }
+  10%  { transform: translate(-50%, -140%) scale(0.87, 0.63); opacity: .7; }
+  20%  { transform: translate(-50%, -140%) scale(0.95, 0.88); opacity: 1; }
+  30%  { transform: translate(-50%, -140%) scale(0.91, 1.03); }
+  40%  { transform: translate(-50%, -140%) scale(0.96, 1.03); }
+  55%  { transform: translate(-50%, -140%) scale(1.03, 0.97); }
+  70%  { transform: translate(-50%, -140%) scale(0.99, 1.00); }
+  85%  { transform: translate(-50%, -140%) scale(0.99, 1.01); }
+  100% { transform: translate(-50%, -140%) scale(1, 1); }
+}
+@keyframes copy-bubble-out {
+  to { opacity: 0; transform: translate(-50%, -190%) scale(1, 1); }
+}
 .dlg-open-anim {
   /* 1 s, et timing LINÉAIRE : le mouvement est entièrement décrit par les
      étapes ci-dessus. Une courbe d'accélération viendrait s'ajouter au
