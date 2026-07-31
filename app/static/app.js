@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-tableau-blanc-dessin-9';
+const BUILD_VERSION = '2026-07-31-tableau-pleine-surface-11';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -2636,11 +2636,14 @@ $('#dlg-note-simple').addEventListener('click', (e) => {
    tout autre moyen (Échap, clic à côté, bouton "Fermer sans enregistrer")
    abandonne les annotations sans rien envoyer au serveur. */
 
-/* Dimensions du tableau blanc. L'utilisateur a demandé "1600x100" —
-   manifestement tronqué (une bande de 100 px de haut ne se dessine pas) :
-   on part sur 1600x1000, à ajuster ici en une ligne si besoin. */
+/* Résolution de référence du tableau blanc. Ce n'est PAS un format figé :
+   le canvas est dimensionné sur la place réellement disponible à
+   l'ouverture (voir openWhiteboard), pour que la surface dessinable
+   remplisse la fenêtre sans bandes vides. Ces valeurs servent seulement
+   de repère de finesse et de plancher de résolution. */
 const BOARD_WIDTH = 1600;
-const BOARD_HEIGHT = 1000;
+const BOARD_MIN_WIDTH = 640;
+const BOARD_MIN_HEIGHT = 400;
 
 const imgEditor = {
   att: null,       // pièce jointe en cours d'édition (null en mode tableau blanc)
@@ -2803,6 +2806,9 @@ async function openImageEditor(att, note, source) {
 
   imgEditor.att = att;
   imgEditorReset(note, source, 'photo');
+  // Une photo garde ses marges (elle a son propre rapport, on ne l'étire
+  // pas) — contrairement au tableau blanc, voir openWhiteboard().
+  $('#dlg-image-editor').classList.remove('board-mode');
 
   const img = new Image();
   img.onload = () => {
@@ -2832,21 +2838,46 @@ function openWhiteboard(note, source) {
   imgEditor.att = null;
   imgEditorReset(note, source, 'board');
 
-  const canvas = imgEditorCanvas();
-  canvas.width = BOARD_WIDTH;
-  canvas.height = BOARD_HEIGHT;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  imgEditorSetBackground(imgEditor.bg);
-  imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
-  $('#dlg-image-editor').showModal();
+  const dlg = $('#dlg-image-editor');
+  // Classe posée avant l'ouverture : elle supprime les marges autour du
+  // canvas (voir .board-mode dans style.css) pour que la zone dessinable
+  // occupe toute la place, sans bandes noires autour.
+  dlg.classList.add('board-mode');
+  dlg.showModal();
+
+  // La taille du tableau est calculée SUR la place réellement disponible,
+  // pas figée à un format arbitraire : un canvas 1600x1000 dans une
+  // fenêtre d'un autre rapport laisse forcément des bandes vides.
+  // Mesure possible seulement une fois la boîte affichée, d'où le
+  // requestAnimationFrame.
+  requestAnimationFrame(() => {
+    const wrap = $('#img-editor-canvas-wrap');
+    const cs = getComputedStyle(wrap);
+    const dispoW = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const dispoH = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+
+    // Résolution de dessin plus fine que l'affichage (trait net, et le PNG
+    // reste exploitable si on l'agrandit ensuite), plafonnée pour ne pas
+    // fabriquer un canvas démesuré sur un grand écran.
+    const echelle = Math.min(2, Math.max(1, BOARD_WIDTH / Math.max(1, dispoW)));
+    const canvas = imgEditorCanvas();
+    canvas.width = Math.max(BOARD_MIN_WIDTH, Math.round(Math.max(1, dispoW) * echelle));
+    canvas.height = Math.max(BOARD_MIN_HEIGHT, Math.round(Math.max(1, dispoH) * echelle));
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    imgEditorSetBackground(imgEditor.bg);
+    imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+  });
 }
 
-$('#dns-board-btn').innerHTML = ICONS.board;
+// Icône pinceau (et non un écran) : c'est l'action "dessiner" qu'on veut
+// reconnaître, la même que la pointe pinceau de l'éditeur.
+$('#dns-board-btn').innerHTML = ICONS.imgBrush;
 $('#dns-board-btn').addEventListener('click', () => {
   if (state.editingNote) openWhiteboard(state.editingNote, 'dns');
 });
-$('#nc-board-btn').innerHTML = ICONS.board;
+$('#nc-board-btn').innerHTML = ICONS.imgBrush;
 $('#nc-board-btn').addEventListener('click', () => {
   composerExpand();
   openWhiteboard(null, 'nc');
@@ -3156,7 +3187,10 @@ $('#dlg-image-editor').addEventListener('cancel', (e) => {
 
 // Sortir du plein écran quand la boîte se ferme, sinon la classe resterait
 // posée et la prochaine ouverture démarrerait en plein écran sans raison.
-$('#dlg-image-editor').addEventListener('close', () => imgEditorSetFullscreen(false));
+$('#dlg-image-editor').addEventListener('close', () => {
+  imgEditorSetFullscreen(false);
+  $('#dlg-image-editor').classList.remove('board-mode');
+});
 
 /* Aplatit le canvas et l'envoie au serveur (PUT, même id) — utilisé à la
    fois par "Enregistrer" et par "Télécharger" (qui enregistre d'abord la
