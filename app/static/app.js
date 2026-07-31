@@ -1,5 +1,13 @@
 /* notask — interface web. Vanilla JS, aucun framework. */
 
+// Repère de version, à bumper à chaque changement notable de ce fichier —
+// affiché bien visible au chargement pour trancher, sans ambiguïté, entre
+// "le navigateur affiche encore une version en cache" et "il y a un vrai
+// bug dans le code déployé". Coller ce numéro (visible dans la console,
+// F12) résout en un coup d'œil ce genre de doute.
+const BUILD_VERSION = '2026-07-31-labels-composer-1';
+console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
+
 const TOKEN_KEY = 'notask_token';
 const COLORS = [
   'default', 'red', 'coral', 'orange', 'amber', 'yellow', 'lime',
@@ -753,6 +761,10 @@ function enterApp() {
 
   // Icônes du menu latéral et logo
   $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
+  // Survoler le logo affiche la version chargée — pas besoin d'ouvrir la
+  // console pour vérifier si un déploiement a bien pris effet (voir
+  // BUILD_VERSION en haut du fichier).
+  $('#brand-logo').title = 'build ' + BUILD_VERSION;
   $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notasks</span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
@@ -1568,6 +1580,12 @@ let composerItems = [{ text: '', checked: false }];
 // disponibles dès la création (voir la barre d'outils secondaire ci-dessous).
 let composerColor = 'default';
 let composerLabelIds = [];
+// Fichiers choisis avant que la notask n'existe côté serveur : gardés en
+// mémoire (File bruts, pas encore chiffrés/envoyés) et uploadés seulement
+// une fois la notask créée (voir le handler #nc-add), contrairement à
+// handleIncomingAttachments() en édition rapide qui envoie immédiatement
+// puisque la note existe déjà.
+let composerPendingFiles = [];
 // Barre d'outils secondaire masquée tant qu'on n'a pas touché au titre ou
 // au corps — voir composerExpand() et les écouteurs "focus" plus bas.
 let composerExpanded = false;
@@ -1599,12 +1617,14 @@ initTextareaResize($('#nc-content-resize'), $('#nc-content'));
 function resetComposer() {
   $('#nc-title').value = '';
   $('#nc-description').value = '';
-  $('#nc-content').value = '';
+  $('#nc-content').innerHTML = '';
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
   composerColor = 'default';
   composerLabelIds = [];
   composerExpanded = false;
+  composerPendingFiles = [];
+  renderComposerAttachments();
   $('#nc-due').value = '';
   renderNcDueBtn();
   $('#nc-colors').hidden = true;
@@ -1620,7 +1640,12 @@ function composerExpand() {
   composerExpanded = true;
   renderComposer();
 }
+// Le clic peut partir de n'importe quel champ du composeur (titre,
+// description ou corps) — pas seulement titre/corps comme au tout premier
+// jet, qui laissait la barre masquée si on cliquait d'abord dans la
+// description.
 $('#nc-title').addEventListener('focus', composerExpand);
+$('#nc-description').addEventListener('focus', composerExpand);
 $('#nc-content').addEventListener('focus', composerExpand);
 
 renderIconBtn($('#nc-icon-btn'), null);
@@ -1685,10 +1710,16 @@ $('#nc-toggle-checklist').addEventListener('click', () => {
   composerExpand();
   if (!composerChecklist) {
     // Bascule depuis le texte libre : chaque ligne déjà tapée devient un élément.
-    const lignes = $('#nc-content').value.split('\n').filter((l) => l.trim());
+    const lignes = richToText($('#nc-content')).split('\n').filter((l) => l.trim());
     composerItems = lignes.length
       ? lignes.map((l) => ({ text: l.trim(), checked: false }))
       : [{ text: '', checked: false }];
+  } else {
+    // Bascule inverse : les éléments redeviennent des paragraphes (même
+    // logique que #dns-toggle-checklist en édition rapide).
+    $('#nc-content').innerHTML = renderFormatted(
+      composerItems.map((i) => i.text).filter(Boolean).join('\n')
+    );
   }
   composerChecklist = !composerChecklist;
   renderComposer();
@@ -1767,6 +1798,85 @@ $('#nc-due-btn').addEventListener('click', () => {
 });
 renderNcDueBtn();
 
+// Mise en forme (gras/italique/souligné/code) : même mécanique que
+// #dns-fmt-toolbar en édition rapide (wrapSelectionRich()/richToText(),
+// définies plus bas dans ce fichier mais utilisables ici — déclarations de
+// fonction, donc "remontées" (hoisted) avant l'exécution de ce script).
+$('#nc-fmt-group').querySelectorAll('button[data-fmt]').forEach((btn) => {
+  if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('click', () => wrapSelectionRich($('#nc-content'), btn.dataset.fmt));
+});
+
+// Pièces jointes : la notask n'existe pas encore, les fichiers restent en
+// mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
+// local seulement — pas de chiffrement/upload avant que la notask existe.
+$('#nc-attach-btn').innerHTML = ICONS.attach;
+function renderComposerAttachments() {
+  const box = $('#nc-attachments');
+  box.innerHTML = '';
+  box.hidden = composerPendingFiles.length === 0;
+  composerPendingFiles.forEach((file, idx) => {
+    const isImage = (file.type || '').startsWith('image/');
+    const chip = document.createElement('div');
+    chip.className = 'dns-attach-chip' + (isImage ? ' is-image' : '');
+    if (isImage) {
+      chip.innerHTML = `<img class="dns-attach-thumb" alt="${escapeHtml(file.name || '')}">
+        <button type="button" class="dns-attach-remove" title="Retirer">${ICONS.close}</button>`;
+      chip.querySelector('img').src = URL.createObjectURL(file);
+    } else {
+      chip.innerHTML = `<span class="dns-attach-icon">${ICONS.file}</span>
+        <span class="dns-attach-name" title="${escapeHtml(file.name || '')}">${escapeHtml(file.name || 'Fichier')}</span>
+        <span class="dns-attach-size">${formatFileSize(file.size)}</span>
+        <button type="button" class="dns-attach-remove" title="Retirer">${ICONS.close}</button>`;
+    }
+    chip.querySelector('.dns-attach-remove').addEventListener('click', () => {
+      composerPendingFiles.splice(idx, 1);
+      renderComposerAttachments();
+    });
+    box.appendChild(chip);
+  });
+}
+
+function queueComposerFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  composerExpand();
+  composerPendingFiles.push(...Array.from(fileList));
+  renderComposerAttachments();
+}
+
+$('#nc-attach-btn').addEventListener('click', () => $('#nc-attach-input').click());
+$('#nc-attach-input').addEventListener('change', (e) => {
+  queueComposerFiles(e.target.files);
+  e.target.value = ''; // permet de rechoisir le même fichier ensuite
+});
+
+// Coller une image directement dans le composeur, comme en édition rapide.
+$('.note-composer').addEventListener('paste', (e) => {
+  const files = Array.from(e.clipboardData ? e.clipboardData.items : [])
+    .filter((it) => it.kind === 'file')
+    .map((it) => it.getAsFile())
+    .filter(Boolean);
+  if (!files.length) return;
+  e.preventDefault();
+  queueComposerFiles(files);
+});
+
+// Glisser-déposer un fichier sur le composeur.
+const ncComposerEl = $('.note-composer');
+['dragenter', 'dragover'].forEach((evt) => ncComposerEl.addEventListener(evt, (e) => {
+  e.preventDefault();
+  ncComposerEl.classList.add('drag-over');
+}));
+['dragleave', 'dragend'].forEach((evt) => ncComposerEl.addEventListener(evt, () => {
+  ncComposerEl.classList.remove('drag-over');
+}));
+ncComposerEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  ncComposerEl.classList.remove('drag-over');
+  queueComposerFiles(e.dataTransfer.files);
+});
+
 // Bouton explicite, indépendant du raccourci Entrée — toujours visible et fiable.
 $('#nc-add-item').addEventListener('click', () => {
   composerItems.push({ text: '', checked: false });
@@ -1778,10 +1888,10 @@ $('#nc-cancel').addEventListener('click', resetComposer);
 
 $('#nc-add').addEventListener('click', async () => {
   const title = $('#nc-title').value.trim();
-  const content = $('#nc-content').value.trim();
+  const content = richToText($('#nc-content')).trim();
   const items = composerItems.filter((i) => i.text.trim());
 
-  if (!title && !content && !(composerChecklist && items.length)) return;
+  if (!title && !content && !(composerChecklist && items.length) && !composerPendingFiles.length) return;
 
   try {
     const body = {
@@ -1797,7 +1907,22 @@ $('#nc-add').addEventListener('click', async () => {
       due_at: $('#nc-due').value || null,
       label_ids: composerLabelIds,
     };
-    await api('/notes', { method: 'POST', body });
+    const created = await api('/notes', { method: 'POST', body });
+
+    // Pièces jointes : la notask vient tout juste d'obtenir un id, on peut
+    // enfin les envoyer (voir le commentaire sur composerPendingFiles).
+    // Une erreur d'upload ne doit pas faire perdre la notask déjà créée :
+    // signalée à part, sans bloquer la réinitialisation du composeur.
+    if (composerPendingFiles.length) {
+      const files = composerPendingFiles;
+      composerPendingFiles = [];
+      const results = await Promise.allSettled(files.map((f) => uploadAttachment(created.id, f)));
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length) {
+        alert(`${failed.length} pièce(s) jointe(s) n'ont pas pu être envoyées : ${failed[0].reason.message}`);
+      }
+    }
+
     resetComposer();
     loadNotes();
   } catch (err) {

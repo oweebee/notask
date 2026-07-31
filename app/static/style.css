@@ -530,6 +530,30 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .composer-head { margin-bottom: .2rem; }
 #nc-content { margin-top: .375rem; }
 
+/* Contenu du composeur : contenteditable (pas <textarea>), même raison et
+   même mécanique que .dns-content-editable en édition rapide — voir le
+   commentaire là-bas. Classe séparée plutôt que réutiliser
+   .dns-content-editable telle quelle : hauteur mini bien plus petite ici
+   (le composeur démarre replié sur 2 lignes, pas 120px). Un contenteditable
+   ne supporte pas l'attribut placeholder : imité via :empty + attribut
+   data-placeholder. */
+.nc-content-editable {
+  width: 100%;
+  min-height: 44px;
+  background: transparent;
+  border: none;
+  color: var(--md-on-surface);
+  padding: .25rem 0;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.nc-content-editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--md-on-surface-variant);
+}
+.nc-content-editable .note-code-block { white-space: pre-wrap; }
+
 /* Bascule "Liste à cocher" : état enfoncé une fois activée */
 #nc-toggle-checklist.active-toggle {
   background: var(--md-secondary-container);
@@ -590,7 +614,21 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   transition: box-shadow .18s ease;
 }
 .note:hover, .note:focus-within { box-shadow: var(--elev-2); }
-.note.dragging { opacity: .4; }
+/* Petit effet de "décrochage" au moment où la carte est prise pour être
+   déplacée : une brève vibration (rotation/échelle), jouée une seule fois
+   à l'ajout de la classe .dragging (animation-fill-mode: forwards, pas de
+   boucle) — pas pendant tout le glisser, juste l'instant de la prise en
+   main. Ne s'applique qu'à l'élément laissé dans la grille (l'image de
+   glisser-déposer natif du navigateur est une capture figée, hors de
+   portée de CSS). */
+.note.dragging { opacity: .4; animation: note-pickup-wobble .22s ease-out; }
+@keyframes note-pickup-wobble {
+  0%   { transform: scale(1) rotate(0deg); }
+  25%  { transform: scale(1.035) rotate(-2deg); }
+  55%  { transform: scale(1.035) rotate(1.5deg); }
+  80%  { transform: scale(1.02) rotate(-.75deg); }
+  100% { transform: scale(1.02) rotate(0deg); }
+}
 
 /* Icône et titre sur la même ligne, icône à gauche. */
 .note-title-row {
@@ -1633,8 +1671,9 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dns-attach-remove:hover { background: rgba(242,184,181,.25); color: var(--md-error); }
 .dns-attach-remove svg { width: 13px; height: 13px; }
 
-/* Glisser-déposer un fichier sur la carte en édition simple. */
-.dns-card.drag-over {
+/* Glisser-déposer un fichier sur la carte en édition simple, ou sur le
+   composeur (même retour visuel, voir ncComposerEl dans app.js). */
+.dns-card.drag-over, .note-composer.drag-over {
   outline: 2px dashed var(--md-primary);
   outline-offset: -2px;
 }
