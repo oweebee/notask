@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-bulle-copie-dans-dialog-33';
+const BUILD_VERSION = '2026-07-31-scrollbars-copie-collante-37';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -273,6 +273,8 @@ let state = {
   // Couleur en cours d'édition dans la boîte d'édition rapide (la boîte
   // "Modifier" complète, elle, écrit directement dans state.editingNote).
   editingColor: 'default',
+  // Masquage du contenu sur l'accueil, en cours d'édition.
+  editingMasked: false,
   composerIcon: null,
   editingIcon: null,
 };
@@ -492,6 +494,9 @@ const ICONS = {
   board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M12 16.5V20"/><path d="M9 20h6"/><path d="M7 12.5l3-3 2.5 2.5 2-2"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
   fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
+
+  // Œil barré : masquage du contenu sur l'accueil.
+  maskEye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>',
 
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.8"/><path d="M15 6.5V5.8A1.8 1.8 0 0 0 13.2 4H5.8A1.8 1.8 0 0 0 4 5.8v7.4A1.8 1.8 0 0 0 5.8 15h.7"/></svg>',
 
@@ -826,6 +831,36 @@ document.addEventListener('pointerdown', (e) => {
   dernierPointDeClic = { x: e.clientX, y: e.clientY };
 }, true);
 
+/* Fermeture animée : la boîte se rétracte vers le point d'où elle est
+   sortie (transform-origin posée à l'ouverture, conservée telle quelle),
+   nettement plus vite qu'à l'ouverture — on veut relire la note, pas
+   admirer sa sortie.
+   Le `close()` réel n'a lieu qu'à la fin : l'événement "close" du <dialog>
+   se déclenche APRÈS la disparition, il est donc trop tard pour animer
+   quoi que ce soit depuis là. Repli sur minuterie si l'animation ne se
+   déclenche pas du tout (onglet en arrière-plan, animations désactivées) :
+   sans lui, la boîte ne se fermerait jamais. */
+function fermerAvecAnimation(dlg) {
+  if (!dlg.open || dlg.dataset.fermeture === '1') return;
+  dlg.dataset.fermeture = '1';
+  dlg.classList.remove('dlg-open-anim');
+  dlg.classList.add('dlg-close-anim');
+
+  const terminer = (e) => {
+    // animationend remonte depuis les enfants : la bulle "Copié", elle
+    // aussi animée et désormais placée DANS la boîte, fermerait sinon la
+    // note en plein milieu. On n'accepte que l'animation de la boîte.
+    if (e && e.target !== dlg) return;
+    if (dlg.dataset.fermeture !== '1') return;
+    delete dlg.dataset.fermeture;
+    dlg.removeEventListener('animationend', terminer);
+    dlg.classList.remove('dlg-close-anim');
+    dlg.close();
+  };
+  dlg.addEventListener('animationend', terminer);
+  setTimeout(() => terminer(null), 500);
+}
+
 function animerOuvertureDialogue(dlg) {
   const r = dlg.getBoundingClientRect();
   // transform-origin exprimée dans le repère de la boîte : le point cliqué
@@ -921,9 +956,24 @@ async function boot() {
   } catch { showLogin(); }
 }
 
+/* Pseudo en lettres alternées : une sur deux en jaune cuillère, l'autre en
+   bleu cuillère — les deux teintes du logo. Construit lettre par lettre en
+   textContent (jamais en innerHTML) : un pseudo est une donnée saisie par
+   l'utilisateur, elle n'a rien à faire dans du HTML interprété. */
+function renderWho(nom) {
+  const box = $('#who');
+  box.innerHTML = '';
+  [...(nom || '')].forEach((lettre, i) => {
+    const s = document.createElement('span');
+    s.className = i % 2 === 0 ? 'who-jaune' : 'who-bleu';
+    s.textContent = lettre;
+    box.appendChild(s);
+  });
+}
+
 function enterApp() {
   show('screen-app');
-  $('#who').textContent = state.user.username;
+  renderWho(state.user.username);
   $('#tab-admin').hidden = !state.user.is_admin;
   $('#admin-sep').hidden = !state.user.is_admin;
 
@@ -1030,7 +1080,40 @@ $('#form-login').addEventListener('submit', async (e) => {
   } catch (err) { msg($('#login-msg'), err.message); }
 });
 
-$('#btn-logout').addEventListener('click', () => { setToken(null); clearEncKey(); location.reload(); });
+function seDeconnecter() { setToken(null); clearEncKey(); location.reload(); }
+
+/* ------------------------------ Profil ------------------------------ */
+
+$('#btn-profil').addEventListener('click', () => {
+  const u = state.user || {};
+  const lignes = [
+    ['Nom d’utilisateur', u.username || '—'],
+    ['Rôle', u.is_admin ? 'Administrateur' : 'Utilisateur'],
+    ['Compte créé le', u.created_at ? formatDue(u.created_at) : '—'],
+    ['Chiffrement des notasks', u.wrapped_dek ? 'Actif' : 'Non initialisé'],
+  ];
+  const box = $('#profil-infos');
+  box.innerHTML = '';
+  for (const [nom, valeur] of lignes) {
+    const dt = document.createElement('dt');
+    dt.textContent = nom;
+    const dd = document.createElement('dd');
+    dd.textContent = valeur;
+    box.append(dt, dd);
+  }
+  $('#dlg-profil').showModal();
+  animerOuvertureDialogue($('#dlg-profil'));
+});
+$('#profil-close').addEventListener('click', () => fermerAvecAnimation($('#dlg-profil')));
+$('#dlg-profil').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  fermerAvecAnimation($('#dlg-profil'));
+});
+$('#profil-logout').addEventListener('click', seDeconnecter);
+$('#profil-password').addEventListener('click', () => {
+  $('#dlg-profil').close();
+  ouvrirChangementMotDePasse();
+});
 $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.view)));
 
 /* -------------------------------- Notes -------------------------------- */
@@ -1602,6 +1685,56 @@ function renderSearchHits() {
   layoutMosaic();
 }
 
+/* ---------------------- Masquage "matrix" d'une carte ----------------------
+   Rideau de caractères qui remplace le contenu d'une notask marquée
+   `masked`, UNIQUEMENT dans la mosaïque d'accueil : ni en édition rapide,
+   ni dans les deux recherches — on masque contre un regard de passage ou
+   une photo, pas contre soi-même en train de chercher quelque chose.
+   Le contenu réel n'est jamais mis dans le DOM de la carte : le masquer en
+   CSS le laisserait lisible dans l'inspecteur et sur une capture d'écran
+   faite par un outil qui rend le texte. */
+
+const MATRIX_GLYPHES = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789';
+const MATRIX_COLONNES = 14;
+const MATRIX_HAUTEUR = 9;   // caractères par colonne
+
+function glyphesAleatoires(n) {
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    s += MATRIX_GLYPHES[Math.floor(Math.random() * MATRIX_GLYPHES.length)];
+    if (i < n - 1) s += '\n';
+  }
+  return s;
+}
+
+function creerRideauMatrix() {
+  const box = document.createElement('div');
+  box.className = 'matrix-mask';
+  box.setAttribute('aria-hidden', 'true');
+  for (let c = 0; c < MATRIX_COLONNES; c++) {
+    const col = document.createElement('span');
+    col.className = 'matrix-col';
+    // Durée et retard tirés au sort par colonne : sans ça les colonnes
+    // descendent toutes ensemble, ce qui ne ressemble à rien.
+    col.style.animationDuration = `${3 + Math.random() * 4}s`;
+    col.style.animationDelay = `${-Math.random() * 5}s`;
+    col.textContent = glyphesAleatoires(MATRIX_HAUTEUR);
+    box.appendChild(col);
+  }
+  return box;
+}
+
+/* Une seule minuterie pour toutes les cartes masquées de la page, plutôt
+   qu'une par carte : le nombre de cartes varie à chaque rendu, et autant
+   de minuteries à créer/détruire serait une source de fuites. Chaque
+   colonne n'est renouvelée qu'une fois sur trois environ, pour que le
+   changement paraisse désordonné et non synchronisé. */
+setInterval(() => {
+  document.querySelectorAll('.matrix-col').forEach((col) => {
+    if (Math.random() < 0.34) col.textContent = glyphesAleatoires(MATRIX_HAUTEUR);
+  });
+}, 2000);
+
 function renderNotes() {
   // Recherche en profondeur active : la mosaïque laisse place aux
   // résultats détaillés (voir renderSearchHits()).
@@ -1637,6 +1770,13 @@ function renderNotes() {
     }
     if (n.description) inner += `<div class="description">${escapeHtml(n.description)}</div>`;
 
+    /* Notask masquée : titre et description restent lisibles (ils servent
+       à retrouver sa notask), tout le reste — contenu, lignes à cocher,
+       pièces jointes — est remplacé par le rideau de caractères et n'est
+       même pas construit dans le DOM. */
+    if (n.masked) {
+      inner += '<div class="matrix-slot"></div>';
+    } else {
     if (n.is_checklist) {
       inner += '<ul class="check">';
       for (const it of n.items) {
@@ -1666,6 +1806,7 @@ function renderNotes() {
       }
       inner += '</div>';
     }
+    }   // fin du bloc "notask non masquée"
 
     inner += `<div class="palette" hidden></div>
       <div class="actions">
@@ -1695,6 +1836,10 @@ function renderNotes() {
     inner += `<div class="note-labels"></div>`;
 
     el.innerHTML = inner;
+    // Rideau construit en DOM (et non en chaîne) : chaque colonne porte sa
+    // propre durée d'animation tirée au sort.
+    const emplacement = el.querySelector('.matrix-slot');
+    if (emplacement) emplacement.replaceWith(creerRideauMatrix());
     hydrateInlineImages(el, n);
     ajouterBoutonsCopieCode(el);
 
@@ -1896,6 +2041,7 @@ let composerItems = [{ text: '', checked: false }];
 // disponibles dès la création (voir la barre d'outils secondaire ci-dessous).
 let composerColor = 'default';
 let composerLabelIds = [];
+let composerMasked = false;
 // Fichiers choisis avant que la notask n'existe côté serveur : gardés en
 // mémoire (File bruts, pas encore chiffrés/envoyés) et uploadés seulement
 // une fois la notask créée (voir le handler #nc-add), contrairement à
@@ -1938,6 +2084,8 @@ function resetComposer() {
   composerItems = [{ text: '', checked: false }];
   composerColor = 'default';
   composerLabelIds = [];
+  composerMasked = false;
+  renderBoutonMasque('#nc-toggle-mask', false);
   composerExpanded = false;
   composerPendingFiles = [];
   renderComposerAttachments();
@@ -2031,6 +2179,13 @@ function renderComposerChecklistBtn() {
   btn.setAttribute('aria-label', label);
   btn.classList.toggle('active-toggle', composerChecklist);
 }
+
+$('#nc-toggle-mask').addEventListener('click', () => {
+  composerExpand();
+  composerMasked = !composerMasked;
+  renderBoutonMasque('#nc-toggle-mask', composerMasked);
+});
+renderBoutonMasque('#nc-toggle-mask', false);
 
 $('#nc-toggle-checklist').addEventListener('click', () => {
   composerExpand();
@@ -2197,6 +2352,7 @@ $('#nc-add').addEventListener('click', async () => {
       color: composerColor,
       due_at: $('#nc-due').value || null,
       label_ids: composerLabelIds,
+      masked: composerMasked,
     };
     const created = await api('/notes', { method: 'POST', body });
 
@@ -2522,7 +2678,11 @@ $('#dn-add-item').addEventListener('click', () => {
   renderNoteItems();
 });
 
-$('#dn-cancel').addEventListener('click', () => $('#dlg-note').close());
+$('#dn-cancel').addEventListener('click', () => fermerAvecAnimation($('#dlg-note')));
+$('#dlg-note').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  fermerAvecAnimation($('#dlg-note'));
+});
 
 /* Sauvegarde du dialogue d'édition complet — utilisée par le bouton
    Enregistrer, et par le clic en dehors de la fenêtre (qui enregistre puis
@@ -2571,7 +2731,7 @@ async function saveNoteDialog() {
       body.items = [];
     }
     await api('/notes/' + n.id, { method: 'PATCH', body });
-    $('#dlg-note').close();
+    fermerAvecAnimation($('#dlg-note'));
     // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
     if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
     else loadNotes();
@@ -2727,6 +2887,24 @@ dnsCard.addEventListener('drop', (e) => {
    fmt-toolbar (gras/italique/souligné/code), ce bouton reste visible dans
    les deux modes — voir #dns-fmt-group dans index.html, qui regroupe les
    seuls boutons de mise en forme et se masque seul en mode liste. */
+/* Bouton de masquage : état enfoncé quand il est actif, dans les deux
+   barres. Le rendu est identique, seule la source de l'état change. */
+function renderBoutonMasque(btnSel, actif) {
+  const btn = $(btnSel);
+  btn.innerHTML = ICONS.maskEye;
+  btn.classList.toggle('active-toggle', !!actif);
+  const label = actif
+    ? "Contenu masqué sur l'accueil — cliquer pour l'afficher"
+    : "Masquer le contenu sur l'accueil";
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+$('#dns-toggle-mask').addEventListener('click', () => {
+  state.editingMasked = !state.editingMasked;
+  renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
+});
+
 function renderDnsMode() {
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-fmt-group').hidden = state.editingIsChecklist;
@@ -2768,6 +2946,8 @@ function openNoteSimpleDialog(note) {
   pendingAttachmentUploads = [];
   state.editingLabelIds = [...(note.label_ids || [])];
   state.editingColor = note.color || 'default';
+  state.editingMasked = !!note.masked;
+  renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
   $('#dns-colors').hidden = true;
 
   $('#dns-title').value = note.title;
@@ -3021,7 +3201,13 @@ function ajouterBoutonsCopieCode(root) {
         afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
       }
     });
-    zone.appendChild(btn);
+    // Bloc : le bouton est placé EN TÊTE et flotte à droite (voir le CSS),
+    // pour rester en haut à droite du bloc et suivre le défilement d'un
+    // code sur plusieurs lignes. Placé en fin, il se serait retrouvé tout
+    // en bas, hors de vue. Code en ligne : à la suite du texte, là où on
+    // l'attend.
+    if (zone.tagName === 'PRE') zone.prepend(btn);
+    else zone.appendChild(btn);
   });
 }
 
@@ -3142,6 +3328,7 @@ async function saveNoteSimpleDialog() {
       is_checklist: state.editingIsChecklist,
       label_ids: state.editingLabelIds,
       color: state.editingColor || n.color,
+      masked: state.editingMasked,
     };
     // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
     // celui du mode courant : sinon, après une bascule, l'ancien contenu
@@ -3167,7 +3354,12 @@ async function saveNoteSimpleDialog() {
 // Échap) déclenche l'événement natif "close", seul point d'enregistrement.
 $('#dlg-note-simple').addEventListener('close', saveNoteSimpleDialog);
 $('#dlg-note-simple').addEventListener('click', (e) => {
-  if (e.target === $('#dlg-note-simple')) $('#dlg-note-simple').close();
+  if (e.target === $('#dlg-note-simple')) fermerAvecAnimation($('#dlg-note-simple'));
+});
+// Échap : on reprend la main pour animer, puis on ferme nous-mêmes.
+$('#dlg-note-simple').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  fermerAvecAnimation($('#dlg-note-simple'));
 });
 
 /* ---------------------------- Éditeur d'image ----------------------------
@@ -4510,13 +4702,267 @@ $('#du-save').addEventListener('click', async () => {
   } catch (err) { msg($('#du-msg'), err.message); }
 });
 
+/* ------------------------ Outils : export / import ------------------------
+   Sauvegarde complète de l'application dans un fichier unique, chiffré par
+   un mot de passe choisi ici — volontairement INDÉPENDANT de celui du
+   compte : l'archive doit rester lisible même si le compte est perdu, or
+   la clé des notasks (DEK) est justement enveloppée par le mot de passe du
+   compte. Le contenu est donc déchiffré côté client, puis rechiffré pour
+   l'archive.
+
+   Format : "NOTASKX1" | sel (16 o) | iv (12 o) | AES-GCM(JSON compressé
+   en UTF-8). Sel et itérations PBKDF2 sont dans le fichier plutôt que
+   codés en dur, pour qu'un futur changement de paramètres n'empêche pas de
+   relire les archives déjà produites. */
+
+const EXPORT_MAGIC = 'NOTASKX1';
+const EXPORT_ITERATIONS = 210000;
+
+async function deriveArchiveKey(password, salt) {
+  const baseKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: EXPORT_ITERATIONS, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+/* Rassemble tout le contenu EN CLAIR : notasks (y compris archivées et en
+   corbeille), leurs lignes, leurs pièces jointes déchiffrées, les libellés
+   et les réglages. */
+async function collecterExport(progres) {
+  progres('Lecture des libellés…');
+  const labels = await api('/labels');
+
+  progres('Lecture des notasks…');
+  const lots = await Promise.all([
+    api('/notes?' + new URLSearchParams({ archived: false })),
+    api('/notes?' + new URLSearchParams({ archived: true })),
+    api('/notes?' + new URLSearchParams({ trashed: true })),
+  ]);
+  const notes = [].concat(...lots);
+  await Promise.all(notes.map(decryptNote));
+
+  let reglages = {};
+  try { reglages = await api('/settings'); } catch { reglages = {}; }
+
+  const notesExport = [];
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i];
+    progres(`Pièces jointes… (${i + 1}/${notes.length})`);
+    const pieces = [];
+    for (const att of (n.attachments || [])) {
+      try {
+        const r = await loadAttachment(att);
+        pieces.push({
+          name: r.name,
+          mime: r.mime,
+          data: bytesToBase64(new Uint8Array(await r.blob.arrayBuffer())),
+        });
+      } catch {
+        // Fichier illisible (disparu du disque, clé changée) : on
+        // n'interrompt pas toute la sauvegarde pour autant.
+      }
+    }
+    notesExport.push({
+      title: n.title, description: n.description, content: n.content,
+      color: n.color, pinned: n.pinned, archived: n.archived,
+      is_checklist: n.is_checklist, due_at: n.due_at, icon: n.icon,
+      label_ids: n.label_ids || [],
+      trashed: !!n.trashed_at,
+      items: (n.items || []).map((it) => ({
+        text: it.text, checked: it.checked, due_at: it.due_at,
+      })),
+      attachments: pieces,
+    });
+  }
+
+  return {
+    format: EXPORT_MAGIC,
+    exported_at: new Date().toISOString(),
+    // `id` conservé : les notasks référencent leurs libellés par
+    // identifiant, il faut pouvoir refaire le lien à l'import (voir
+    // nomParAncienId). Ces identifiants ne servent qu'à ça, ils n'ont
+    // aucune valeur sur une autre installation.
+    labels: labels.map((l) => ({ id: l.id, name: l.name, color: l.color, position: l.position })),
+    notes: notesExport,
+    settings: reglages,
+  };
+}
+
+$('#btn-outils').addEventListener('click', () => {
+  $('#export-pw').value = ''; $('#export-pw2').value = '';
+  $('#import-pw').value = ''; $('#import-file').value = '';
+  msg($('#export-msg'), ''); msg($('#import-msg'), '');
+  $('#dlg-outils').showModal();
+  animerOuvertureDialogue($('#dlg-outils'));
+});
+$('#outils-close').addEventListener('click', () => fermerAvecAnimation($('#dlg-outils')));
+$('#dlg-outils').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  fermerAvecAnimation($('#dlg-outils'));
+});
+
+$('#export-run').addEventListener('click', async () => {
+  const pw = $('#export-pw').value;
+  if (pw.length < 8) return msg($('#export-msg'), 'Mot de passe : 8 caractères minimum.');
+  if (pw !== $('#export-pw2').value) return msg($('#export-msg'), 'Les deux mots de passe ne correspondent pas.');
+
+  const btn = $('#export-run');
+  btn.disabled = true;
+  try {
+    const avancement = (t) => msg($('#export-msg'), t, 'ok');
+    const donnees = await collecterExport(avancement);
+
+    avancement('Chiffrement…');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveArchiveKey(pw, salt);
+    const clair = new TextEncoder().encode(JSON.stringify(donnees));
+    const chiffre = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, clair));
+
+    const entete = new TextEncoder().encode(EXPORT_MAGIC);
+    const fichier = new Uint8Array(entete.length + salt.length + iv.length + chiffre.length);
+    fichier.set(entete, 0);
+    fichier.set(salt, entete.length);
+    fichier.set(iv, entete.length + salt.length);
+    fichier.set(chiffre, entete.length + salt.length + iv.length);
+
+    const url = URL.createObjectURL(new Blob([fichier], { type: 'application/octet-stream' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `notask-${new Date().toISOString().slice(0, 10)}.notask`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    msg($('#export-msg'), `Archive créée : ${donnees.notes.length} notask(s), ${donnees.labels.length} libellé(s).`, 'ok');
+  } catch (err) {
+    msg($('#export-msg'), err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#import-run').addEventListener('click', async () => {
+  const fichier = $('#import-file').files[0];
+  const pw = $('#import-pw').value;
+  if (!fichier) return msg($('#import-msg'), 'Choisissez un fichier d’archive.');
+  if (!pw) return msg($('#import-msg'), 'Saisissez le mot de passe de l’archive.');
+
+  const btn = $('#import-run');
+  btn.disabled = true;
+  try {
+    const octets = new Uint8Array(await fichier.arrayBuffer());
+    const entete = new TextDecoder().decode(octets.slice(0, EXPORT_MAGIC.length));
+    if (entete !== EXPORT_MAGIC) throw new Error("Ce fichier n'est pas une archive notask.");
+
+    const salt = octets.slice(EXPORT_MAGIC.length, EXPORT_MAGIC.length + 16);
+    const iv = octets.slice(EXPORT_MAGIC.length + 16, EXPORT_MAGIC.length + 28);
+    const chiffre = octets.slice(EXPORT_MAGIC.length + 28);
+    const key = await deriveArchiveKey(pw, salt);
+
+    let donnees;
+    try {
+      const clair = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, chiffre);
+      donnees = JSON.parse(new TextDecoder().decode(clair));
+    } catch {
+      // AES-GCM échoue à l'authentification : mot de passe faux, ou
+      // fichier abîmé. Impossible de distinguer les deux, on le dit.
+      throw new Error('Mot de passe incorrect, ou archive endommagée.');
+    }
+
+    msg($('#import-msg'), 'Création des libellés…', 'ok');
+    // Les identifiants de libellés de l'archive n'ont aucun sens ici : on
+    // recrée les manquants et on garde une table de correspondance
+    // nom -> nouvel identifiant pour rattacher les notasks.
+    const existants = await api('/labels');
+    const parNom = new Map(existants.map((l) => [l.name, l.id]));
+    for (const l of (donnees.labels || [])) {
+      if (parNom.has(l.name)) continue;
+      try {
+        const cree = await api('/labels', { method: 'POST', body: { name: l.name, color: l.color } });
+        parNom.set(cree.name, cree.id);
+      } catch { /* doublon ou nom refusé : on continue */ }
+    }
+    // Ancien identifiant -> nom : c'est par identifiant que les notasks
+    // référencent leurs libellés, et ces identifiants n'ont aucun sens sur
+    // cette installation. Le nom sert de pivot.
+    const nomParAncienId = new Map();
+    (donnees.labels || []).forEach((l) => nomParAncienId.set(l.id, l.name));
+
+    /* Les notasks qui étaient en corbeille au moment de l'export
+       (`trashed`) reviennent ici en notasks ordinaires : réimporter
+       directement dans la corbeille les exposerait à la purge automatique
+       des 30 jours, et on importe justement pour récupérer du contenu. Le
+       drapeau reste dans l'archive, à titre d'information. */
+    const notes = donnees.notes || [];
+    let faits = 0, echecs = 0;
+    for (const n of notes) {
+      msg($('#import-msg'), `Import des notasks… (${faits + echecs + 1}/${notes.length})`, 'ok');
+      try {
+        const body = {
+          title: await encryptField(n.title || ''),
+          description: await encryptField(n.description || ''),
+          content: n.is_checklist ? '' : await encryptField(n.content || ''),
+          color: n.color || 'default',
+          pinned: !!n.pinned,
+          archived: !!n.archived,
+          is_checklist: !!n.is_checklist,
+          due_at: n.due_at || null,
+          icon: n.icon || null,
+          label_ids: (n.label_ids || [])
+            .map((ancienId) => parNom.get(nomParAncienId.get(ancienId)))
+            .filter((v) => v !== undefined),
+          items: n.is_checklist
+            ? await Promise.all((n.items || []).map(async (it) => ({
+              text: await encryptField(it.text || ''),
+              checked: !!it.checked,
+              due_at: it.due_at || null,
+            })))
+            : [],
+        };
+        const cree = await api('/notes', { method: 'POST', body });
+
+        for (const p of (n.attachments || [])) {
+          const octetsPj = base64ToBytes(p.data);
+          const f = new File([octetsPj], p.name || 'fichier', { type: p.mime || 'application/octet-stream' });
+          try { await uploadAttachment(cree.id, f); } catch { /* pièce jointe perdue, notask conservée */ }
+        }
+        faits += 1;
+      } catch {
+        echecs += 1;
+      }
+    }
+
+    if (donnees.settings && Object.keys(donnees.settings).length) {
+      try { await api('/settings', { method: 'PATCH', body: donnees.settings }); } catch { /* non bloquant */ }
+    }
+
+    await loadLabels();
+    await loadNotes();
+    msg($('#import-msg'),
+      `Import terminé : ${faits} notask(s) ajoutée(s)${echecs ? `, ${echecs} en échec` : ''}.`,
+      echecs ? 'error' : 'ok');
+  } catch (err) {
+    msg($('#import-msg'), err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 /* ---------------------------- Mot de passe ---------------------------- */
 
-$('#btn-password').addEventListener('click', () => {
+/* Appelée depuis la boîte Profil (le bouton dédié de l'en-tête a été
+   remplacé par les entrées Profil/Outils). */
+function ouvrirChangementMotDePasse() {
   $('#dp-current').value = ''; $('#dp-new').value = ''; $('#dp-new2').value = '';
   msg($('#dp-msg'), '');
   $('#dlg-password').showModal();
-});
+}
 
 $('#dp-cancel').addEventListener('click', () => $('#dlg-password').close());
 

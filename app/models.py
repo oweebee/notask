@@ -126,6 +126,12 @@ class NoteBase(SQLModel):
     # Icône facultative affichée à gauche de la note (clé parmi un jeu fixe,
     # voir ICON_KEYS dans app/routers/notes.py).
     icon: Optional[str] = Field(default=None, max_length=40)
+    # Masque le contenu de la notask dans la mosaïque d'accueil derrière une
+    # animation de caractères (voir .matrix-mask côté client). Protection
+    # visuelle contre un regard ou une photo par-dessus l'épaule, rien de
+    # plus : le contenu part et revient en clair comme n'importe quel autre,
+    # et reste lisible dès qu'on ouvre la notask.
+    masked: bool = False
 
 
 class Note(NoteBase, table=True):
@@ -237,6 +243,7 @@ class NoteUpdate(SQLModel):
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
     icon: Optional[str] = None
+    masked: Optional[bool] = None
     # Nouvelle position manuelle (glisser-déposer) ; voir Note.position.
     position: Optional[float] = None
 

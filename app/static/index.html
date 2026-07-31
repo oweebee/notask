@@ -60,9 +60,12 @@
     <span class="logo" id="brand-logo"></span>
     <span class="brand">notask</span>
     <span class="spacer"></span>
+    <!-- Pseudo en lettres alternées jaune/bleu cuillère (voir renderWho()
+         dans app.js), puis deux entrées sans cadre reprenant les mêmes
+         teintes : Profil en jaune, Outils en bleu. -->
     <span class="who" id="who"></span>
-    <button class="btn ghost sm" id="btn-password">Mot de passe</button>
-    <button class="btn ghost sm" id="btn-logout">Déconnexion</button>
+    <button class="top-entry top-entry-yellow" id="btn-profil" type="button">Profil</button>
+    <button class="top-entry top-entry-blue" id="btn-outils" type="button">Outils</button>
   </header>
 
   <div class="shell">
@@ -171,6 +174,8 @@
                 <span class="fmt-sep"></span>
               </span>
               <button type="button" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
+              <!-- Masquage du contenu sur la page d'accueil uniquement. -->
+              <button type="button" id="nc-toggle-mask" title="Masquer le contenu sur l'accueil" aria-label="Masquer le contenu sur l'accueil"></button>
             </div>
             <div class="field-actions-row composer-tools-row" id="nc-tools-row">
               <!-- Tableau blanc en premier, avant le trombone. -->
@@ -363,6 +368,7 @@
         <span class="fmt-sep"></span>
       </span>
       <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
+      <button type="button" id="dns-toggle-mask" title="Masquer le contenu sur l'accueil" aria-label="Masquer le contenu sur l'accueil"></button>
     </div>
     <!-- Même base d'outils que le composeur (voir #nc-tools-row) :
          trombone, couleur, échéance — plus l'historique, qui n'a de sens
@@ -483,6 +489,67 @@
   <div class="dialog-actions">
     <button class="btn ghost" id="dp-cancel" type="button">Annuler</button>
     <button class="btn" id="dp-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
+<!-- Profil : informations de base et sortie de session. -->
+<dialog id="dlg-profil">
+  <h2>Profil</h2>
+  <dl class="profil-infos" id="profil-infos"></dl>
+  <div class="dialog-actions">
+    <button class="btn ghost" id="profil-password" type="button">Changer de mot de passe</button>
+    <span class="spacer" style="flex:1"></span>
+    <button class="btn ghost" id="profil-close" type="button">Fermer</button>
+    <button class="btn danger" id="profil-logout" type="button">Déconnexion</button>
+  </div>
+</dialog>
+
+<!-- Outils. Première fonction : sauvegarde complète, chiffrée par un mot de
+     passe choisi ici — indépendant de celui du compte, pour que l'archive
+     reste lisible même si le compte est perdu. -->
+<dialog id="dlg-outils">
+  <h2>Outils</h2>
+
+  <section class="outil-bloc">
+    <h3>Exporter toute l'application</h3>
+    <p class="hint">
+      Libellés, notasks (lignes et pièces jointes comprises) et réglages,
+      réunis dans un seul fichier chiffré par le mot de passe ci-dessous.
+      Ce mot de passe est indépendant de celui du compte : notez-le, il est
+      le seul moyen de relire l'archive.
+    </p>
+    <div class="field">
+      <label for="export-pw">Mot de passe de l'archive</label>
+      <input id="export-pw" type="password" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label for="export-pw2">Confirmation</label>
+      <input id="export-pw2" type="password" autocomplete="new-password">
+    </div>
+    <button class="btn" id="export-run" type="button">Exporter</button>
+    <div id="export-msg"></div>
+  </section>
+
+  <section class="outil-bloc">
+    <h3>Réimporter une archive</h3>
+    <p class="hint">
+      Le contenu de l'archive s'ajoute à ce qui existe déjà — rien n'est
+      remplacé ni supprimé.
+    </p>
+    <div class="field">
+      <label for="import-file">Fichier d'archive</label>
+      <input id="import-file" type="file" accept=".notask,application/octet-stream">
+    </div>
+    <div class="field">
+      <label for="import-pw">Mot de passe de l'archive</label>
+      <input id="import-pw" type="password" autocomplete="current-password">
+    </div>
+    <button class="btn" id="import-run" type="button">Importer</button>
+    <div id="import-msg"></div>
+  </section>
+
+  <div class="dialog-actions">
+    <button class="btn ghost" id="outils-close" type="button">Fermer</button>
   </div>
 </dialog>
 
