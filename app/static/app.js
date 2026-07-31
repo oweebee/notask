@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-barre-outils-commune-7';
+const BUILD_VERSION = '2026-07-31-tableau-blanc-dessin-9';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -2636,28 +2636,56 @@ $('#dlg-note-simple').addEventListener('click', (e) => {
    tout autre moyen (Échap, clic à côté, bouton "Fermer sans enregistrer")
    abandonne les annotations sans rien envoyer au serveur. */
 
+/* Dimensions du tableau blanc. L'utilisateur a demandé "1600x100" —
+   manifestement tronqué (une bande de 100 px de haut ne se dessine pas) :
+   on part sur 1600x1000, à ajuster ici en une ligne si besoin. */
+const BOARD_WIDTH = 1600;
+const BOARD_HEIGHT = 1000;
+
 const imgEditor = {
-  att: null,       // pièce jointe en cours d'édition
+  att: null,       // pièce jointe en cours d'édition (null en mode tableau blanc)
   note: null,       // note propriétaire (pour rafraîchir la bonne vue après enregistrement)
-  source: null,     // 'card' | 'dns' — qui a ouvert l'éditeur
-  tool: 'rect',
+  source: null,     // 'card' | 'dns' | 'nc' — qui a ouvert l'éditeur
+  // 'photo' : on annote une pièce jointe existante, l'enregistrement
+  // remplace ses octets (PUT). 'board' : tableau blanc, l'enregistrement
+  // crée une nouvelle pièce jointe (ou, depuis le composeur, un fichier en
+  // attente puisque la notask n'existe pas encore).
+  mode: 'photo',
+  tool: 'brush',
   color: LABEL_COLOR_HEX.red,
+  size: 6,          // épaisseur du trait libre, en pixels canvas
+  // Couleur de fond, visible uniquement là où le canvas est transparent —
+  // donc jamais sur une photo (opaque), et partout sur un tableau blanc
+  // (dont le canvas reste transparent, le fond n'étant aplati qu'à
+  // l'enregistrement). Permet d'en changer à tout moment sans effacer le
+  // dessin déjà fait, contrairement à un remplissage réel.
+  bg: '#ffffff',
+  fullscreen: false,
   history: [],      // pile d'ImageData ; le dernier élément = état affiché
   strokeBase: null, // clone de l'état courant, pris au pointerdown, restauré à chaque pointermove pour prévisualiser sans laisser de trace
   drawing: false,
+  lastX: 0,         // dernier point du tracé libre (segment par segment)
+  lastY: 0,
   startX: 0,
   startY: 0,
 };
 
 const IMG_EDITOR_TOOL_ICONS = {
+  brush: 'imgBrush', pencil: 'imgPencil', marker: 'imgMarker', eraser: 'imgEraser',
   rect: 'imgRect', ellipse: 'imgEllipse', highlight: 'imgHighlight',
   text: 'imgText', mosaic: 'imgMosaic',
 };
+
+// Outils à main levée : le geste trace segment par segment au fil du
+// pointeur, au lieu de définir une forme entre deux points.
+const IMG_EDITOR_FREEHAND = new Set(['brush', 'pencil', 'marker', 'eraser']);
 
 function imgEditorCanvas() { return $('#img-editor-canvas'); }
 
 $('#img-editor-undo').innerHTML = ICONS.undo;
 $('#img-editor-download').innerHTML = ICONS.download;
+$('#img-editor-bg-btn').innerHTML = ICONS.palette;
+$('#img-editor-fullscreen').innerHTML = ICONS.fullscreen;
 $$('#img-editor-tools .img-tool-btn').forEach((b) => {
   b.innerHTML = ICONS[IMG_EDITOR_TOOL_ICONS[b.dataset.tool]];
   b.classList.toggle('active', b.dataset.tool === imgEditor.tool);
@@ -2666,6 +2694,12 @@ $$('#img-editor-tools .img-tool-btn').forEach((b) => {
     $$('#img-editor-tools .img-tool-btn').forEach((x) => x.classList.toggle('active', x === b));
     imgEditorCanvas().classList.toggle('tool-text', imgEditor.tool === 'text');
   };
+});
+
+// Épaisseur du trait libre.
+$('#img-editor-size').addEventListener('input', (e) => {
+  imgEditor.size = Number(e.target.value) || 1;
+  $('#img-editor-size-val').textContent = imgEditor.size;
 });
 
 // Palette de couleurs de l'éditeur : construite une seule fois (elle ne
@@ -2689,6 +2723,74 @@ $$('#img-editor-tools .img-tool-btn').forEach((b) => {
   }
 })();
 
+/* Couleur de fond : palette séparée, avec blanc et noir en plus des
+   couleurs de notes (un tableau blanc doit pouvoir être… blanc, et un
+   fond noir sert pour les croquis clairs). Appliquée en direct au fond
+   CSS du canvas — le canvas lui-même reste transparent, la couleur n'est
+   aplatie dans le PNG qu'à l'enregistrement (voir imgEditorFlatten()) :
+   on peut donc en changer autant de fois qu'on veut sans jamais effacer
+   ce qui est déjà dessiné. */
+const IMG_EDITOR_BG_COLORS = ['#ffffff', '#f2efe6', '#cfd8dc', '#263238', '#000000'];
+
+(function buildImgEditorBgColors() {
+  const box = $('#img-editor-bg-colors');
+  const hexes = [...IMG_EDITOR_BG_COLORS, ...COLORS.filter((c) => c !== 'default').map((c) => LABEL_COLOR_HEX[c])];
+  for (const hex of hexes) {
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch' + (hex === imgEditor.bg ? ' active' : '');
+    s.style.background = hex;
+    s.title = hex;
+    s.onclick = () => {
+      imgEditorSetBackground(hex);
+      box.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+    };
+    box.appendChild(s);
+  }
+})();
+
+function imgEditorSetBackground(hex) {
+  imgEditor.bg = hex;
+  imgEditorCanvas().style.background = hex;
+}
+
+$('#img-editor-bg-btn').addEventListener('click', () => {
+  const box = $('#img-editor-bg-colors');
+  box.hidden = !box.hidden;
+});
+
+/* Plein écran : la boîte occupe tout l'écran, il ne reste que la barre
+   d'outils en haut et l'image/le fond. Ce n'est PAS l'API Fullscreen du
+   navigateur — un <dialog> modal vit déjà dans le "top layer", une classe
+   CSS suffit et évite les demandes de permission/sorties inopinées. Échap
+   sort du plein écran au lieu de fermer l'éditeur (voir l'écouteur
+   "cancel" plus bas), ce qui évite de perdre un dessin en cours d'un
+   simple appui. */
+function imgEditorSetFullscreen(on) {
+  imgEditor.fullscreen = on;
+  $('#dlg-image-editor').classList.toggle('fullscreen', on);
+  const btn = $('#img-editor-fullscreen');
+  btn.innerHTML = on ? ICONS.fullscreenExit : ICONS.fullscreen;
+  const label = on ? 'Quitter le plein écran' : 'Plein écran';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+$('#img-editor-fullscreen').addEventListener('click', () => imgEditorSetFullscreen(!imgEditor.fullscreen));
+
+/* Prépare le dialogue pour une nouvelle session d'édition, quelle que
+   soit sa provenance (photo existante ou tableau blanc vierge). */
+function imgEditorReset(note, source, mode) {
+  imgEditor.note = note;
+  imgEditor.source = source;
+  imgEditor.mode = mode;
+  imgEditor.drawing = false;
+  imgEditorSetFullscreen(false);
+  $('#img-editor-bg-colors').hidden = true;
+  $('#img-editor-size').value = imgEditor.size;
+  $('#img-editor-size-val').textContent = imgEditor.size;
+}
+
 async function openImageEditor(att, note, source) {
   if (!att || !((att.meta && att.meta.mime) || '').startsWith('image/')) return;
   let loaded;
@@ -2700,8 +2802,7 @@ async function openImageEditor(att, note, source) {
   }
 
   imgEditor.att = att;
-  imgEditor.note = note;
-  imgEditor.source = source;
+  imgEditorReset(note, source, 'photo');
 
   const img = new Image();
   img.onload = () => {
@@ -2710,12 +2811,46 @@ async function openImageEditor(att, note, source) {
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
+    // Une photo est opaque : le fond ne se verra nulle part, mais on le
+    // met quand même à jour pour que la gomme révèle du blanc plutôt que
+    // le damier de transparence du navigateur.
+    imgEditorSetBackground(imgEditor.bg);
     imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
     $('#dlg-image-editor').showModal();
   };
   img.onerror = () => alert("Impossible d'afficher cette image.");
   img.src = loaded.url;
 }
+
+/* Tableau blanc : le même éditeur, sur un canvas vierge. Volontairement
+   TRANSPARENT et non rempli de blanc — le fond est une simple couleur CSS
+   sous le canvas, aplatie dans le PNG seulement à l'enregistrement
+   (imgEditorFlatten()). Conséquences voulues : on peut changer la couleur
+   de fond à tout moment sans toucher au dessin, et la gomme fait vraiment
+   réapparaître le fond. */
+function openWhiteboard(note, source) {
+  imgEditor.att = null;
+  imgEditorReset(note, source, 'board');
+
+  const canvas = imgEditorCanvas();
+  canvas.width = BOARD_WIDTH;
+  canvas.height = BOARD_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  imgEditorSetBackground(imgEditor.bg);
+  imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+  $('#dlg-image-editor').showModal();
+}
+
+$('#dns-board-btn').innerHTML = ICONS.board;
+$('#dns-board-btn').addEventListener('click', () => {
+  if (state.editingNote) openWhiteboard(state.editingNote, 'dns');
+});
+$('#nc-board-btn').innerHTML = ICONS.board;
+$('#nc-board-btn').addEventListener('click', () => {
+  composerExpand();
+  openWhiteboard(null, 'nc');
+});
 
 // Conversion écran -> coordonnées du canvas : celui-ci est affiché à une
 // taille réduite (max-width/max-height en CSS) mais dessiné à sa résolution
@@ -2752,6 +2887,47 @@ $('#img-editor-undo').addEventListener('click', imgEditorUndo);
 
 function imgEditorRestoreStrokeBase() {
   imgEditorCanvas().getContext('2d').putImageData(imgEditor.strokeBase, 0, 0);
+}
+
+/* Trace un segment de tracé libre entre deux points, selon la pointe
+   choisie. `pressure` vaut 0..1 : les stylets et tablettes graphiques la
+   renseignent réellement, la souris renvoie 0.5 (ou 0 sur certains
+   navigateurs, d'où le repli). Seuls le pinceau et le crayon en tiennent
+   compte — un feutre a par nature un trait d'épaisseur constante.
+
+   Chaque pointe est un réglage de contexte, pas un algorithme différent :
+   - pinceau : opaque, épaisseur très sensible à la pression ;
+   - crayon  : fin, légèrement transparent, peu sensible à la pression ;
+   - feutre  : épais, franchement transparent, épaisseur constante — les
+     passages se superposent comme un surligneur ;
+   - gomme   : efface réellement (destination-out) au lieu de peindre en
+     blanc, ce qui laisse réapparaître le fond du tableau. */
+function imgEditorStrokeSegment(ctx, x0, y0, x1, y1, pressure) {
+  const p = pressure > 0 ? pressure : 0.5;
+  const base = imgEditor.size;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = imgEditor.color;
+
+  if (imgEditor.tool === 'brush') {
+    ctx.lineWidth = Math.max(1, base * (0.35 + 1.3 * p));
+  } else if (imgEditor.tool === 'pencil') {
+    ctx.lineWidth = Math.max(1, base * (0.5 + 0.5 * p) * 0.6);
+    ctx.globalAlpha = 0.85;
+  } else if (imgEditor.tool === 'marker') {
+    ctx.lineWidth = Math.max(2, base * 1.6);
+    ctx.globalAlpha = 0.35;
+  } else if (imgEditor.tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = Math.max(2, base * 1.8);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /* Dessine la forme en cours de geste (rectangle/ellipse/surlignage) ou un
@@ -2885,32 +3061,79 @@ function imgEditorOpenTextInput(e, p) {
   input.addEventListener('keydown', onKey);
 }
 
+// Une session d'édition est ouverte soit sur une pièce jointe (mode photo),
+// soit sur un tableau blanc (aucune pièce jointe) : tester `att` seul
+// bloquerait tout dessin sur le tableau.
+function imgEditorActif() { return imgEditor.mode === 'board' || !!imgEditor.att; }
+
 imgEditorCanvas().addEventListener('pointerdown', (e) => {
-  if (!imgEditor.att) return;
+  if (!imgEditorActif()) return;
   const p = canvasPoint(e);
   if (imgEditor.tool === 'text') {
     imgEditorOpenTextInput(e, p);
     return;
   }
+  // preventDefault + touch-action:none en CSS : sans ça, un doigt ou un
+  // stylet sur écran tactile fait défiler/zoomer la page au lieu de
+  // dessiner, et le geste est interrompu au bout de quelques pixels.
+  e.preventDefault();
   imgEditor.drawing = true;
   imgEditor.startX = p.x;
   imgEditor.startY = p.y;
+  imgEditor.lastX = p.x;
+  imgEditor.lastY = p.y;
   const canvas = imgEditorCanvas();
-  imgEditor.strokeBase = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d');
+  imgEditor.strokeBase = ctx.getImageData(0, 0, canvas.width, canvas.height);
   canvas.setPointerCapture(e.pointerId);
+  // Un simple appui sans déplacement doit laisser un point, pas rien.
+  if (IMG_EDITOR_FREEHAND.has(imgEditor.tool)) {
+    imgEditorStrokeSegment(ctx, p.x, p.y, p.x, p.y, e.pressure);
+  }
 });
+
 imgEditorCanvas().addEventListener('pointermove', (e) => {
   if (!imgEditor.drawing) return;
-  const p = canvasPoint(e);
-  imgEditorDrawPreview(imgEditor.startX, imgEditor.startY, p.x, p.y);
+  e.preventDefault();
+
+  if (!IMG_EDITOR_FREEHAND.has(imgEditor.tool)) {
+    const p = canvasPoint(e);
+    imgEditorDrawPreview(imgEditor.startX, imgEditor.startY, p.x, p.y);
+    return;
+  }
+
+  // getCoalescedEvents() rend tous les points captés par le matériel depuis
+  // la dernière frame — un stylet ou une tablette en produit bien plus que
+  // les pointermove livrés au JS. Sans ça, un geste rapide donne une ligne
+  // brisée à angles visibles au lieu d'une courbe.
+  const ctx = imgEditorCanvas().getContext('2d');
+  const points = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (points.length ? points : [e])) {
+    const p = canvasPoint(ev);
+    imgEditorStrokeSegment(ctx, imgEditor.lastX, imgEditor.lastY, p.x, p.y, ev.pressure);
+    imgEditor.lastX = p.x;
+    imgEditor.lastY = p.y;
+  }
 });
+
 imgEditorCanvas().addEventListener('pointerup', (e) => {
   if (!imgEditor.drawing) return;
   imgEditor.drawing = false;
+  if (IMG_EDITOR_FREEHAND.has(imgEditor.tool)) {
+    // Le tracé s'est déjà inscrit au fil du geste : un seul état
+    // d'historique pour tout le trait, pas un par segment.
+    imgEditorPushHistory();
+    return;
+  }
   const p = canvasPoint(e);
   imgEditorCommitShape(imgEditor.startX, imgEditor.startY, p.x, p.y);
 });
-imgEditorCanvas().addEventListener('pointercancel', () => { imgEditor.drawing = false; });
+
+imgEditorCanvas().addEventListener('pointercancel', () => {
+  if (!imgEditor.drawing) return;
+  imgEditor.drawing = false;
+  if (IMG_EDITOR_FREEHAND.has(imgEditor.tool)) imgEditorPushHistory();
+});
 
 // Fermeture sans enregistrer : bouton dédié, clic sur le fond, ou Échap
 // (événement natif "cancel" d'un <dialog>) — les trois abandonnent les
@@ -2921,6 +3144,20 @@ $('#dlg-image-editor').addEventListener('click', (e) => {
   if (e.target === $('#dlg-image-editor')) $('#dlg-image-editor').close();
 });
 
+/* Échap : sort d'abord du plein écran s'il est actif, et seulement au
+   second appui ferme l'éditeur. Sans ça, un réflexe d'Échap pour "revenir
+   à la fenêtre normale" ferait perdre tout un dessin en cours. */
+$('#dlg-image-editor').addEventListener('cancel', (e) => {
+  if (imgEditor.fullscreen) {
+    e.preventDefault();
+    imgEditorSetFullscreen(false);
+  }
+});
+
+// Sortir du plein écran quand la boîte se ferme, sinon la classe resterait
+// posée et la prochaine ouverture démarrerait en plein écran sans raison.
+$('#dlg-image-editor').addEventListener('close', () => imgEditorSetFullscreen(false));
+
 /* Aplatit le canvas et l'envoie au serveur (PUT, même id) — utilisé à la
    fois par "Enregistrer" et par "Télécharger" (qui enregistre d'abord la
    dernière version avant de la proposer en téléchargement, plutôt que de
@@ -2929,7 +3166,53 @@ $('#dlg-image-editor').addEventListener('click', (e) => {
    serveur juste après l'avoir chiffré nous-mêmes) et le nom de fichier à
    utiliser, pour que l'appelant puisse aussi déclencher un téléchargement
    sans repasser par le réseau. */
+/* Aplatit le canvas SUR son fond : le canvas est transparent là où rien
+   n'a été dessiné (voir openWhiteboard), or un PNG transparent donnerait
+   une vignette illisible sur une carte sombre. On recompose donc dans un
+   canvas temporaire — fond d'abord, dessin par-dessus — plutôt que de
+   remplir le canvas d'édition, qui doit rester transparent pour permettre
+   de changer de couleur de fond et de gommer à tout moment. */
+function imgEditorFlatten() {
+  const canvas = imgEditorCanvas();
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = imgEditor.bg || '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0);
+  return out;
+}
+
+/* Enregistre le tableau blanc comme NOUVELLE pièce jointe. Depuis
+   l'édition rapide la notask existe déjà : envoi immédiat. Depuis le
+   composeur elle n'existe pas encore : le PNG rejoint la file des
+   fichiers en attente (composerPendingFiles), envoyée à la création. */
+async function imgEditorPersistBoard() {
+  const flat = imgEditorFlatten();
+  const blob = await new Promise((resolve) => flat.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error("Impossible d'enregistrer le tableau.");
+  const name = `tableau-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.png`;
+  const file = new File([blob], name, { type: 'image/png' });
+
+  if (imgEditor.source === 'nc') {
+    composerPendingFiles.push(file);
+    renderComposerAttachments();
+    return { blob, name };
+  }
+
+  const note = imgEditor.note;
+  if (!note) throw new Error('Aucune notask associée.');
+  const created = await uploadAttachment(note.id, file);
+  created.meta = { name, mime: 'image/png' };
+  if (!note.attachments) note.attachments = [];
+  note.attachments.push(created);
+  return { blob, name };
+}
+
 async function imgEditorPersist() {
+  if (imgEditor.mode === 'board') return imgEditorPersistBoard();
+
   const att = imgEditor.att;
   if (!att) throw new Error('Aucune image chargée.');
 
@@ -2938,7 +3221,9 @@ async function imgEditorPersist() {
   // seul moyen de retrouver l'image telle qu'elle était avant l'annotation.
   if (imgEditor.note) await snapshotNoteVersion(imgEditor.note.id);
 
-  const canvas = imgEditorCanvas();
+  // Aplati sur le fond comme le tableau : la gomme peut avoir rendu des
+  // zones transparentes, qui deviendraient noires ou vides sans ça.
+  const canvas = imgEditorFlatten();
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error("Impossible d'enregistrer l'image.");
   const buffer = await blob.arrayBuffer();

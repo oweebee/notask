@@ -389,7 +389,9 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   text-align: left;
   border: none;
   border-radius: var(--shape-full) 0 0 var(--shape-full);
-  padding: .375rem .875rem .375rem .375rem;
+  /* Retrait gauche augmenté de 5px (6px -> 11px) : l'icône et le texte
+     sont décalés d'autant vers la droite, à l'écart du bord. */
+  padding: .375rem .875rem .375rem 11px;
   margin-bottom: 4px;
   color: var(--md-on-surface);
   font-size: .8125rem;
@@ -1256,9 +1258,15 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
    carte. */
 .label-chip-card {
   cursor: default;
+  /* Retrait droit plus faible : c'est la croix de suppression qui occupe
+     la place de ce côté (dans les boîtes d'édition uniquement). */
   padding: .2rem .3rem .2rem .7rem;
   color: var(--md-on-surface);
 }
+/* Sur la carte (mosaïque), les puces sont en lecture seule : pas de croix,
+   donc rien pour combler le retrait droit réduit — le texte paraissait
+   collé à droite et décalé. Retrait symétrique ici. */
+.label-chip-card.is-readonly { padding: .2rem .7rem; }
 /* Croix de retrait d'un libellé, dans les dialogues d'édition : masquée,
    révélée au survol de la puce (comportement demandé).
    Historique, pour ne pas refaire le tour : cette croix a été signalée
@@ -1433,7 +1441,13 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    mises en forme ne s'appliquent qu'au texte libre), contrairement au
    bouton de bascule note/liste juste après, toujours visible pour pouvoir
    revenir en arrière dans les deux sens. */
-#dns-fmt-group { display: flex; align-items: center; gap: .375rem; }
+/* Les deux groupes de mise en forme (édition rapide et composeur) : sans
+   display:flex, ce <span> laisse ses boutons — des éléments en display:grid
+   de 32px — s'empiler verticalement les uns sous les autres. */
+#dns-fmt-group, #nc-fmt-group { display: flex; align-items: center; gap: .375rem; }
+/* [hidden] doit l'emporter sur le display:flex ci-dessus (masquage du
+   groupe en mode liste à cocher, voir renderComposer()/renderDnsMode()). */
+#dns-fmt-group[hidden], #nc-fmt-group[hidden] { display: none; }
 .fmt-toolbar button[data-fmt="bold"] { font-weight: 700; }
 .fmt-toolbar button[data-fmt="italic"] { font-style: italic; }
 .fmt-toolbar button[data-fmt="underline"] { text-decoration: underline; }
@@ -1538,11 +1552,14 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 }
 .dns-bottom-bar {
   flex: none;
+  /* Colonne, exactement comme .nc-toolbar-block dans le composeur : la
+     rangée de mise en forme au-dessus, la rangée d'actions en dessous.
+     Avant, c'était une seule rangée en space-between qui repoussait les
+     actions à l'opposé et laissait un grand trou au milieu. */
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .75rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .25rem;
   background: var(--note-color, var(--md-surface-3));
   border-radius: var(--shape-lg);
   padding: .625rem 1rem;
@@ -1794,6 +1811,51 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 }
 .img-editor-colors .swatch { width: 22px; height: 22px; }
 
+/* Épaisseur du trait libre. */
+.img-editor-size {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding-left: .5rem;
+  border-left: 1px solid var(--md-outline-variant);
+  color: var(--md-on-surface-variant);
+  font-size: .75rem;
+}
+.img-editor-size input[type=range] { width: 90px; accent-color: var(--md-primary); }
+.img-editor-size span { min-width: 1.5em; text-align: right; }
+
+/* Couleur de fond : la palette se déplie sous le bouton, en surcouche
+   pour ne pas repousser le reste de la barre d'outils. */
+.img-editor-bg { position: relative; display: flex; align-items: center; }
+.img-editor-bg #img-editor-bg-colors {
+  position: absolute;
+  top: calc(100% + .35rem);
+  left: 0;
+  z-index: 5;
+  width: 190px;
+  padding: .5rem;
+  background: var(--md-surface-4);
+  border: none;
+  border-radius: var(--shape-sm);
+  box-shadow: var(--elev-3);
+}
+
+/* Plein écran : la boîte prend tout l'écran, il ne reste que la barre
+   d'outils et l'image/le fond. Pas l'API Fullscreen du navigateur — un
+   <dialog> modal est déjà au-dessus de tout, une classe suffit (voir
+   imgEditorSetFullscreen() dans app.js). */
+.img-editor-dlg[open].fullscreen {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  margin: 0;
+  top: 0;
+  left: 0;
+}
+.img-editor-dlg[open].fullscreen .img-editor-canvas-wrap { padding: .5rem; }
+
 .img-editor-actions {
   display: flex;
   align-items: center;
@@ -1818,6 +1880,14 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   max-height: 100%;
   display: block;
   box-shadow: var(--elev-2);
+  /* Indispensable au dessin au doigt/stylet : sans ça le navigateur
+     interprète le geste comme un défilement ou un zoom et interrompt le
+     tracé au bout de quelques pixels (voir aussi le preventDefault dans
+     les gestionnaires pointerdown/pointermove d'app.js). */
+  touch-action: none;
+  /* Évite la sélection bleue du canvas quand on trace vite. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 #img-editor-canvas.tool-text { cursor: text; }
 #img-editor-canvas:not(.tool-text) { cursor: crosshair; }
