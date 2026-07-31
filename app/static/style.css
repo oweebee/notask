@@ -440,11 +440,17 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    élément explicitement positionné — sans placer nous-mêmes explicitement
    les quelques notes voisines, elles atterriraient toutes après le composeur
    et la recherche, jamais à côté. */
-.notes-grid .note-composer,
-.notes-grid .search-toolbar {
+.notes-grid .composer-stack {
   grid-column: 2 / span 2;
   margin: 0;
+  /* Composeur puis recherche, empilés et solidaires : la recherche suit
+     donc automatiquement la hauteur du composeur quand il se déplie. */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
+.notes-grid .composer-stack > .note-composer { margin-bottom: 0; }
+.notes-grid .composer-stack > .search-toolbar { margin: 0; }
 
 @media (max-width: 860px) {
   main { width: 100%; }
@@ -846,6 +852,26 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: .75rem;
   align-items: start;
+}
+
+/* Vue "Notasks Prévues" : trois colonnes côte à côte, de gauche à droite
+   à venir / du jour / en retard (voir renderTasks()). Chaque colonne
+   empile ses cartes sur une seule file — le auto-fill de .task-cards
+   ci-dessus n'a plus lieu d'être une fois la largeur déjà réduite. */
+.tasks-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.tasks-col { min-width: 0; }
+.tasks-col .task-cards { grid-template-columns: minmax(0, 1fr); }
+.tasks-col .tasks-group { margin-top: 0; }
+
+/* Sous 860 px, les trois colonnes s'empilent : elles deviendraient
+   illisibles côte à côte sur un écran étroit. */
+@media (max-width: 860px) {
+  .tasks-columns { grid-template-columns: 1fr; }
 }
 
 /* Carte de tâche : même langage visuel que la note, en plus compact */

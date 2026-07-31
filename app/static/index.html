@@ -108,6 +108,13 @@
              notask, .nc-toolbar-block porte les outils, avec un vrai espace
              entre les deux plutôt qu'une barre fondue dans la même carte —
              voir composerExpand()/renderComposer() dans app.js. -->
+        <!-- Composeur ET recherche dans un seul bloc de grille : la barre de
+             recherche doit rester collée sous le composeur, y compris quand
+             celui-ci se déplie. Placés en deux éléments distincts, ils
+             tombaient sur deux rangées de grille dont la hauteur est fixée
+             par la note voisine la plus haute — d'où le grand vide entre les
+             deux. -->
+        <div class="composer-stack">
         <div class="note-composer">
           <div class="nc-card">
             <div class="composer-head">
@@ -195,6 +202,7 @@
 
         <div class="toolbar search-toolbar">
           <input type="search" id="notes-search" placeholder="Rechercher dans les notasks…">
+        </div>
         </div>
       </div>
       <div class="empty" id="notes-empty" hidden>Aucune notask.</div>

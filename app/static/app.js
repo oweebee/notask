@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-dessin-dans-le-texte-13';
+const BUILD_VERSION = '2026-07-31-recherche-collee-agenda-1mois-15';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -1206,15 +1206,19 @@ function notesReorderable() {
    partir de la rangée suivante — inchangé, aucune limite de nombre de notes. */
 function layoutMosaic() {
   const grid = $('#notes-grid');
-  const composer = $('.note-composer');
-  const search = $('.search-toolbar');
+  // Composeur et recherche forment un seul bloc de grille (.composer-stack) :
+  // la recherche reste ainsi collée sous le composeur et suit ses variations
+  // de hauteur. Auparavant ils occupaient deux rangées distinctes, dont la
+  // hauteur était imposée par la note voisine la plus haute — la recherche
+  // se retrouvait alors très loin sous le composeur.
+  const stack = $('.composer-stack');
   const noteEls = $$('#notes-grid .note');
-  if (!grid || !composer || !search) return;
+  if (!grid || !stack) return;
 
   const reset = (el) => { el.style.gridColumn = ''; el.style.gridRow = ''; };
 
   if (window.innerWidth <= 860) {
-    reset(composer); reset(search);
+    reset(stack);
     noteEls.forEach(reset);
     return;
   }
@@ -1222,37 +1226,26 @@ function layoutMosaic() {
   const cols = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
   const span = Math.min(2, cols);
   const start = Math.max(1, Math.floor((cols - span) / 2) + 1);
-  const colValue = `${start} / span ${span}`;
 
-  let row = 1;
-  const composerVisible = !composer.hidden;
-  if (composerVisible) {
-    composer.style.gridColumn = colValue;
-    composer.style.gridRow = String(row);
-    row += 1;
-  } else {
-    reset(composer);
-  }
-  const searchRow = row;
-  search.style.gridColumn = colValue;
-  search.style.gridRow = String(searchRow);
+  stack.style.gridColumn = `${start} / span ${span}`;
+  stack.style.gridRow = '1';
 
+  // Notes placées explicitement de part et d'autre du bloc, sur la même
+  // rangée : sans ça elles atterriraient toutes après lui (le placement
+  // automatique de CSS Grid ne revient jamais combler une colonne laissée
+  // libre avant un élément positionné explicitement).
   let noteIdx = 0;
-  const placeSideNotes = (rowNum) => {
-    for (let c = 1; c < start && noteIdx < noteEls.length; c++, noteIdx++) {
-      noteEls[noteIdx].style.gridColumn = String(c);
-      noteEls[noteIdx].style.gridRow = String(rowNum);
-    }
-    for (let c = start + span; c <= cols && noteIdx < noteEls.length; c++, noteIdx++) {
-      noteEls[noteIdx].style.gridColumn = String(c);
-      noteEls[noteIdx].style.gridRow = String(rowNum);
-    }
-  };
-  if (composerVisible) placeSideNotes(1);
-  placeSideNotes(searchRow);
+  for (let c = 1; c < start && noteIdx < noteEls.length; c++, noteIdx++) {
+    noteEls[noteIdx].style.gridColumn = String(c);
+    noteEls[noteIdx].style.gridRow = '1';
+  }
+  for (let c = start + span; c <= cols && noteIdx < noteEls.length; c++, noteIdx++) {
+    noteEls[noteIdx].style.gridColumn = String(c);
+    noteEls[noteIdx].style.gridRow = '1';
+  }
 
   // Le reste suit un placement automatique normal, à partir de la rangée
-  // suivante (aucune case du composeur/de la recherche ne reste à combler).
+  // suivante (aucune case de la rangée 1 ne reste à combler).
   for (; noteIdx < noteEls.length; noteIdx++) reset(noteEls[noteIdx]);
 }
 
@@ -3693,21 +3686,54 @@ function renderTasks() {
   grid.innerHTML = '';
   $('#tasks-empty').hidden = state.tasks.length > 0;
 
-  // Regroupement par échéance, dans un ordre qui a du sens à la lecture
-  const ordre = ['late', 'today', 'upcoming', 'done'];
   const groupes = {};
   for (const t of state.tasks) (groupes[t.bucket] ||= []).push(t);
 
-  for (const b of ordre) {
-    if (!groupes[b]) continue;
+  /* Trois colonnes côte à côte, de gauche à droite : à venir, du jour,
+     en retard. Colonnes toujours affichées même vides, pour que chaque
+     échéance garde sa place et qu'on ne relise pas les en-têtes à chaque
+     fois. Les tâches terminées ne sont pas une échéance : elles restent
+     en pleine largeur, sous les trois colonnes.
+     AUCUNE limite de date ici, volontairement : "à venir" liste toutes
+     les échéances, si lointaines soient-elles. C'est la colonne d'agenda
+     de l'accueil qui, elle, se borne à un mois (voir loadAgenda()) — elle
+     sert à un coup d'œil, cette vue-ci à tout voir. */
+  const colonnes = document.createElement('div');
+  colonnes.className = 'tasks-columns';
+  grid.appendChild(colonnes);
+
+  const conteneurs = {};
+  for (const b of ['upcoming', 'today', 'late']) {
+    const col = document.createElement('section');
+    col.className = 'tasks-col';
 
     const titre = document.createElement('h2');
-    titre.className = 'tasks-group' + (b === 'late' ? ' late' : '');
-    titre.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
-    grid.appendChild(titre);
+    titre.className = 'tasks-group ' + b;
+    titre.textContent = `${BUCKET_LABELS[b]} (${(groupes[b] || []).length})`;
+    col.appendChild(titre);
 
     const liste = document.createElement('div');
     liste.className = 'task-cards';
+    col.appendChild(liste);
+
+    conteneurs[b] = liste;
+    colonnes.appendChild(col);
+  }
+
+  for (const b of ['upcoming', 'today', 'late', 'done']) {
+    if (!groupes[b]) continue;
+
+    let liste = conteneurs[b];
+    if (!liste) {
+      // "done" : hors colonnes, en pleine largeur sous la grille.
+      const titre = document.createElement('h2');
+      titre.className = 'tasks-group ' + b;
+      titre.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
+      grid.appendChild(titre);
+      liste = document.createElement('div');
+      liste.className = 'task-cards';
+      grid.appendChild(liste);
+    }
 
     for (const t of groupes[b]) {
       const card = document.createElement('article');
@@ -3750,7 +3776,6 @@ function renderTasks() {
 
       liste.appendChild(card);
     }
-    grid.appendChild(liste);
   }
 }
 
@@ -3797,9 +3822,11 @@ async function updateTaskBadges() {
 /* --------------------------- Colonne d'échéances --------------------------
    Aperçu compact des notasks proches, affiché à côté de la mosaïque (voir
    #agenda-col dans index.html et switchView() qui l'active/désactive selon
-   la vue). Volontairement borné à 7 jours pour "à venir" — sans limite, la
-   colonne finirait par afficher toutes les échéances lointaines, ce qui n'a
-   plus rien d'un coup d'œil rapide. Les tâches terminées n'y figurent pas. */
+   la vue). Borné à un mois pour "à venir" — sans limite, la colonne
+   finirait par afficher toutes les échéances lointaines, ce qui n'a plus
+   rien d'un coup d'œil rapide. À ne pas confondre avec la vue "Notasks
+   Prévues", elle sans aucune limite de date (voir renderTasks()). Les
+   tâches terminées n'y figurent pas. */
 async function loadAgenda() {
   let tasks;
   try {
@@ -3812,10 +3839,14 @@ async function loadAgenda() {
     t.note_title = await decryptField(t.note_title);
   }));
   const now = new Date();
-  const dans7j = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Fenêtre d'un mois pour "à venir" (7 jours auparavant). setMonth gère
+  // seul les mois de longueurs différentes, contrairement à un simple
+  // "+30 jours" en millisecondes.
+  const limite = new Date(now);
+  limite.setMonth(limite.getMonth() + 1);
   const items = tasks.filter((t) => {
     if (t.bucket === 'late' || t.bucket === 'today') return true;
-    if (t.bucket === 'upcoming') return new Date(t.due_at) <= dans7j;
+    if (t.bucket === 'upcoming') return new Date(t.due_at) <= limite;
     return false; // "done" exclu : la colonne suit les échéances à venir, pas un historique
   });
   renderAgenda(items);
