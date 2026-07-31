@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-scrollbars-copie-collante-37';
+const BUILD_VERSION = '2026-07-31-terminal-fallout-41';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -1685,55 +1685,156 @@ function renderSearchHits() {
   layoutMosaic();
 }
 
-/* ---------------------- Masquage "matrix" d'une carte ----------------------
-   Rideau de caractères qui remplace le contenu d'une notask marquée
-   `masked`, UNIQUEMENT dans la mosaïque d'accueil : ni en édition rapide,
-   ni dans les deux recherches — on masque contre un regard de passage ou
-   une photo, pas contre soi-même en train de chercher quelque chose.
+/* --------------------- Masquage "terminal" d'une carte ---------------------
+   Remplace le contenu d'une notask marquée `masked`, UNIQUEMENT dans la
+   mosaïque d'accueil : ni en édition rapide, ni dans les deux recherches —
+   on masque contre un regard de passage ou une photo, pas contre soi-même
+   en train de chercher quelque chose.
+
    Le contenu réel n'est jamais mis dans le DOM de la carte : le masquer en
-   CSS le laisserait lisible dans l'inspecteur et sur une capture d'écran
-   faite par un outil qui rend le texte. */
+   CSS le laisserait lisible dans l'inspecteur et sur bien des captures.
 
-const MATRIX_GLYPHES = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789';
-const MATRIX_COLONNES = 14;
-const MATRIX_HAUTEUR = 9;   // caractères par colonne
+   Rendu : un terminal qui tape des lignes de code et des journaux
+   d'exécution, avec des erreurs en rouge, dans l'esprit d'un terminal
+   Fallout (phosphore, lignes de balayage, curseur plein). Les lignes sont
+   plausibles mais entièrement fictives — aucune ne provient de la notask. */
 
-function glyphesAleatoires(n) {
-  let s = '';
-  for (let i = 0; i < n; i++) {
-    s += MATRIX_GLYPHES[Math.floor(Math.random() * MATRIX_GLYPHES.length)];
-    if (i < n - 1) s += '\n';
-  }
-  return s;
+const TERM_LIGNES_VISIBLES = 7;
+
+// Trois familles mélangées : du code, des journaux de validation, et
+// quelques invites façon terminal Fallout.
+const TERM_CODE = [
+  'const session = await fetch("/api/v2/session", { method: "POST" });',
+  'if (!verifySignature(chunk, key)) throw new Error("bad signature");',
+  'for (let i = 0; i < buffer.length; i += 4) { crc = update(crc, buffer[i]); }',
+  'export async function rotateKeys(store) {',
+  '  const derived = await pbkdf2(secret, salt, 210_000, "SHA-256");',
+  'db.exec("PRAGMA journal_mode = WAL");',
+  'let attempts = 0; while (attempts++ < MAX_RETRY) { … }',
+  'memcpy(dst + offset, src, len - offset);',
+  'return payload.map(decodeFrame).filter(Boolean);',
+  'router.get("/health", (_, res) => res.json({ status: "ok" }));',
+  'assert(node.left.height - node.right.height <= 1);',
+  'std::vector<uint8_t> block(BLOCK_SIZE, 0x00);',
+];
+const TERM_LOGS = [
+  '[  OK  ] handshake completed  tls1.3  x25519',
+  '[  OK  ] 4096 blocks verified in 0.312s',
+  '[ INFO ] cache warm — 128 entries preloaded',
+  '[  OK  ] signature chain valid up to root',
+  '[ INFO ] scheduler tick 0x1f4  drift 2ms',
+  '[  OK  ] wal checkpoint  1.2 MiB flushed',
+  '[ INFO ] 3 workers idle, 1 busy',
+];
+const TERM_ERREURS = [
+  '[ FAIL ] checksum mismatch at 0x7ffd21a0',
+  'panic: index out of range [12] with length 8',
+  '[ WARN ] retry 2/5 — connection reset by peer',
+  'segmentation fault (core dumped)',
+  '[ FAIL ] permission denied: /dev/mem',
+];
+const TERM_FALLOUT = [
+  'ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL',
+  '> SET TERMINAL/INQUIRE',
+  '> RUN DEBUG/ACCOUNTS.F',
+  'WELCOME TO ROBCO TERMLINK',
+  '> ENTER PASSWORD NOW',
+];
+
+function tirerAuSort(liste) { return liste[Math.floor(Math.random() * liste.length)]; }
+
+/* Choisit la prochaine ligne et sa nature. Les proportions donnent un flux
+   surtout technique, ponctué de validations, avec l'erreur assez rare pour
+   qu'elle reste remarquable. */
+function prochaineLigneTerminal() {
+  const d = Math.random();
+  if (d < 0.10) return { texte: tirerAuSort(TERM_FALLOUT), type: 'fallout' };
+  if (d < 0.22) return { texte: tirerAuSort(TERM_ERREURS), type: 'erreur' };
+  if (d < 0.50) return { texte: tirerAuSort(TERM_LOGS), type: 'log' };
+  return { texte: tirerAuSort(TERM_CODE), type: 'code' };
 }
 
-function creerRideauMatrix() {
+/* État de frappe par terminal. WeakMap plutôt qu'un tableau : les cartes
+   sont reconstruites à chaque rendu de la mosaïque, et une entrée dont
+   l'élément a disparu du document se libère toute seule. */
+const termEtats = new WeakMap();
+
+function creerTerminalMasque() {
   const box = document.createElement('div');
-  box.className = 'matrix-mask';
+  box.className = 'term-mask';
   box.setAttribute('aria-hidden', 'true');
-  for (let c = 0; c < MATRIX_COLONNES; c++) {
-    const col = document.createElement('span');
-    col.className = 'matrix-col';
-    // Durée et retard tirés au sort par colonne : sans ça les colonnes
-    // descendent toutes ensemble, ce qui ne ressemble à rien.
-    col.style.animationDuration = `${3 + Math.random() * 4}s`;
-    col.style.animationDelay = `${-Math.random() * 5}s`;
-    col.textContent = glyphesAleatoires(MATRIX_HAUTEUR);
-    box.appendChild(col);
-  }
+
+  const corps = document.createElement('div');
+  corps.className = 'term-body';
+
+  const courante = document.createElement('div');
+  courante.className = 'term-line term-current';
+  const tape = document.createElement('span');
+  const caret = document.createElement('span');
+  caret.className = 'term-caret';
+  caret.textContent = '█';
+  courante.append(tape, caret);
+  corps.appendChild(courante);
+
+  // Voile de lignes de balayage, par-dessus le texte.
+  const scan = document.createElement('div');
+  scan.className = 'term-scan';
+
+  box.append(corps, scan);
+  termEtats.set(box, {
+    corps, courante, tape,
+    ligne: prochaineLigneTerminal(),
+    pos: 0,
+    pause: 0,
+  });
   return box;
 }
 
-/* Une seule minuterie pour toutes les cartes masquées de la page, plutôt
-   qu'une par carte : le nombre de cartes varie à chaque rendu, et autant
-   de minuteries à créer/détruire serait une source de fuites. Chaque
-   colonne n'est renouvelée qu'une fois sur trois environ, pour que le
-   changement paraisse désordonné et non synchronisé. */
+/* Une seule minuterie pour toute la page, plutôt qu'une par carte : le
+   nombre de cartes change à chaque rendu, autant de minuteries à
+   créer/détruire serait une source de fuites. On avance de 1 à 3
+   caractères par tick, ce qui donne une frappe irrégulière — une vitesse
+   constante trahirait immédiatement la machine. */
 setInterval(() => {
-  document.querySelectorAll('.matrix-col').forEach((col) => {
-    if (Math.random() < 0.34) col.textContent = glyphesAleatoires(MATRIX_HAUTEUR);
+  // Onglet en arrière-plan : personne ne regarde, on ne touche à rien.
+  if (document.hidden) return;
+  const terminaux = document.querySelectorAll('.term-mask');
+  if (!terminaux.length) return;
+
+  terminaux.forEach((box) => {
+    const e = termEtats.get(box);
+    if (!e) return;
+
+    // Petite pause en fin de ligne, comme quelqu'un qui reprend son souffle.
+    if (e.pause > 0) { e.pause -= 1; return; }
+
+    e.pos += 1 + Math.floor(Math.random() * 3);
+    const texte = e.ligne.texte;
+
+    if (e.pos >= texte.length) {
+      // Ligne terminée : elle rejoint l'historique, une nouvelle commence.
+      e.tape.textContent = '';
+      const finie = document.createElement('div');
+      finie.className = 'term-line term-' + e.ligne.type;
+      finie.textContent = texte;
+      e.corps.insertBefore(finie, e.courante);
+
+      // On ne garde que les dernières lignes : la hauteur du bloc est
+      // fixe, tout ce qui dépasse serait invisible et coûterait pour rien.
+      while (e.corps.children.length > TERM_LIGNES_VISIBLES + 1) {
+        e.corps.removeChild(e.corps.firstChild);
+      }
+
+      e.ligne = prochaineLigneTerminal();
+      e.pos = 0;
+      e.pause = 4 + Math.floor(Math.random() * 8);
+      return;
+    }
+
+    e.tape.textContent = texte.slice(0, e.pos);
+    e.courante.className = 'term-line term-current term-' + e.ligne.type;
   });
-}, 2000);
+}, 55);
 
 function renderNotes() {
   // Recherche en profondeur active : la mosaïque laisse place aux
@@ -1775,7 +1876,7 @@ function renderNotes() {
        pièces jointes — est remplacé par le rideau de caractères et n'est
        même pas construit dans le DOM. */
     if (n.masked) {
-      inner += '<div class="matrix-slot"></div>';
+      inner += '<div class="term-slot"></div>';
     } else {
     if (n.is_checklist) {
       inner += '<ul class="check">';
@@ -1838,8 +1939,8 @@ function renderNotes() {
     el.innerHTML = inner;
     // Rideau construit en DOM (et non en chaîne) : chaque colonne porte sa
     // propre durée d'animation tirée au sort.
-    const emplacement = el.querySelector('.matrix-slot');
-    if (emplacement) emplacement.replaceWith(creerRideauMatrix());
+    const emplacement = el.querySelector('.term-slot');
+    if (emplacement) emplacement.replaceWith(creerTerminalMasque());
     hydrateInlineImages(el, n);
     ajouterBoutonsCopieCode(el);
 
