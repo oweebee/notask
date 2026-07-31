@@ -39,7 +39,7 @@ MAX_META_CHARS = 2000
 def _owned_note(note_id: int, user: User, session: Session) -> Note:
     note = session.get(Note, note_id)
     if note is None or note.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note introuvable")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notask introuvable")
     return note
 
 

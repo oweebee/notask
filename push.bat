@@ -23,6 +23,17 @@ if not exist ".git" (
   git remote add origin %REPO% || goto :erreur
 )
 
+REM --- Verrou .git\index.lock : reste parfois derriere un git plante ou
+REM     interrompu (antivirus, sync, fermeture brutale...) et bloque tout
+REM     add/commit tant qu'il traine. Un git normal en cours sur CE dossier
+REM     pendant qu'on double-clique le script est en pratique impossible
+REM     (le script est la seule chose qui lance git ici) : le supprimer
+REM     avant de continuer est donc sans risque dans ce contexte.
+if exist ".git\index.lock" (
+  echo [INFO] Verrou .git\index.lock detecte, suppression...
+  del /f /q ".git\index.lock" >nul 2>&1
+)
+
 git remote get-url origin >nul 2>&1
 if errorlevel 1 (
   echo [INIT] Ajout du remote origin...
@@ -69,5 +80,4 @@ echo [ECHEC] Une commande git a echoue. Voir les messages ci-dessus.
 
 :fin
 echo.
-pause
 endlocal

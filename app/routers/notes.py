@@ -46,7 +46,7 @@ ICON_KEYS = {
 def _owned_note(note_id: int, user: User, session: Session) -> Note:
     note = session.get(Note, note_id)
     if note is None or note.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note introuvable")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notask introuvable")
     return note
 
 
@@ -89,7 +89,7 @@ def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> Non
 
 @router.get("", response_model=List[NoteOut])
 def list_notes(
-    archived: bool = Query(default=False, description="Afficher les notes archivées"),
+    archived: bool = Query(default=False, description="Afficher les notasks archivées"),
     q: Optional[str] = Query(default=None, description="Recherche titre et contenu"),
     label: Optional[int] = Query(default=None, description="Filtrer par identifiant de libellé"),
     user: User = Depends(get_current_user),
@@ -155,7 +155,7 @@ def update_note(
     if data.get("done") and (data.get("due_at", note.due_at) is None):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Une note sans échéance ne peut pas être marquée terminée",
+            "Une notask sans échéance ne peut pas être marquée terminée",
         )
 
     if "done" in data and data["done"] != note.done:

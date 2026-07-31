@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 20 19">
   <!-- Favicon simplifié : viewBox quasi carré, cuillères jointives et sans
-       le détail de reflet (trop fin pour rester lisible à 16px) — le rendu
-       précédent laissait beaucoup de vide et paraissait minuscule dans
-       l'onglet. -->
+       le détail de reflet (trop fin pour rester lisible à 16px). Manches
+       élargis (3 -> 5) et rapprochés (écart 7 -> 4 unités) par rapport à la
+       version précédente : le grand vide central sous les têtes la faisait
+       paraître minuscule dans l'onglet, à côté d'un favicon emoji classique
+       qui remplit tout le carré. -->
   <ellipse cx="5" cy="6" rx="5" ry="6" fill="#ffd54f"/>
-  <rect x="3.5" y="11" width="3" height="8" rx="1.5" fill="#ffd54f"/>
+  <rect x="3" y="11" width="5" height="8" rx="2" fill="#ffd54f"/>
   <ellipse cx="15" cy="6" rx="5" ry="6" fill="#42a5f5"/>
-  <rect x="13.5" y="11" width="3" height="8" rx="1.5" fill="#42a5f5"/>
+  <rect x="12" y="11" width="5" height="8" rx="2" fill="#42a5f5"/>
 </svg>

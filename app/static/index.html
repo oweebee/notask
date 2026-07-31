@@ -38,7 +38,7 @@
 <section id="screen-login" class="gate" hidden>
   <div class="card">
     <h1>notask</h1>
-    <p class="sub">Connectez-vous pour accéder à vos notes et à vos tâches.</p>
+    <p class="sub">Connectez-vous pour accéder à vos notasks et à vos tâches.</p>
     <form id="form-login">
       <div class="field">
         <label for="login-user">Nom d'utilisateur</label>
@@ -67,16 +67,24 @@
 
   <div class="shell">
     <aside class="drawer">
-      <p class="drawer-section">Notes</p>
-      <button class="drawer-item active" data-view="notes" id="nav-notes">Notes</button>
-      <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
+      <!-- Teinte jaune/bleue = repère de navigation (couleurs des deux
+           cuillères du logo), ne concerne que ce menu — les notes elles-
+           mêmes gardent leur propre palette de 21 couleurs, inchangée. -->
+      <div class="drawer-notes-group">
+        <p class="drawer-section">Notasks</p>
+        <button class="drawer-item active" data-view="notes" id="nav-notes">Notasks</button>
+        <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
+        <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
+      </div>
 
       <hr class="drawer-sep">
-      <p class="drawer-section">Tâches</p>
-      <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
-      <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
-      <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
-      <button class="drawer-item" data-view="done" id="nav-done">Terminées</button>
+      <div class="drawer-tasks-group">
+        <p class="drawer-section">Tâches</p>
+        <button class="drawer-item" data-view="tasks" id="nav-tasks">Toutes</button>
+        <button class="drawer-item" data-view="late" id="nav-late">En retard</button>
+        <button class="drawer-item" data-view="today" id="nav-today">Aujourd'hui</button>
+        <button class="drawer-item" data-view="done" id="nav-done">Terminées</button>
+      </div>
 
       <hr class="drawer-sep">
       <p class="drawer-section">Libellés</p>
@@ -106,7 +114,7 @@
           </div>
           <input class="description-in" id="nc-description" placeholder="Description">
           <div class="ta-wrap">
-            <textarea id="nc-content" rows="2" placeholder="Nouvelle note…"></textarea>
+            <textarea id="nc-content" rows="2" placeholder="Nouvelle notask…"></textarea>
             <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
           </div>
           <div id="nc-items" hidden></div>
@@ -121,10 +129,10 @@
         </div>
 
         <div class="toolbar search-toolbar">
-          <input type="search" id="notes-search" placeholder="Rechercher dans les notes…">
+          <input type="search" id="notes-search" placeholder="Rechercher dans les notasks…">
         </div>
       </div>
-      <div class="empty" id="notes-empty" hidden>Aucune note.</div>
+      <div class="empty" id="notes-empty" hidden>Aucune notask.</div>
     </section>
 
     <!-- ---- Tâches ---- -->
@@ -133,7 +141,7 @@
         <strong id="tasks-title" style="flex:1"></strong>
       </div>
       <p class="tasks-hint">
-        Une tâche naît toujours d'une note : datez une note, ou l'une de ses cases à cocher.
+        Une tâche naît toujours d'une notask : datez une notask, ou l'une de ses cases à cocher.
       </p>
       <div class="tasks-grid" id="tasks-grid"></div>
       <div class="empty" id="tasks-empty" hidden>Aucune tâche.</div>
@@ -153,12 +161,20 @@
       </table>
     </section>
   </main>
+
+  <!-- Colonne d'échéances, uniquement sur les vues Notes/Favoris/Archives —
+       prise sur les marges de part et d'autre de la mosaïque, pas sur sa
+       propre largeur (voir la grille .shell dans style.css). -->
+  <aside class="agenda-col" id="agenda-col" hidden>
+    <div id="agenda-content"></div>
+    <div class="empty agenda-empty" id="agenda-empty" hidden>Aucune échéance à venir.</div>
+  </aside>
   </div>
 </div>
 
 <!-- ============ Boîtes de dialogue ============ -->
 <dialog id="dlg-note">
-  <h2>Modifier la note</h2>
+  <h2>Modifier la notask</h2>
   <div class="field">
     <label for="dn-title">Titre</label>
     <div class="title-row">
@@ -183,7 +199,7 @@
     <div id="dn-items"></div>
   </div>
   <div class="field">
-    <label>Échéance de la note</label>
+    <label>Échéance de la notask</label>
     <div class="field-actions-row">
       <button class="btn ghost sm" id="dn-add-item" type="button" hidden>+ Élément</button>
       <div class="due-row">
@@ -228,11 +244,15 @@
   </div>
   <div class="dns-bottom-bar">
     <div class="fmt-toolbar" id="dns-fmt-toolbar">
-      <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
-      <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
-      <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
-      <span class="fmt-sep"></span>
-      <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+      <span id="dns-fmt-group">
+        <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
+        <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
+        <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+        <span class="fmt-sep"></span>
+        <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+        <span class="fmt-sep"></span>
+      </span>
+      <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
     </div>
     <div class="field-actions-row">
       <button class="btn ghost sm" id="dns-add-item" type="button" hidden>+ Élément</button>

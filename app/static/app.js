@@ -169,7 +169,7 @@ function clearEncKey() {
 
 async function encryptField(plain) {
   if (!plain) return '';
-  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  if (!encKey) throw new Error('Notasks verrouillées : reconnectez-vous.');
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, new TextEncoder().encode(plain));
   const combined = new Uint8Array(iv.length + ct.byteLength);
@@ -180,7 +180,7 @@ async function encryptField(plain) {
 
 async function decryptField(value) {
   if (!value || !value.startsWith(ENC_PREFIX)) return value || '';
-  if (!encKey) return 'Note verrouillée';
+  if (!encKey) return 'Notask verrouillée';
   try {
     const combined = base64ToBytes(value.slice(ENC_PREFIX.length));
     const iv = combined.slice(0, 12);
@@ -198,7 +198,7 @@ async function decryptField(value) {
    (inutile : le blob part directement dans un FormData, pas dans du JSON).
    Format du blob envoyé au serveur : iv (12 octets) + texte chiffré. */
 async function encryptBinary(buffer) {
-  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  if (!encKey) throw new Error('Notasks verrouillées : reconnectez-vous.');
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, buffer);
   const combined = new Uint8Array(iv.length + ct.byteLength);
@@ -208,7 +208,7 @@ async function encryptBinary(buffer) {
 }
 
 async function decryptBinary(buffer) {
-  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  if (!encKey) throw new Error('Notasks verrouillées : reconnectez-vous.');
   const bytes = new Uint8Array(buffer);
   const iv = bytes.slice(0, 12);
   const ct = bytes.slice(12);
@@ -242,6 +242,7 @@ let state = {
   view: 'notes',
   notes: [],
   showArchived: false,
+  showFavoritesOnly: false,
   search: '',
   tasks: [],
   editingNote: null,
@@ -254,10 +255,10 @@ let state = {
 };
 
 const BUCKET_LABELS = {
-  late: 'En retard',
-  today: "Aujourd'hui",
-  upcoming: 'À venir',
-  done: 'Terminées',
+  late: 'Notasks en retard',
+  today: 'Notasks du jour',
+  upcoming: 'Notasks à venir',
+  done: 'Notasks terminées',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -692,7 +693,7 @@ async function boot() {
   if (!window.crypto || !window.crypto.subtle) {
     document.body.innerHTML =
       '<div style="max-width:32rem;margin:4rem auto;padding:1.5rem;font-family:sans-serif;color:#e6e0e9;">'
-      + '<h1>Connexion non sécurisée</h1><p>notask chiffre le contenu des notes dans le navigateur, ce qui '
+      + '<h1>Connexion non sécurisée</h1><p>notask chiffre le contenu des notasks dans le navigateur, ce qui '
       + "nécessite une connexion HTTPS (l'API de chiffrement du navigateur est désactivée en HTTP). "
       + 'Vérifiez la configuration HTTPS du serveur (Traefik/Coolify).</p></div>';
     return;
@@ -728,12 +729,13 @@ function enterApp() {
   // Icônes du menu latéral et logo
   $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
   $('#nav-notes').innerHTML =
-    `<span class="spoon-pair">${ICONS.spoon}${ICONS.spoonBlue}</span><span class="label">Notes</span>`;
+    `<span class="spoon-pair">${ICONS.spoon}${ICONS.spoonBlue}</span><span class="label">Notasks</span>`;
+  $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
-  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes</span>';
-  $('#nav-late').innerHTML = ICONS.late + '<span class="label">En retard</span>';
-  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Aujourd\'hui</span>';
-  $('#nav-done').innerHTML = ICONS.check + '<span class="label">Terminées</span>';
+  $('#nav-tasks').innerHTML = ICONS.tasks + '<span class="label">Toutes les notasks</span>';
+  $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span>';
+  $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span>';
+  $('#nav-done').innerHTML = ICONS.check + '<span class="label">Notasks terminées</span>';
   $('#tab-admin').innerHTML = ICONS.users + '<span class="label">Comptes</span>';
 
   loadLabels();
@@ -750,21 +752,37 @@ function switchView(view) {
   state.view = view;
   $$('.drawer-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
 
-  const isNotes = view === 'notes' || view === 'archives';
+  const isNotes = view === 'notes' || view === 'archives' || view === 'favorites';
   const isTasks = view in TASK_VIEWS;
 
   $('#view-notes').hidden = !isNotes;
   $('#view-tasks').hidden = !isTasks;
   $('#view-admin').hidden = view !== 'admin';
 
+  // Colonne d'échéances : seulement sur les vues Notes/Favoris/Archives, là
+  // où la mosaïque a des marges à céder (voir .shell.has-agenda). Son
+  // contenu se recharge à l'intérieur de loadNotes() ci-dessous, pas ici :
+  // un seul point de rechargement, plutôt que de dupliquer l'appel à chaque
+  // fois que l'un ou l'autre change (pin, archive, éditions...).
+  $('.shell').classList.toggle('has-agenda', isNotes);
+  $('#agenda-col').hidden = !isNotes;
+
   if (isNotes) {
     state.showArchived = view === 'archives';
-    $('#notes-empty').textContent = state.showArchived ? 'Aucune note archivée.' : 'Aucune note.';
-    $('.note-composer').hidden = state.showArchived;  // on ne compose pas dans les archives
+    state.showFavoritesOnly = view === 'favorites';
+    $('#notes-empty').textContent = state.showArchived
+      ? 'Aucune notask archivée.'
+      : state.showFavoritesOnly ? 'Aucun favori.' : 'Aucune notask.';
+    // On ne compose pas dans les archives, ni dans les favoris (vue filtrée
+    // en lecture — une note qui vient d'y être créée n'est de toute façon
+    // pas encore épinglée, donc disparaîtrait aussitôt de la liste).
+    $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
   }
   if (isTasks) {
-    const titres = { tasks: 'Toutes les tâches', late: 'En retard', today: "Aujourd'hui", done: 'Terminées' };
+    // Mêmes intitulés que le menu de gauche (BUCKET_LABELS), plus "tasks"
+    // qui n'y figure pas (regroupement "Toutes", pas un bucket de tâches).
+    const titres = { tasks: 'Toutes les notasks', ...BUCKET_LABELS };
     $('#tasks-title').textContent = titres[view];
     loadTasks(TASK_VIEWS[view]);
   }
@@ -827,8 +845,15 @@ async function loadNotes() {
   if (state.labelFilter) params.set('label', state.labelFilter);
   const notes = await api('/notes?' + params);
   await Promise.all(notes.map(decryptNote));
-  state.notes = state.search ? notes.filter((n) => noteMatchesSearch(n, state.search)) : notes;
+  let filtered = notes;
+  // Favoris : pas de paramètre côté serveur, la liste des notes non
+  // archivées est déjà chargée — filtrer ici sur `pinned` suffit, comme la
+  // recherche juste en dessous.
+  if (state.showFavoritesOnly) filtered = filtered.filter((n) => n.pinned);
+  if (state.search) filtered = filtered.filter((n) => noteMatchesSearch(n, state.search));
+  state.notes = filtered;
   renderNotes();
+  if (!$('#agenda-col').hidden) loadAgenda();
 }
 
 /* -------------------------------- Libellés --------------------------------
@@ -975,7 +1000,7 @@ $('#label-new-input').addEventListener('keydown', (e) => {
 // positions que du sous-ensemble visible mélangerait l'ordre des notes
 // masquées par le filtre.
 function notesReorderable() {
-  return !state.showArchived && !state.search && !state.labelFilter;
+  return !state.showArchived && !state.showFavoritesOnly && !state.search && !state.labelFilter;
 }
 
 /* Place le composeur, la recherche, ET assez de notes pour les entourer des
@@ -1150,7 +1175,7 @@ function renderNotes() {
       loadNotes();
     };
     el.querySelector('[data-act=delete]').onclick = async () => {
-      if (!confirm('Supprimer définitivement cette note ?')) return;
+      if (!confirm('Supprimer définitivement cette notask ?')) return;
       await api('/notes/' + n.id, { method: 'DELETE' });
       loadNotes();
     };
@@ -1629,9 +1654,10 @@ $('#dlg-note').addEventListener('click', (e) => {
 });
 
 /* --- Dialogue d'édition simple, façon Keep ---
-   Ouvert au clic sur le corps d'une note : seul le texte se modifie
-   (titre, contenu ou cases à cocher) — pas de couleur, pas de libellé, pas
-   d'échéance, pas de bascule de mode. Toute fermeture enregistre. */
+   Ouvert au clic sur le corps d'une note : texte, cases à cocher, échéance,
+   pièces jointes et bascule texte libre/liste s'y modifient — pas de
+   couleur, pas de libellé (réservés à la boîte "Modifier" complète). Toute
+   fermeture enregistre. */
 
 /* -------------------- Pièces jointes, édition simple -------------------- *
  * Upload/suppression immédiats (pas de bouton Enregistrer sur cette boîte
@@ -1689,19 +1715,34 @@ function renderAttachmentsSimple() {
   }
 }
 
-async function handleIncomingAttachments(fileList) {
+// Suivi des envois de pièces jointes en cours (paste/glisser-déposer/bouton
+// ne sont jamais attendus par leur appelant, ce sont des gestionnaires
+// d'événement). Sans ce suivi, fermer la boîte juste après un collage
+// déclenche saveNoteSimpleDialog() -> loadNotes() AVANT la fin de l'envoi :
+// loadNotes() remplace state.notes par des objets fraîchement récupérés du
+// serveur (qui ne connaît pas encore la pièce jointe), et le the résultat de
+// l'upload, une fois arrivé, ne fait plus que muter un objet déjà orphelin
+// — la photo est bien envoyée, mais jamais revue dans l'interface. Voir
+// saveNoteSimpleDialog() qui attend ce tableau avant de continuer.
+let pendingAttachmentUploads = [];
+
+function handleIncomingAttachments(fileList) {
   const note = state.editingNote;
   if (!note || !fileList || !fileList.length) return;
-  for (const file of Array.from(fileList)) {
-    try {
-      const created = await uploadAttachment(note.id, file);
-      created.meta = JSON.parse(await decryptField(created.enc_meta) || '{}');
-      note.attachments.push(created);
-    } catch (err) {
-      alert(err.message);
+  const job = (async () => {
+    for (const file of Array.from(fileList)) {
+      try {
+        const created = await uploadAttachment(note.id, file);
+        created.meta = JSON.parse(await decryptField(created.enc_meta) || '{}');
+        note.attachments.push(created);
+      } catch (err) {
+        alert(err.message);
+      }
     }
-  }
-  renderAttachmentsSimple();
+    renderAttachmentsSimple();
+  })();
+  pendingAttachmentUploads.push(job);
+  return job;
 }
 
 $('#dns-attach-btn').addEventListener('click', () => $('#dns-attach-input').click());
@@ -1742,6 +1783,40 @@ dnsCard.addEventListener('drop', (e) => {
   handleIncomingAttachments(e.dataTransfer.files);
 });
 
+/* Bascule texte libre <-> liste à cocher, édition simple. Contrairement au
+   fmt-toolbar (gras/italique/souligné/code), ce bouton reste visible dans
+   les deux modes — voir #dns-fmt-group dans index.html, qui regroupe les
+   seuls boutons de mise en forme et se masque seul en mode liste. */
+function renderDnsMode() {
+  $('#dns-content-field').hidden = state.editingIsChecklist;
+  $('#dns-fmt-group').hidden = state.editingIsChecklist;
+  $('#dns-items-field').hidden = !state.editingIsChecklist;
+  $('#dns-add-item').hidden = !state.editingIsChecklist;
+  const btn = $('#dns-toggle-checklist');
+  btn.innerHTML = state.editingIsChecklist ? ICONS.pencil : ICONS.tasks;
+  const label = state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+$('#dns-toggle-checklist').addEventListener('click', () => {
+  if (!state.editingIsChecklist) {
+    // Texte libre -> liste : chaque ligne déjà écrite devient un élément.
+    const lignes = richToText($('#dns-content')).split('\n').filter((l) => l.trim());
+    state.editingNoteItems = lignes.length
+      ? lignes.map((l) => ({ text: l.trim(), checked: false, due_at: null }))
+      : [{ text: '', checked: false, due_at: null }];
+    renderNoteItemsSimple();
+  } else {
+    // Liste -> texte libre : les lignes deviennent des paragraphes.
+    $('#dns-content').innerHTML = renderFormatted(
+      state.editingNoteItems.map((i) => i.text).filter(Boolean).join('\n')
+    );
+  }
+  state.editingIsChecklist = !state.editingIsChecklist;
+  renderDnsMode();
+});
+
 function openNoteSimpleDialog(note) {
   state.editingNote = note;
   state.editingIsChecklist = note.is_checklist;
@@ -1749,14 +1824,12 @@ function openNoteSimpleDialog(note) {
     text: i.text, checked: i.checked, due_at: i.due_at,
   }));
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
+  pendingAttachmentUploads = [];
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
   $('#dns-content').innerHTML = renderFormatted(note.content || '');
-  $('#dns-content-field').hidden = state.editingIsChecklist;
-  $('#dns-fmt-toolbar').hidden = state.editingIsChecklist;
-  $('#dns-items-field').hidden = !state.editingIsChecklist;
-  $('#dns-add-item').hidden = !state.editingIsChecklist;
+  renderDnsMode();
   $('#dns-due').value = note.due_at || '';
   renderNoteDueBtnSimple();
   renderNoteItemsSimple();
@@ -1897,17 +1970,32 @@ $('#dns-add-item').addEventListener('click', () => {
 async function saveNoteSimpleDialog() {
   const n = state.editingNote;
   if (!n) return;
+  // Attendre les pièces jointes encore en cours d'envoi (collées/déposées
+  // juste avant la fermeture) avant tout PATCH/rechargement — voir le
+  // commentaire sur pendingAttachmentUploads plus haut.
+  await Promise.allSettled(pendingAttachmentUploads);
+  pendingAttachmentUploads = [];
   try {
     const body = {
       title: await encryptField($('#dns-title').value),
       description: await encryptField($('#dns-description').value),
       due_at: $('#dns-due').value || null,
+      // Sans ce champ, basculer le mode avec #dns-toggle-checklist ne
+      // survivait pas à la fermeture : is_checklist n'était jamais envoyé,
+      // la note rouvrait dans son ancien mode au prochain clic.
+      is_checklist: state.editingIsChecklist,
     };
+    // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
+    // celui du mode courant : sinon, après une bascule, l'ancien contenu
+    // (lignes de checklist ou texte libre) restait en base sans être
+    // affiché nulle part — même logique que saveNoteDialog() ci-dessus.
     if (state.editingIsChecklist) {
       const items = state.editingNoteItems.filter((i) => i.text.trim());
       body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
+      body.content = '';
     } else {
       body.content = await encryptField(richToText($('#dns-content')));
+      body.items = [];
     }
     await api('/notes/' + n.id, { method: 'PATCH', body });
   } catch (err) {
@@ -1967,15 +2055,15 @@ function renderTasks() {
 
       // Une tâche issue d'une ligne rappelle toujours la note dont elle vient
       const origine = t.kind === 'item'
-        ? `<button class="task-origin" title="Ouvrir la note">
-             ${ICONS.noteRef}<span>${escapeHtml(t.note_title || 'Note sans titre')}</span>
+        ? `<button class="task-origin" title="Ouvrir la notask">
+             ${ICONS.noteRef}<span>${escapeHtml(t.note_title || 'Notask sans titre')}</span>
            </button>`
         : '';
 
       card.innerHTML = `
         <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Terminer">
         <div class="task-main">
-          <div class="task-text">${escapeHtml(t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Note sans titre'))}</div>
+          <div class="task-text">${escapeHtml(t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre'))}</div>
           <div class="task-meta">
             <span class="${b === 'late' ? 'late' : ''}">${ICONS.clock}${formatDue(t.due_at)}</span>
           </div>
@@ -2000,6 +2088,69 @@ async function ouvrirNoteParId(noteId) {
   const note = await api('/notes/' + noteId);
   await decryptNote(note);
   openNoteDialog(note);
+}
+
+/* --------------------------- Colonne d'échéances --------------------------
+   Aperçu compact des notasks proches, affiché à côté de la mosaïque (voir
+   #agenda-col dans index.html et switchView() qui l'active/désactive selon
+   la vue). Volontairement borné à 7 jours pour "à venir" — sans limite, la
+   colonne finirait par afficher toutes les échéances lointaines, ce qui n'a
+   plus rien d'un coup d'œil rapide. Les tâches terminées n'y figurent pas. */
+async function loadAgenda() {
+  let tasks;
+  try {
+    tasks = await api('/tasks');
+  } catch {
+    return; // session expirée par ex. — api() gère déjà la redirection
+  }
+  await Promise.all(tasks.map(async (t) => {
+    t.text = await decryptField(t.text);
+    t.note_title = await decryptField(t.note_title);
+  }));
+  const now = new Date();
+  const dans7j = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const items = tasks.filter((t) => {
+    if (t.bucket === 'late' || t.bucket === 'today') return true;
+    if (t.bucket === 'upcoming') return new Date(t.due_at) <= dans7j;
+    return false; // "done" exclu : la colonne suit les échéances à venir, pas un historique
+  });
+  renderAgenda(items);
+}
+
+function renderAgenda(items) {
+  const box = $('#agenda-content');
+  box.innerHTML = '';
+  $('#agenda-empty').hidden = items.length > 0;
+
+  const ordre = ['late', 'today', 'upcoming'];
+  const groupes = {};
+  for (const t of items) (groupes[t.bucket] ||= []).push(t);
+
+  for (const b of ordre) {
+    if (!groupes[b] || !groupes[b].length) continue;
+
+    const section = document.createElement('div');
+    section.className = 'agenda-group' + (b === 'late' ? ' late' : '');
+    const h2 = document.createElement('h2');
+    h2.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
+    section.appendChild(h2);
+
+    for (const t of groupes[b]) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'agenda-item';
+      // Couleur de la note d'origine en repère (bordure gauche), via la
+      // même table hexadécimale que les puces de libellé — plus fiable
+      // qu'une classe .c-* ici, dont le fond serait à écraser en plus.
+      btn.style.borderLeftColor = LABEL_COLOR_HEX[t.color] || 'var(--md-outline-variant)';
+      const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
+      btn.innerHTML = `<span class="agenda-item-text">${escapeHtml(label)}</span>
+        <span class="agenda-item-due">${formatDue(t.due_at)}</span>`;
+      btn.addEventListener('click', () => ouvrirNoteParId(t.note_id));
+      section.appendChild(btn);
+    }
+    box.appendChild(section);
+  }
 }
 
 /* -------------------------------- Comptes -------------------------------- */

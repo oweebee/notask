@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="notask",
-    description="Notes et tâches — API REST protégée par JWT.",
+    description="Notasks et tâches — API REST protégée par JWT.",
     version="1.0.0",
     lifespan=lifespan,
 )

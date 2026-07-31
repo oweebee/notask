@@ -41,7 +41,7 @@ def list_tasks(
     bucket: Optional[str] = Query(
         default=None, description="late, today, upcoming ou done ; tout si absent"
     ),
-    include_archived: bool = Query(default=False, description="Inclure les notes archivées"),
+    include_archived: bool = Query(default=False, description="Inclure les notasks archivées"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -123,7 +123,7 @@ def set_done(
         if note is None or note.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Tâche introuvable")
         if note.due_at is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette note n'a pas d'échéance")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette notask n'a pas d'échéance")
 
         note.done = payload.done
         note.done_at = now if payload.done else None
