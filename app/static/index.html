@@ -74,6 +74,7 @@
         <button class="drawer-item active" data-view="notes" id="nav-notes">Notasks</button>
         <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
         <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
+        <button class="drawer-item" data-view="trash" id="nav-trash">Corbeille</button>
       </div>
 
       <hr class="drawer-sep">
@@ -160,6 +161,19 @@
       <div class="empty" id="tasks-empty" hidden>Aucune tâche.</div>
     </section>
 
+    <!-- ---- Corbeille ---- -->
+    <!-- Notasks supprimées, en lecture seule (pas d'édition possible depuis
+         ici) : juste de quoi identifier la notask avant de la restaurer ou
+         de la supprimer définitivement. Purge automatique côté serveur au
+         bout de 30 jours (voir _purge_expired_trash() dans notes.py). -->
+    <section id="view-trash" hidden>
+      <div class="toolbar">
+        <strong style="flex:1">Corbeille</strong>
+      </div>
+      <div class="trash-grid" id="trash-grid"></div>
+      <div class="empty" id="trash-empty" hidden>La corbeille est vide.</div>
+    </section>
+
     <!-- ---- Comptes ---- -->
     <section id="view-admin" hidden>
       <div class="toolbar">
@@ -229,6 +243,7 @@
   <div class="field">
     <label>Libellés</label>
     <div class="label-chips" id="dn-labels"></div>
+    <div class="label-add-picker" id="dn-labels-picker" hidden></div>
   </div>
   <div class="dialog-actions">
     <button class="btn ghost sm" id="dn-history-btn" type="button">Historique</button>
@@ -253,6 +268,7 @@
       <div id="dns-items"></div>
     </div>
     <div class="label-chips" id="dns-labels"></div>
+    <div class="label-add-picker" id="dns-labels-picker" hidden></div>
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
          la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
          l'envoi (voir uploadAttachment() dans app.js). -->

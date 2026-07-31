@@ -53,7 +53,11 @@ def list_tasks(
 
     notes = session.exec(select(Note).where(Note.user_id == user.id)).all()
     by_id = {n.id: n for n in notes}
-    visible = [n for n in notes if include_archived or not n.archived]
+    # Une note en corbeille n'est plus une tâche, même si elle a une échéance.
+    visible = [
+        n for n in notes
+        if (include_archived or not n.archived) and n.trashed_at is None
+    ]
 
     # 1. Les notes qui portent une échéance
     for n in visible:

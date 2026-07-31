@@ -245,6 +245,7 @@ let state = {
   showFavoritesOnly: false,
   search: '',
   tasks: [],
+  trashNotes: [],
   editingNote: null,
   editingNoteItems: [],
   labels: [],
@@ -755,6 +756,7 @@ function enterApp() {
   $('#nav-notes').innerHTML = ICONS.spoon + '<span class="label">Notasks</span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">Favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">Archives</span>';
+  $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">Corbeille</span>';
   $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">Toutes les notasks</span><span class="nav-count" id="count-tasks" hidden></span>';
   $('#nav-late').innerHTML = ICONS.late + '<span class="label">Notasks en retard</span><span class="nav-count" id="count-late" hidden></span>';
   $('#nav-today').innerHTML = ICONS.today + '<span class="label">Notasks du jour</span><span class="nav-count" id="count-today" hidden></span>';
@@ -780,6 +782,7 @@ function switchView(view) {
 
   $('#view-notes').hidden = !isNotes;
   $('#view-tasks').hidden = !isTasks;
+  $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
   // Colonne d'échéances : seulement sur les vues Notes/Favoris/Archives, là
@@ -809,6 +812,7 @@ function switchView(view) {
     $('#tasks-title').textContent = titres[view];
     loadTasks(TASK_VIEWS[view]);
   }
+  if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
 }
 
@@ -878,6 +882,68 @@ async function loadNotes() {
   renderNotes();
   if (!$('#agenda-col').hidden) loadAgenda();
   updateTaskBadges();
+}
+
+/* -------------------------------- Corbeille --------------------------------
+   Notasks supprimées : liste en lecture seule, juste de quoi identifier la
+   notask avant de la restaurer ou de la supprimer définitivement — pas
+   d'édition possible depuis ici (voir renderNotes() pour la vue normale,
+   bien plus riche en interactions). Purge automatique après 30 jours côté
+   serveur (TRASH_RETENTION_DAYS dans notes.py) ; le même chiffre est
+   dupliqué ici uniquement pour l'affichage du compte à rebours. */
+const TRASH_RETENTION_DAYS = 30;
+
+async function loadTrash() {
+  const notes = await api('/notes?' + new URLSearchParams({ trashed: true }));
+  await Promise.all(notes.map(decryptNote));
+  state.trashNotes = notes;
+  renderTrash();
+}
+
+function daysLeftInTrash(trashedAt) {
+  const elapsedDays = (Date.now() - new Date(trashedAt).getTime()) / 86400000;
+  return Math.max(0, Math.ceil(TRASH_RETENTION_DAYS - elapsedDays));
+}
+
+function renderTrash() {
+  const grid = $('#trash-grid');
+  grid.innerHTML = '';
+  const notes = state.trashNotes || [];
+  $('#trash-empty').hidden = notes.length > 0;
+
+  for (const n of notes) {
+    const el = document.createElement('article');
+    el.className = 'trash-card c-' + n.color;
+
+    const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
+    const title = n.title || 'Notask sans titre';
+    const snippet = n.is_checklist
+      ? `${(n.items || []).length} élément${(n.items || []).length > 1 ? 's' : ''}`
+      : (n.content || '').slice(0, 140);
+
+    el.innerHTML = `
+      <div class="trash-card-title-row">${icon}<h3>${escapeHtml(title)}</h3></div>
+      ${n.description ? `<div class="description">${escapeHtml(n.description)}</div>` : ''}
+      ${snippet ? `<div class="trash-card-snippet">${escapeHtml(snippet)}</div>` : ''}
+      <div class="trash-card-meta">${daysLeftInTrash(n.trashed_at)} j avant suppression définitive</div>
+      <div class="trash-card-actions">
+        <button type="button" class="btn ghost sm" data-act="restore">${ICONS.undo} Restaurer</button>
+        <button type="button" class="btn danger sm" data-act="purge">${ICONS.trash} Supprimer définitivement</button>
+      </div>`;
+
+    el.querySelector('[data-act=restore]').onclick = async () => {
+      await api('/notes/' + n.id + '/restore', { method: 'POST' });
+      loadTrash();
+      updateTaskBadges();
+    };
+    el.querySelector('[data-act=purge]').onclick = async () => {
+      if (!confirm('Supprimer définitivement cette notask ? Cette action est irréversible.')) return;
+      await api('/notes/' + n.id, { method: 'DELETE' });
+      loadTrash();
+    };
+
+    grid.appendChild(el);
+  }
 }
 
 /* -------------------------------- Libellés --------------------------------
@@ -1155,15 +1221,6 @@ function renderNotes() {
       inner += `<div class="body">${renderFormatted(n.content)}</div>`;
     }
 
-    if (n.due_at) {
-      const now = new Date();
-      const late = !n.done && new Date(n.due_at) < now;
-      inner += `<div class="note-due ${late ? 'late' : ''} ${n.done ? 'done' : ''}">
-        <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
-        ${ICONS.clock}<span>${formatDue(n.due_at)}</span>
-      </div>`;
-    }
-
     if (n.attachments && n.attachments.length) {
       const images = n.attachments.filter((a) => (a.meta && a.meta.mime || '').startsWith('image/'));
       const files = n.attachments.filter((a) => !(a.meta && a.meta.mime || '').startsWith('image/'));
@@ -1180,13 +1237,28 @@ function renderNotes() {
     inner += `<div class="palette" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
+        <button data-act="label" title="Libellés" aria-label="Libellés">${ICONS.tag}</button>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
         <span class="sep"></span>
-        <button data-act="delete" title="Supprimer" aria-label="Supprimer">${ICONS.trash}</button>
-      </div>
-      <div class="note-labels"></div>
+        <button data-act="delete" title="Mettre à la corbeille" aria-label="Mettre à la corbeille">${ICONS.trash}</button>
+      </div>`;
+
+    // Échéance : tout en bas de la carte, sous la barre d'options — plus
+    // au-dessus des pièces jointes comme avant (déplacée à la demande, au
+    // même niveau que l'ancien bouton + des libellés, juste au-dessus de
+    // la rangée de libellés).
+    if (n.due_at) {
+      const now = new Date();
+      const late = !n.done && new Date(n.due_at) < now;
+      inner += `<div class="note-due ${late ? 'late' : ''} ${n.done ? 'done' : ''}">
+        <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
+        ${ICONS.clock}<span>${formatDue(n.due_at)}</span>
+      </div>`;
+    }
+
+    inner += `<div class="note-labels"></div>
       <div class="label-add-picker" hidden></div>`;
 
     el.innerHTML = inner;
@@ -1214,7 +1286,7 @@ function renderNotes() {
       loadNotes();
     };
     el.querySelector('[data-act=delete]').onclick = async () => {
-      if (!confirm('Supprimer définitivement cette notask ?')) return;
+      if (!confirm('Déplacer cette notask vers la corbeille ? Elle y restera 30 jours avant suppression définitive.')) return;
       await api('/notes/' + n.id, { method: 'DELETE' });
       loadNotes();
     };
@@ -1299,16 +1371,19 @@ function renderNotes() {
    assignés à cette notask, colorés avec la couleur propre du libellé
    (celle choisie dans le menu latéral via openLabelEditPopup — pas la
    couleur de la note), pas un aplat générique comme avant. Survol d'une
-   puce = petite croix à droite pour la retirer ; après la dernière puce,
-   un bouton + ouvre la liste des libellés pas encore posés sur cette
-   notask (`.label-add-picker`, même case-à-côté que .palette). Couleur en
-   style inline plutôt qu'en classe .c-* : `.label-chip:hover` a la même
-   spécificité et écraserait sinon la couleur au survol (même piège que
-   celui déjà rencontré et corrigé sur .drawer-item, voir
-   renderLabelsDrawer()). */
+   puce = petite croix à droite pour la retirer. L'ajout ne passe plus par
+   un bouton + à la suite des puces (retiré à la demande) : c'est le
+   bouton "Libellés" de la barre d'actions (data-act="label", à côté de
+   couleur/archiver/modifier) qui ouvre la liste des libellés pas encore
+   posés sur cette notask (`.label-add-picker`, même case-à-côté que
+   .palette). Couleur en style inline plutôt qu'en classe .c-* :
+   `.label-chip:hover` a la même spécificité et écraserait sinon la
+   couleur au survol (même piège que celui déjà rencontré et corrigé sur
+   .drawer-item, voir renderLabelsDrawer()). */
 function renderCardLabels(el, n) {
   const box = el.querySelector('.note-labels');
   const picker = el.querySelector('.label-add-picker');
+  const toggleBtn = el.querySelector('[data-act="label"]');
   if (!box || !picker) return;
   box.innerHTML = '';
   picker.innerHTML = '';
@@ -1344,39 +1419,34 @@ function renderCardLabels(el, n) {
 
   const remaining = state.labels.filter((l) => !(n.label_ids || []).includes(l.id));
 
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'label-add-btn';
-  addBtn.title = 'Ajouter un libellé';
-  addBtn.setAttribute('aria-label', 'Ajouter un libellé');
-  addBtn.innerHTML = ICONS.plus;
-  addBtn.onclick = (e) => {
-    e.stopPropagation();
-    if (!picker.hidden) { picker.hidden = true; return; }
-    picker.innerHTML = '';
-    if (!remaining.length) {
-      picker.innerHTML = '<span class="hint">Aucun libellé disponible — créez-en un dans le menu latéral.</span>';
-    } else {
-      for (const l of remaining) {
-        const opt = document.createElement('button');
-        opt.type = 'button';
-        opt.className = 'label-chip';
-        if (l.color && LABEL_COLOR_HEX[l.color]) {
-          opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+  if (toggleBtn) {
+    toggleBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!picker.hidden) { picker.hidden = true; return; }
+      picker.innerHTML = '';
+      if (!remaining.length) {
+        picker.innerHTML = '<span class="hint">Aucun libellé disponible — créez-en un dans le menu latéral.</span>';
+      } else {
+        for (const l of remaining) {
+          const opt = document.createElement('button');
+          opt.type = 'button';
+          opt.className = 'label-chip';
+          if (l.color && LABEL_COLOR_HEX[l.color]) {
+            opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+          }
+          opt.textContent = l.name;
+          opt.onclick = async (e2) => {
+            e2.stopPropagation();
+            const nextIds = [...(n.label_ids || []), l.id];
+            await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
+            loadNotes();
+          };
+          picker.appendChild(opt);
         }
-        opt.textContent = l.name;
-        opt.onclick = async (e2) => {
-          e2.stopPropagation();
-          const nextIds = [...(n.label_ids || []), l.id];
-          await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
-          loadNotes();
-        };
-        picker.appendChild(opt);
       }
-    }
-    picker.hidden = false;
-  };
-  box.appendChild(addBtn);
+      picker.hidden = false;
+    };
+  }
 }
 
 /* Pendant le survol, on déplace en direct la carte glissée juste avant ou
@@ -1824,34 +1894,91 @@ function renderNoteItems() {
 }
 
 /* Chips de libellés dans une boîte de dialogue d'édition (complète ou
-   simple, voir les deux wrappers ci-dessous) : un clic bascule
-   l'appartenance de la note au libellé. Mêmes state.editingLabelIds et
-   state.labels dans les deux cas — un seul dialogue est jamais ouvert à la
-   fois, pas de risque de collision. */
-function renderLabelChipsInto(boxSelector, rerender) {
+   simple, voir les deux wrappers ci-dessous). Même présentation que sur la
+   carte (renderCardLabels()) : puces déjà posées, colorées avec la couleur
+   propre du libellé, croix au survol pour la retirer, puis un bouton +
+   après la dernière puce qui ouvre .label-add-picker (élément frère du
+   conteneur de puces, voir index.html) pour poser un libellé restant.
+   Aucun appel API ici (contrairement à la carte) : on modifie seulement
+   state.editingLabelIds, la boîte de dialogue enregistre au moment de sa
+   fermeture (voir saveNoteDialog()/saveNoteSimpleDialog()). Mêmes
+   state.editingLabelIds et state.labels dans les deux dialogues — un seul
+   dialogue est jamais ouvert à la fois, pas de risque de collision. */
+function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
   const box = $(boxSelector);
+  const picker = $(pickerSelector);
   box.innerHTML = '';
-  for (const l of state.labels) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'label-chip' + (state.editingLabelIds.includes(l.id) ? ' active' : '');
-    chip.textContent = l.name;
-    chip.onclick = () => {
-      if (state.editingLabelIds.includes(l.id)) {
-        state.editingLabelIds = state.editingLabelIds.filter((id) => id !== l.id);
-      } else {
-        state.editingLabelIds.push(l.id);
-      }
+  if (picker) { picker.innerHTML = ''; picker.hidden = true; }
+
+  const assigned = state.editingLabelIds
+    .map((id) => state.labels.find((l) => l.id === id))
+    .filter(Boolean);
+
+  for (const l of assigned) {
+    const chip = document.createElement('span');
+    chip.className = 'label-chip label-chip-card';
+    if (l.color && LABEL_COLOR_HEX[l.color]) {
+      chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+    }
+    const name = document.createElement('span');
+    name.className = 'label-chip-name';
+    name.textContent = l.name;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'label-chip-x';
+    x.setAttribute('aria-label', `Retirer le libellé ${l.name}`);
+    x.innerHTML = ICONS.close;
+    x.onclick = (e) => {
+      e.stopPropagation();
+      state.editingLabelIds = state.editingLabelIds.filter((id) => id !== l.id);
       rerender();
     };
+    chip.append(name, x);
     box.appendChild(chip);
   }
+
+  if (picker) {
+    const remaining = state.labels.filter((l) => !state.editingLabelIds.includes(l.id));
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'label-add-btn';
+    addBtn.title = 'Ajouter un libellé';
+    addBtn.setAttribute('aria-label', 'Ajouter un libellé');
+    addBtn.innerHTML = ICONS.plus;
+    addBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!picker.hidden) { picker.hidden = true; return; }
+      picker.innerHTML = '';
+      if (!remaining.length) {
+        picker.innerHTML = '<span class="hint">Aucun libellé disponible — créez-en un dans le menu latéral.</span>';
+      } else {
+        for (const l of remaining) {
+          const opt = document.createElement('button');
+          opt.type = 'button';
+          opt.className = 'label-chip';
+          if (l.color && LABEL_COLOR_HEX[l.color]) {
+            opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
+          }
+          opt.textContent = l.name;
+          opt.onclick = (e2) => {
+            e2.stopPropagation();
+            state.editingLabelIds.push(l.id);
+            rerender();
+          };
+          picker.appendChild(opt);
+        }
+      }
+      picker.hidden = false;
+    };
+    box.appendChild(addBtn);
+  }
+
   if (!state.labels.length) {
     box.innerHTML = '<span class="hint">Aucun libellé — créez-en un dans le menu latéral.</span>';
   }
 }
-function renderNoteLabelChips() { renderLabelChipsInto('#dn-labels', renderNoteLabelChips); }
-function renderNoteLabelChipsSimple() { renderLabelChipsInto('#dns-labels', renderNoteLabelChipsSimple); }
+function renderNoteLabelChips() { renderLabelChipsInto('#dn-labels', '#dn-labels-picker', renderNoteLabelChips); }
+function renderNoteLabelChipsSimple() { renderLabelChipsInto('#dns-labels', '#dns-labels-picker', renderNoteLabelChipsSimple); }
 
 $('#dn-add-item').addEventListener('click', () => {
   state.editingNoteItems.push({ text: '', checked: false, due_at: null });

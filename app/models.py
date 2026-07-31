@@ -133,6 +133,14 @@ class Note(NoteBase, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     done: bool = False
     done_at: Optional[datetime] = None
+    # Corbeille : non nul => la note est "supprimée" mais pas encore purgée.
+    # Une suppression normale (bouton corbeille sur la carte) se contente de
+    # poser cette date ; la suppression définitive (fichiers, lignes, pièces
+    # jointes, historique) n'a lieu que 30 jours plus tard (purge auto, voir
+    # _purge_expired_trash dans app/routers/notes.py) ou en resupprimant une
+    # note déjà en corbeille. Une note en corbeille n'apparaît plus dans
+    # aucune autre vue (notes, archives, tâches), voir list_notes()/tasks.py.
+    trashed_at: Optional[datetime] = None
     # Redéclaré ici avec NOT NULL + server_default '' (contrairement à la
     # version héritée de NoteBase, nullable par défaut) : sans quoi la
     # migration ajoutant cette colonne à une table `note` déjà peuplée
@@ -275,6 +283,7 @@ class NoteOut(NoteBase):
     id: int
     done: bool
     done_at: Optional[datetime] = None
+    trashed_at: Optional[datetime] = None
     label_ids: List[int] = []
     position: float = 0.0
     created_at: datetime

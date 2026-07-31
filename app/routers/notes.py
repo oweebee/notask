@@ -4,6 +4,7 @@ Une échéance posée sur une note, ou sur l'une de ses cases à cocher, en fait
 une tâche visible dans la vue Tâches. Voir app/routers/tasks.py.
 """
 
+from datetime import timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,6 +30,10 @@ from app.routers.attachments import ATTACH_DIR
 from app.routers.note_versions import delete_all_versions
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
+
+# Une note en corbeille est purgée définitivement au bout de ce délai — voir
+# _purge_expired_trash(), appelée à chaque list_notes().
+TRASH_RETENTION_DAYS = 30
 
 COLORS = {
     "default", "red", "coral", "orange", "amber", "yellow", "lime",
@@ -89,25 +94,75 @@ def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> Non
         ))
 
 
+def _purge_note(note: Note, session: Session) -> None:
+    """Suppression définitive et irréversible : lignes, pièces jointes (fichier
+    disque + ligne), historique complet (voir delete_all_versions), puis la
+    note elle-même. Ne fait pas de commit — à la charge de l'appelant."""
+    for item in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
+        session.delete(item)
+    for att in session.exec(select(NoteAttachment).where(NoteAttachment.note_id == note.id)).all():
+        path = ATTACH_DIR / att.storage_name
+        if path.exists():
+            path.unlink()
+        session.delete(att)
+    delete_all_versions(note.id, session)
+    session.delete(note)
+
+
+def _purge_expired_trash(user: User, session: Session) -> None:
+    """Purge silencieusement les notes en corbeille depuis plus de
+    TRASH_RETENTION_DAYS. Pas de tâche planifiée dans cette appli : ce
+    contrôle est fait "à la volée" à chaque list_notes(), donc au pire au
+    prochain chargement de l'utilisateur plutôt qu'à la seconde près."""
+    cutoff = utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
+    expired = session.exec(
+        select(Note).where(
+            Note.user_id == user.id,
+            Note.trashed_at.is_not(None),
+            Note.trashed_at < cutoff,
+        )
+    ).all()
+    if not expired:
+        return
+    for note in expired:
+        _purge_note(note, session)
+    session.commit()
+
+
 @router.get("", response_model=List[NoteOut])
 def list_notes(
     archived: bool = Query(default=False, description="Afficher les notasks archivées"),
+    trashed: bool = Query(default=False, description="Afficher la corbeille au lieu des notasks normales"),
     q: Optional[str] = Query(default=None, description="Recherche titre et contenu"),
     label: Optional[int] = Query(default=None, description="Filtrer par identifiant de libellé"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    stmt = select(Note).where(Note.user_id == user.id, Note.archived == archived)
+    _purge_expired_trash(user, session)
+
+    if trashed:
+        stmt = select(Note).where(Note.user_id == user.id, Note.trashed_at.is_not(None))
+    else:
+        # Une note en corbeille disparaît de toutes les autres vues, y
+        # compris les archives.
+        stmt = select(Note).where(
+            Note.user_id == user.id, Note.archived == archived, Note.trashed_at.is_(None)
+        )
     if q:
         stmt = stmt.where(
             Note.title.contains(q) | Note.description.contains(q) | Note.content.contains(q)
         )
-    # Épinglées d'abord, puis par ordre manuel (glisser-déposer) ; les notes
-    # antérieures à l'ajout de `position` partagent toutes la valeur 0 et
-    # retombent alors sur la date de modification, pour ne pas se mélanger.
-    notes = session.exec(
-        stmt.order_by(Note.pinned.desc(), Note.position.desc(), Note.updated_at.desc())
-    ).all()
+    if trashed:
+        # Les plus récemment mises à la corbeille en premier.
+        notes = session.exec(stmt.order_by(Note.trashed_at.desc())).all()
+    else:
+        # Épinglées d'abord, puis par ordre manuel (glisser-déposer) ; les
+        # notes antérieures à l'ajout de `position` partagent toutes la
+        # valeur 0 et retombent alors sur la date de modification, pour ne
+        # pas se mélanger.
+        notes = session.exec(
+            stmt.order_by(Note.pinned.desc(), Note.position.desc(), Note.updated_at.desc())
+        ).all()
     if label is not None:
         notes = [n for n in notes if label in (n.label_ids or [])]
     return notes
@@ -188,17 +243,34 @@ def delete_note(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """Double rôle, comme une corbeille classique (ex. Gmail) : la première
+    suppression met la note de côté (trashed_at), la seconde — appelée
+    depuis la corbeille elle-même, sur une note déjà mise de côté — est
+    définitive. Évite d'ajouter une route dédiée juste pour ce second cas."""
     note = _owned_note(note_id, user, session)
-    for item in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
-        session.delete(item)
-    for att in session.exec(select(NoteAttachment).where(NoteAttachment.note_id == note.id)).all():
-        path = ATTACH_DIR / att.storage_name
-        if path.exists():
-            path.unlink()
-        session.delete(att)
-    delete_all_versions(note.id, session)
-    session.delete(note)
+    if note.trashed_at is None:
+        note.trashed_at = utcnow()
+        session.add(note)
+        session.commit()
+        return
+    _purge_note(note, session)
     session.commit()
+
+
+@router.post("/{note_id}/restore", response_model=NoteOut)
+def restore_note(
+    note_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    note = _owned_note(note_id, user, session)
+    if note.trashed_at is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette notask n'est pas dans la corbeille")
+    note.trashed_at = None
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+    return note
 
 
 # -------------------- Lignes à cocher, une par une --------------------
