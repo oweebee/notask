@@ -1249,6 +1249,16 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   padding: .2rem .3rem .2rem .7rem;
   color: var(--md-on-surface);
 }
+/* Croix de retrait d'un libellé, dans les dialogues d'édition.
+   VOLONTAIREMENT TOUJOURS VISIBLE (opacity .6), pas révélée au survol :
+   la version "apparaît au survol" a été signalée comme ne marchant pas,
+   plusieurs fois de suite, sans que le code ni la règle CSS ne montrent
+   d'erreur à la relecture. Impossible de reproduire ici (pas de
+   navigateur dans l'environnement de dev), donc on supprime purement et
+   simplement la dépendance au survol : la croix est là en permanence, ce
+   qui règle le problème quelle qu'en soit la cause réelle (appareil
+   tactile sans survol, moteur de rendu, cache…). Ne pas la remettre en
+   opacity:0 sans avoir pu tester en vrai. */
 .label-chip-x {
   display: grid;
   place-items: center;
@@ -1257,16 +1267,16 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   flex: none;
   border: none;
   border-radius: 50%;
-  background: transparent;
+  background: rgba(0,0,0,.18);
   color: inherit;
-  opacity: 0;
+  opacity: .6;
   cursor: pointer;
   transition: opacity .12s ease, background .12s ease;
 }
 .label-chip-x svg { width: 12px; height: 12px; display: block; }
 .label-chip-card:hover .label-chip-x,
-.label-chip-card:focus-within .label-chip-x { opacity: .8; }
-.label-chip-x:hover { opacity: 1 !important; background: rgba(0,0,0,.2); }
+.label-chip-card:focus-within .label-chip-x { opacity: 1; }
+.label-chip-x:hover { opacity: 1; background: rgba(0,0,0,.35); }
 /* Bouton "+" en fin de rangée, dans les boîtes de dialogue (#dn-labels/
    #dns-labels) — ouvre .label-add-picker, la liste des libellés pas
    encore posés. Plus utilisé sur la carte de la mosaïque (remplacé par
@@ -1285,6 +1295,7 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 }
 .label-add-btn svg { width: 14px; height: 14px; display: block; }
 .label-add-btn:hover { background: rgba(0,0,0,.28); color: var(--md-on-surface); }
+.label-empty-hint { font-size: .75rem; color: var(--md-on-surface-variant); }
 .label-add-picker {
   display: flex;
   gap: .375rem;

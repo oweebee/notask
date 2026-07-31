@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-labels-composer-1';
+const BUILD_VERSION = '2026-07-31-labels-x-toujours-visible-2';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -2069,6 +2069,16 @@ function renderLabelChipsInto(boxSelector, pickerSelector, rerender) {
     };
     chip.append(name, x);
     box.appendChild(chip);
+  }
+
+  // Repère quand la notask n'a encore aucun libellé : sans ça, la rangée
+  // se résume à un "+" isolé, qu'on peut prendre pour un bouton
+  // afficher/masquer plutôt que pour "ajouter un libellé".
+  if (!assigned.length && state.labels.length) {
+    const hint = document.createElement('span');
+    hint.className = 'hint label-empty-hint';
+    hint.textContent = 'Aucun libellé sur cette notask —';
+    box.appendChild(hint);
   }
 
   if (picker) {
