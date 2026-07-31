@@ -1516,34 +1516,61 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    un scale uniforme ne ferait que grossir.
    L'origine (transform-origin) est posée en JS sur le point cliqué, voir
    animerOuvertureDialogue() dans app.js. */
+/* Étapes calculées, pas posées à l'œil : montée rapide vers la taille
+   finale (exponentielle) + oscillation amortie en antiphase sur les deux
+   axes. La montée est volontairement plus rapide que l'amortissement, pour
+   que le ballotement se voie AUTOUR de la taille finale (dépassement
+   jusqu'à ~1,04) et non en dessous — sinon la boîte a l'air de monter
+   mollement au lieu de rebondir.
+   Un arrêt tous les 5% : assez dense pour que l'interpolation reste fidèle
+   à 60 images/s sur 1 s, sans écrire 60 lignes illisibles. */
 @keyframes dlg-gelatine {
-  0%   { transform: scale(.28, .28); opacity: 0; }
-  25%  { transform: scale(1.04, .92); opacity: 1; }
-  45%  { transform: scale(.95, 1.06); }
-  62%  { transform: scale(1.03, .975); }
-  78%  { transform: scale(.985, 1.015); }
-  90%  { transform: scale(1.006, .995); }
-  100% { transform: scale(1, 1); }
+  0% { transform: scale(0.2500, 0.2500); opacity: 0; }
+  5% { transform: scale(0.6606, 0.4740); opacity: 0.33; }
+  10% { transform: scale(0.8741, 0.6266); opacity: 0.67; }
+  15% { transform: scale(0.9510, 0.7610); }
+  20% { transform: scale(0.9512, 0.8826); }
+  25% { transform: scale(0.9272, 0.9769); }
+  30% { transform: scale(0.9140, 1.0307); }
+  35% { transform: scale(0.9250, 1.0431); }
+  40% { transform: scale(0.9557, 1.0258); }
+  45% { transform: scale(0.9919, 0.9975); }
+  50% { transform: scale(1.0192, 0.9746); }
+  55% { transform: scale(1.0299, 0.9666); }
+  60% { transform: scale(1.0244, 0.9736); }
+  65% { transform: scale(1.0097, 0.9891); }
+  70% { transform: scale(0.9945, 1.0048); }
+  75% { transform: scale(0.9853, 1.0143); }
+  80% { transform: scale(0.9845, 1.0153); }
+  85% { transform: scale(0.9903, 1.0096); }
+  90% { transform: scale(0.9985, 1.0014); }
+  95% { transform: scale(1.0052, 0.9947); }
+  100% { transform: scale(1.0000, 1.0000); }
 }
 @keyframes dlg-backdrop-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 .dlg-open-anim {
-  animation: dlg-gelatine .58s cubic-bezier(.34, .8, .3, 1) both;
+  /* 1 s, et timing LINÉAIRE : le mouvement est entièrement décrit par les
+     étapes ci-dessus. Une courbe d'accélération viendrait s'ajouter au
+     rebond déjà calculé et le déformerait. */
+  animation: dlg-gelatine 1s linear both;
   /* will-change : prévient le compositeur qu'il s'agit d'une animation de
      transformation, ce qui évite le léger crénelage du texte pendant la
      mise à l'échelle sur certains navigateurs. */
   will-change: transform;
 }
-.dlg-open-anim::backdrop { animation: dlg-backdrop-in .28s ease both; }
+.dlg-open-anim::backdrop { animation: dlg-backdrop-in .35s ease both; }
 
-/* Certains utilisateurs demandent explicitement moins d'animation (réglage
-   système) : on respecte, la boîte apparaît simplement. */
-@media (prefers-reduced-motion: reduce) {
-  .dlg-open-anim { animation: none; }
-  .dlg-open-anim::backdrop { animation: none; }
-}
+/* PAS de suppression sous prefers-reduced-motion, volontairement.
+   Vérifié dans le navigateur de l'utilisateur : ce réglage est à "reduce"
+   (Windows > Effets d'animation désactivés), si bien qu'une règle
+   `animation: none` rendait l'effet strictement invisible — alors qu'il a
+   été demandé explicitement. On garde donc l'animation dans tous les cas ;
+   elle dure 1 s et ne concerne qu'une ouverture de fenêtre.
+   Si un jour cette app sert à plusieurs personnes, c'est ici qu'il faudra
+   rétablir un repli, en le rendant réglable plutôt qu'automatique. */
 
 /* Les deux fenêtres de note (édition complète et édition simple) s'ouvrent
    toujours à la même taille, quel que soit le contenu (30% plus bas que la
