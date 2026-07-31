@@ -35,10 +35,15 @@ router = APIRouter(prefix="/api/notes", tags=["notes"])
 # _purge_expired_trash(), appelée à chaque list_notes().
 TRASH_RETENTION_DAYS = 30
 
+# 24 teintes : deux rangées pleines de 12 dans le sélecteur (voir COLORS
+# dans app.js et les classes .c-* dans style.css — les trois listes doivent
+# rester synchronisées, sinon le serveur refuse une couleur pourtant
+# proposée à l'écran).
 COLORS = {
     "default", "red", "coral", "orange", "amber", "yellow", "lime",
     "green", "emerald", "teal", "cyan", "blue", "indigo", "violet",
     "purple", "magenta", "pink", "rose", "brown", "slate", "grey",
+    "navy", "olive", "plum",
 }
 
 # Jeu fixe d'icônes proposées à gauche du titre, à la création comme à

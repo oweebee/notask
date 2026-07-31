@@ -5,24 +5,31 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-07-31-nuancier-dans-dialog-29';
+const BUILD_VERSION = '2026-07-31-palette-partagee-24-couleurs-32';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
+/* 24 teintes = deux rangées pleines de 12 dans le sélecteur. Trois listes à
+   garder synchronisées : celle-ci, LABEL_COLOR_HEX juste en dessous, les
+   classes .c-* de style.css, et l'ensemble COLORS de app/routers/notes.py
+   (le serveur refuse toute couleur qu'il ne connaît pas). */
 const COLORS = [
   'default', 'red', 'coral', 'orange', 'amber', 'yellow', 'lime',
   'green', 'emerald', 'teal', 'cyan', 'blue', 'indigo', 'violet',
   'purple', 'magenta', 'pink', 'rose', 'brown', 'slate', 'grey',
+  'navy', 'olive', 'plum',
 ];
 
 // Mêmes teintes que les classes .c-* de style.css, dupliquées ici pour
-// pouvoir les poser en style inline sur un libellé (voir renderLabelsDrawer).
+// pouvoir les poser en style inline sur un libellé (voir renderLabelsDrawer)
+// ou comme couleur de texte (voir la palette partagée construirePalette).
 const LABEL_COLOR_HEX = {
   red: '#7a2e33', coral: '#8a3a2a', orange: '#8a541c', amber: '#856614',
   yellow: '#7a6f12', lime: '#55771c', green: '#2f7a3c', emerald: '#16785b',
   teal: '#146b6a', cyan: '#12607a', blue: '#1d548f', indigo: '#364196',
   violet: '#5138a3', purple: '#68318f', magenta: '#7d2c7d', pink: '#8a2c61',
   rose: '#8a2c44', brown: '#664a37', slate: '#3f4b5a', grey: '#4b4b52',
+  navy: '#1e3a5f', olive: '#5d6b2f', plum: '#4e2a52',
 };
 
 // Même alpha que le composeur/la recherche (.55), pour une couleur de
@@ -814,6 +821,34 @@ function animerOuvertureDialogue(dlg) {
   dlg.classList.remove('dlg-open-anim');
   void dlg.offsetWidth;
   dlg.classList.add('dlg-open-anim');
+}
+
+/* Palette de couleurs, unique et partagée : couleur de note (carte, boîte
+   d'édition, composeur) ET couleur de texte utilisent exactement le même
+   nuancier et le même code. Les pastilles portent les classes .c-*, donc
+   toute teinte ajoutée à COLORS apparaît partout d'un coup.
+   `onPick` reçoit le NOM de la couleur ('red', 'default'…) ; à l'appelant
+   de le traduire en ce dont il a besoin (classe pour une note, hexadécimal
+   via LABEL_COLOR_HEX pour du texte).
+   preventDefault sur mousedown : indispensable quand la palette sert à
+   colorer du texte, sinon le focus quitte la zone d'édition et la
+   sélection disparaît avant le clic. */
+function construirePalette(box, actif, onPick) {
+  box.innerHTML = '';
+  for (const c of COLORS) {
+    const s = document.createElement('button');
+    s.type = 'button';
+    s.className = 'swatch c-' + c + (c === actif ? ' active' : '');
+    s.title = c;
+    s.addEventListener('mousedown', (e) => e.preventDefault());
+    s.onclick = (e) => {
+      e.stopPropagation();
+      box.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+      onPick(c);
+    };
+    box.appendChild(s);
+  }
 }
 
 /* Applique la couleur de la note comme fond du dialogue (éditer ou éditer
@@ -1681,17 +1716,10 @@ function renderNotes() {
     const palette = el.querySelector('.palette');
     el.querySelector('[data-act=color]').onclick = () => {
       if (!palette.dataset.filled) {
-        for (const c of COLORS) {
-          const s = document.createElement('button');
-          s.type = 'button';
-          s.className = 'swatch c-' + c + (c === n.color ? ' active' : '');
-          s.title = c;
-          s.onclick = async () => {
-            await api('/notes/' + n.id, { method: 'PATCH', body: { color: c } });
-            loadNotes();
-          };
-          palette.appendChild(s);
-        }
+        construirePalette(palette, n.color, async (c) => {
+          await api('/notes/' + n.id, { method: 'PATCH', body: { color: c } });
+          loadNotes();
+        });
         palette.dataset.filled = '1';
       }
       palette.hidden = !palette.hidden;
@@ -2012,19 +2040,8 @@ $('#nc-color-btn').innerHTML = ICONS.palette;
 $('#nc-color-btn').addEventListener('click', () => {
   composerExpand();
   if (!ncColorsBox.hidden) { ncColorsBox.hidden = true; return; }
-  ncColorsBox.innerHTML = '';
-  for (const c of COLORS) {
-    const s = document.createElement('button');
-    s.type = 'button';
-    s.className = 'swatch c-' + c + (c === composerColor ? ' active' : '');
-    s.title = c;
-    s.onclick = () => {
-      composerColor = c;
-      ncColorsBox.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
-      s.classList.add('active');
-    };
-    ncColorsBox.appendChild(s);
-  }
+  $('#nc-text-colors').hidden = true;    // une seule palette ouverte à la fois
+  construirePalette(ncColorsBox, composerColor, (c) => { composerColor = c; });
   ncColorsBox.hidden = false;
 });
 
@@ -2060,7 +2077,7 @@ renderNcDueBtn();
 // #dns-fmt-toolbar en édition rapide (wrapSelectionRich()/richToText(),
 // définies plus bas dans ce fichier mais utilisables ici — déclarations de
 // fonction, donc "remontées" (hoisted) avant l'exécution de ce script).
-brancherBarreFormat('#nc-fmt-group', '#nc-content');
+brancherBarreFormat('#nc-fmt-group', '#nc-content', '#nc-text-colors', '#nc-colors');
 
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
@@ -2287,21 +2304,10 @@ function openNoteDialog(note) {
   renderNoteDueBtn();
   applyDialogColor($('#dlg-note'), note.color);
 
-  const colors = $('#dn-colors');
-  colors.innerHTML = '';
-  for (const c of COLORS) {
-    const s = document.createElement('button');
-    s.type = 'button';
-    s.className = 'swatch c-' + c + (c === note.color ? ' active' : '');
-    s.title = c;
-    s.onclick = () => {
-      state.editingNote.color = c;
-      colors.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
-      s.classList.add('active');
-      applyDialogColor($('#dlg-note'), c);
-    };
-    colors.appendChild(s);
-  }
+  construirePalette($('#dn-colors'), note.color, (c) => {
+    state.editingNote.color = c;
+    applyDialogColor($('#dlg-note'), c);
+  });
 
   renderNoteItems();
   $('#dlg-note').showModal();
@@ -2770,12 +2776,28 @@ function openNoteSimpleDialog(note) {
    l'ouverture (voir openNoteSimpleDialog()). */
 const FMT_TAGS = { bold: 'strong', italic: 'em', underline: 'u' };
 
+/* Mémorise la position de défilement de l'élément et de tous ses ancêtres
+   défilables, et rend une fonction qui la rétablit. `focus()` sur une zone
+   éditable fait remonter le conteneur en haut : sans ce garde-fou, appliquer
+   une mise en forme au milieu d'une longue notask ramenait la vue à la
+   première ligne. */
+function memoriserDefilements(el) {
+  const positions = [];
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    if (n.scrollHeight > n.clientHeight) positions.push([n, n.scrollTop]);
+  }
+  return () => positions.forEach(([n, v]) => { n.scrollTop = v; });
+}
+
 function wrapSelectionRich(el, kind, couleur) {
+  const retablirDefilement = memoriserDefilements(el);
   el.focus();
   const sel = window.getSelection();
-  if (!sel.rangeCount) return;
+  // Sorties anticipées : le focus() ci-dessus a déjà pu faire défiler, il
+  // faut rétablir avant de renoncer.
+  if (!sel.rangeCount) { retablirDefilement(); return; }
   const range = sel.getRangeAt(0);
-  if (!el.contains(range.commonAncestorContainer)) return;
+  if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return; }
   const text = range.toString();
 
   let wrapper;
@@ -2815,79 +2837,34 @@ function wrapSelectionRich(el, kind, couleur) {
   }
   sel.removeAllRanges();
   sel.addRange(newRange);
+  // En tout dernier : le focus et le repositionnement du curseur ci-dessus
+  // ont pu faire défiler le conteneur.
+  retablirDefilement();
 }
 
-/* Petit nuancier flottant du bouton "Couleur du texte". Reprend les vraies
-   couleurs de l'éditeur d'image (IMG_EDITOR_COLORS) plutôt que les teintes
-   assombries des notes : le texte doit rester lisible sur la carte.
-   La sélection est déjà préservée par le preventDefault du mousedown sur
-   le bouton (voir brancherBarreFormat) — le popover, lui, ne prend jamais
-   le focus pour la même raison. */
-function ouvrirNuancierTexte(anchor, editable) {
-  document.querySelectorAll('.text-color-popup').forEach((p) => p.remove());
-
-  const pop = document.createElement('div');
-  pop.className = 'cal-popup text-color-popup';
-
-  /* Même précaution que openCalPopup() : une <dialog> ouverte en modal
-     s'affiche dans le "top layer" du navigateur et rend TOUT le reste du
-     document inerte. Un popup ajouté à document.body se retrouvait donc
-     derrière le voile sombre (d'où son air transparent) et ne recevait
-     aucun clic : celui-ci atteignait le fond de la boîte, dont le
-     gestionnaire ferme la notask — d'où la couleur jamais appliquée et la
-     note qui se refermait. On l'ajoute donc DANS la boîte, et on le
-     positionne par rapport à elle. */
-  const hostDialog = anchor.closest('dialog');
-  const host = hostDialog || document.body;
-  host.appendChild(pop);
-
-  for (const [hex, nom] of IMG_EDITOR_COLORS) {
-    const s = document.createElement('button');
-    s.type = 'button';
-    s.className = 'swatch';
-    s.style.background = hex;
-    s.title = nom;
-    s.addEventListener('mousedown', (e) => e.preventDefault());
-    s.onclick = () => {
-      wrapSelectionRich(editable, 'color', hex);
-      fermer();
-    };
-    pop.appendChild(s);
-  }
-
-  const LARGEUR = 200;   // cf. .text-color-popup dans style.css
-  if (hostDialog) {
-    const dialogRect = hostDialog.getBoundingClientRect();
-    const anchorRect = anchor.getBoundingClientRect();
-    const top = anchorRect.bottom - dialogRect.top + 6;
-    const left = Math.min(anchorRect.left - dialogRect.left, dialogRect.width - LARGEUR - 8);
-    pop.style.top = `${top}px`;
-    pop.style.left = `${Math.max(8, left)}px`;
-  } else {
-    const rect = anchor.getBoundingClientRect();
-    const left = Math.min(
-      rect.left + window.scrollX,
-      window.scrollX + document.documentElement.clientWidth - LARGEUR - 8,
-    );
-    pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
-    pop.style.left = `${Math.max(8, left)}px`;
-  }
-
-  const fermer = () => {
-    pop.remove();
-    document.removeEventListener('mousedown', dehors);
-    document.removeEventListener('keydown', touche);
-  };
-  const dehors = (e) => { if (!pop.contains(e.target) && e.target !== anchor) fermer(); };
-  const touche = (e) => { if (e.key === 'Escape') fermer(); };
-  setTimeout(() => document.addEventListener('mousedown', dehors), 0);
-  document.addEventListener('keydown', touche);
+/* Couleur du texte : MÊME nuancier et MÊME code que la couleur de note
+   (construirePalette), déplié dans la barre d'outils au lieu d'un popover
+   flottant. Ce choix règle d'un coup les deux défauts de la version
+   flottante : plus de problème de superposition avec une <dialog> modale
+   (le panneau vit dans le flux de la boîte), et plus de calcul de
+   placement qui débordait sous la barre.
+   `default` sert de "retirer la couleur" : on enveloppe alors sans couleur,
+   donc richToText n'écrit aucun marqueur. */
+function basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel) {
+  const box = $(paletteSel);
+  if (!box.hidden) { box.hidden = true; return; }
+  if (autrePaletteSel) $(autrePaletteSel).hidden = true;
+  construirePalette(box, null, (c) => {
+    wrapSelectionRich($(editableSel), 'color', c === 'default' ? null : LABEL_COLOR_HEX[c]);
+    box.hidden = true;
+  });
+  box.hidden = false;
 }
 
 /* Branche une barre de mise en forme sur sa zone de texte. Mutualisée
    entre l'édition rapide et le composeur : les deux ont exactement les
    mêmes boutons, il n'y a aucune raison d'en tenir deux copies. */
-function brancherBarreFormat(groupeSel, editableSel) {
+function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel) {
   $(groupeSel).querySelectorAll('button[data-fmt]').forEach((btn) => {
     if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
     if (btn.dataset.fmt === 'color') btn.innerHTML = ICONS.textColor;
@@ -2897,13 +2874,13 @@ function brancherBarreFormat(groupeSel, editableSel) {
     // sélectionné n'était plus entouré, un tag vide s'insérait au début).
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
-      if (btn.dataset.fmt === 'color') ouvrirNuancierTexte(btn, $(editableSel));
+      if (btn.dataset.fmt === 'color') basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel);
       else wrapSelectionRich($(editableSel), btn.dataset.fmt);
     });
   });
 }
 
-brancherBarreFormat('#dns-fmt-toolbar', '#dns-content');
+brancherBarreFormat('#dns-fmt-toolbar', '#dns-content', '#dns-text-colors', '#dns-colors');
 
 /* Inverse de renderFormatted() : reconvertit le HTML de la zone
    contenteditable en texte façon markdown pour l'enregistrement. */
@@ -2918,8 +2895,11 @@ function richToText(root) {
       case 'strong': case 'b': return '**' + inner() + '**';
       case 'em': case 'i': return '*' + inner() + '*';
       case 'u': return '__' + inner() + '__';
-      case 'pre': return '```' + node.textContent.replace(/\u200b/g, '') + '```';
-      case 'code': return '`' + node.textContent.replace(/\u200b/g, '') + '`';
+      // texteCodeSansBouton : la pastille de copie est inject\u00e9e DANS la
+      // zone de code, elle ne doit jamais se retrouver dans le texte
+      // enregistr\u00e9 (voir ajouterBoutonsCopieCode).
+      case 'pre': return '```' + texteCodeSansBouton(node) + '```';
+      case 'code': return '`' + texteCodeSansBouton(node) + '`';
       // Image insérée dans le texte (dessin/tableau) : on ne garde qu'un
       // marqueur avec l'id de la pièce jointe, jamais les octets ni une
       // URL temporaire — voir NOTE_IMG_MARK et hydrateInlineImages().
@@ -2977,15 +2957,32 @@ function cssColorToHex(valeur) {
    `case 'button'` de richToText, garde-fou pour le même risque).
    contentEditable="false" : sans lui, le bouton devient éditable et
    déplaçable au milieu du texte dans la boîte d'édition rapide. */
+/* Texte d'une zone de code, débarrassé de la pastille de copie qu'on y a
+   injectée. Indispensable partout où l'on relit ce contenu (copie ET
+   reconversion en texte par richToText) : sans ça, le bouton ferait
+   potentiellement partie du code recopié ou enregistré. */
+function texteCodeSansBouton(node) {
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('.code-copy-btn').forEach((b) => b.remove());
+  return (clone.textContent || '').replace(/​/g, '');
+}
+
 function ajouterBoutonsCopieCode(root) {
   if (!root) return;
-  root.querySelectorAll('pre.note-code-block').forEach((pre) => {
-    if (pre.querySelector('.code-copy-btn')) return;
+  // Blocs ET code en ligne : un mot de passe ou une clé se met souvent en
+  // code en ligne, c'est justement là qu'on veut copier d'un geste.
+  const zones = root.querySelectorAll('pre.note-code-block, code.note-code-inline');
+  zones.forEach((zone) => {
+    // Un <code> situé à l'intérieur d'un bloc est déjà couvert par le
+    // bouton du bloc : pas de second bouton imbriqué.
+    if (zone.tagName === 'CODE' && zone.closest('pre.note-code-block')) return;
+    if (zone.querySelector('.code-copy-btn')) return;
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'code-copy-btn';
     btn.contentEditable = 'false';
-    btn.title = 'Copier le code';
+    btn.title = 'Copier';
     btn.setAttribute('aria-label', 'Copier le code');
     btn.innerHTML = ICONS.copy;
     // Sans ce preventDefault, le mousedown déplace le curseur/efface la
@@ -2996,16 +2993,15 @@ function ajouterBoutonsCopieCode(root) {
       // la notask.
       e.stopPropagation();
       e.preventDefault();
-      const code = pre.querySelector('code');
-      const texte = (code ? code.textContent : pre.textContent) || '';
+      const cible = zone.tagName === 'PRE' ? (zone.querySelector('code') || zone) : zone;
       try {
-        await navigator.clipboard.writeText(texte);
+        await navigator.clipboard.writeText(texteCodeSansBouton(cible));
         afficherBulleCopie(e.clientX, e.clientY, 'Copié');
       } catch {
         afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
       }
     });
-    pre.appendChild(btn);
+    zone.appendChild(btn);
   });
 }
 
@@ -3076,20 +3072,11 @@ const dnsColorsBox = $('#dns-colors');
 $('#dns-color-btn').innerHTML = ICONS.palette;
 $('#dns-color-btn').addEventListener('click', () => {
   if (!dnsColorsBox.hidden) { dnsColorsBox.hidden = true; return; }
-  dnsColorsBox.innerHTML = '';
-  for (const c of COLORS) {
-    const s = document.createElement('button');
-    s.type = 'button';
-    s.className = 'swatch c-' + c + (c === state.editingColor ? ' active' : '');
-    s.title = c;
-    s.onclick = () => {
-      state.editingColor = c;
-      dnsColorsBox.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
-      s.classList.add('active');
-      applyDialogColor($('#dlg-note-simple'), c);
-    };
-    dnsColorsBox.appendChild(s);
-  }
+  $('#dns-text-colors').hidden = true;   // une seule palette ouverte à la fois
+  construirePalette(dnsColorsBox, state.editingColor, (c) => {
+    state.editingColor = c;
+    applyDialogColor($('#dlg-note-simple'), c);
+  });
   dnsColorsBox.hidden = false;
 });
 
