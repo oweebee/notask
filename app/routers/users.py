@@ -17,7 +17,7 @@ from app.models import (
     UserSettings,
     UserUpdate,
 )
-from app.security import hash_password
+from app.security import generate_enc_salt, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -45,6 +45,7 @@ def create_user(
         password_hash=hash_password(payload.password),
         is_admin=payload.is_admin,
         must_change_password=True,  # l'utilisateur choisira son propre mot de passe
+        enc_salt=generate_enc_salt(),
     )
     session.add(user)
     session.commit()

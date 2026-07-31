@@ -268,7 +268,8 @@ header.topbar .who { color: var(--md-on-surface-variant); font-size: .875rem; }
 }
 /* Un libellé coloré + actif (filtre en cours) : l'outline reste visible même
    si le style inline l'emporte sur le fond de .active. */
-.drawer-item.label-item[style].active { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+/* Bleu (couleur de la cuillère bleue), pas le mauve par défaut. */
+.drawer-item.label-item[style].active { outline: 2px solid #42a5f5; outline-offset: -2px; }
 .drawer-item.label-item[style] { color: var(--md-on-surface); }
 .drawer-item svg { width: 22px; height: 22px; flex: none; }
 .drawer-item .spoon-pair { height: 22px; }

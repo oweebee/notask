@@ -59,12 +59,20 @@ def list_tasks(
     for n in visible:
         if n.due_at is None:
             continue
+        # text = n.title, sans le repli "extrait du contenu si titre vide"
+        # d'origine : titre et contenu peuvent être chiffrés de bout en bout
+        # côté client (voir app.js), le serveur ne peut plus juger si le
+        # titre est "vide" une fois chiffré (une chaîne chiffrée n'est
+        # jamais vide même quand le texte en clair l'est), ni découper le
+        # contenu chiffré sans casser le déchiffrement. Le repli visuel
+        # ("Note sans titre" / extrait du contenu) est donc recalculé côté
+        # client, après déchiffrement — voir decorateTaskText() dans app.js.
         tasks.append(TaskOut(
             kind="note",
             id=n.id,
             note_id=n.id,
             note_title=n.title,
-            text=n.title or (n.content[:80] if n.content else "Note sans titre"),
+            text=n.title,
             due_at=n.due_at,
             done=n.done,
             color=n.color,
@@ -84,7 +92,7 @@ def list_tasks(
                 id=it.id,
                 note_id=parent.id,
                 note_title=parent.title,
-                text=it.text or "Ligne sans texte",
+                text=it.text,
                 due_at=it.due_at,
                 done=it.checked,
                 color=parent.color,
@@ -126,7 +134,7 @@ def set_done(
 
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
-            text=note.title or "Note sans titre", due_at=note.due_at, done=note.done,
+            text=note.title, due_at=note.due_at, done=note.done,
             color=note.color, bucket=_bucket(note.due_at, note.done, now),
         )
 

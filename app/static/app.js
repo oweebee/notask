@@ -25,6 +25,186 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/* ============================ Chiffrement ============================
+   Chiffrement de bout en bout du contenu des notes (titre, description,
+   contenu, texte des lignes de checklist) : le serveur ne stocke et ne
+   transporte que des chaînes chiffrées ; il n'a jamais accès à la clé.
+
+   Deux clés distinctes :
+   - KEK ("key-encryption key") : dérivée du mot de passe de connexion par
+     PBKDF2, à partir du sel public de l'utilisateur (User.enc_salt). Jamais
+     stockée, recalculée à chaque connexion.
+   - DEK ("data-encryption key") : clé aléatoire qui chiffre réellement les
+     notes, générée une seule fois. Stockée côté serveur "enveloppée"
+     (chiffrée) par la KEK du moment (User.wrapped_dek) — le serveur voit
+     l'enveloppe, jamais la DEK. Changer son propre mot de passe ne fait que
+     réenvelopper la même DEK avec la nouvelle KEK (voir
+     rewrapDekForNewPassword()) : aucune note n'est perdue. Seule une
+     réinitialisation par un administrateur (qui ne connaît pas l'ancien mot
+     de passe) empêche de déballer l'ancienne enveloppe ; une nouvelle DEK
+     est alors générée, et les notes chiffrées avec l'ancienne restent
+     illisibles — c'est la conséquence attendue, pas un bug.
+
+   La DEK déballée (encKey) n'est mise en cache qu'en sessionStorage, jamais
+   localStorage — elle ne survit ni à la fermeture de l'onglet, ni à celle
+   du navigateur, contrairement au jeton de connexion. Conséquence assumée :
+   une nouvelle fenêtre ou un redémarrage du navigateur redemande le mot de
+   passe (voir boot()).
+
+   Format d'un champ chiffré : "e1:" + base64(iv[12 octets] + données
+   chiffrées). Une valeur sans ce préfixe est traitée comme du texte en
+   clair (notes créées avant l'activation de cette fonctionnalité) : elle
+   reste lisible telle quelle et sera chiffrée à la prochaine modification. */
+
+const ENC_PREFIX = 'e1:';
+const EKEY_STORAGE = 'notask_ekey';
+let encKey = null; // CryptoKey AES-GCM (la DEK, déballée) — jamais persistée telle quelle
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return bytes;
+}
+
+async function deriveKEK(password, saltHex) {
+  const baseKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey'],
+  );
+  // 210 000 itérations : recommandation OWASP 2023 pour PBKDF2-HMAC-SHA256.
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: 210000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+async function generateDek() {
+  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+
+async function wrapDek(dek, kek) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const raw = await crypto.subtle.exportKey('raw', dek);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kek, raw);
+  const combined = new Uint8Array(iv.length + ct.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ct), iv.length);
+  return ENC_PREFIX + bytesToBase64(combined);
+}
+
+async function unwrapDek(wrapped, kek) {
+  const combined = base64ToBytes(wrapped.slice(ENC_PREFIX.length));
+  const iv = combined.slice(0, 12);
+  const ct = combined.slice(12);
+  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, kek, ct);
+  return crypto.subtle.importKey('raw', raw, 'AES-GCM', true, ['encrypt', 'decrypt']);
+}
+
+/* Appelée juste après une connexion/inscription réussie (mot de passe
+   encore disponible en clair dans le formulaire). Déballe la DEK existante,
+   ou en génère une nouvelle si aucune enveloppe valide n'est déchiffrable
+   avec le mot de passe fourni (première connexion, ou après une
+   réinitialisation par un administrateur — voir le commentaire plus haut). */
+async function unlockWithPassword(password, user) {
+  const kek = await deriveKEK(password, user.enc_salt);
+  encKey = null;
+  if (user.wrapped_dek) {
+    try {
+      encKey = await unwrapDek(user.wrapped_dek, kek);
+    } catch {
+      encKey = null; // enveloppe posée par un autre mot de passe (reset admin)
+    }
+  }
+  if (!encKey) {
+    encKey = await generateDek();
+    const wrapped = await wrapDek(encKey, kek);
+    await api('/auth/enc-key', { method: 'PUT', body: { wrapped_dek: wrapped } });
+    user.wrapped_dek = wrapped;
+  }
+  const raw = await crypto.subtle.exportKey('raw', encKey);
+  sessionStorage.setItem(EKEY_STORAGE, bytesToBase64(new Uint8Array(raw)));
+}
+
+/* Appelée après un changement de mot de passe volontaire (l'ancien est
+   vérifié côté serveur) : réenveloppe la même DEK — déjà en mémoire, donc
+   aucune note existante n'a besoin d'être rechiffrée. */
+async function rewrapDekForNewPassword(newPassword) {
+  if (!encKey || !state.user) return;
+  const kek = await deriveKEK(newPassword, state.user.enc_salt);
+  const wrapped = await wrapDek(encKey, kek);
+  await api('/auth/enc-key', { method: 'PUT', body: { wrapped_dek: wrapped } });
+}
+
+/* Reprend la DEK mise en cache en session (même onglet, pas de redémarrage
+   du navigateur) — évite de redemander le mot de passe à chaque rechargement
+   de page tant que l'onglet reste ouvert. */
+async function restoreCachedKey() {
+  const cached = sessionStorage.getItem(EKEY_STORAGE);
+  if (!cached) return false;
+  try {
+    encKey = await crypto.subtle.importKey('raw', base64ToBytes(cached), 'AES-GCM', true, ['encrypt', 'decrypt']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearEncKey() {
+  encKey = null;
+  sessionStorage.removeItem(EKEY_STORAGE);
+}
+
+async function encryptField(plain) {
+  if (!plain) return '';
+  if (!encKey) throw new Error('Notes verrouillées : reconnectez-vous.');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, new TextEncoder().encode(plain));
+  const combined = new Uint8Array(iv.length + ct.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ct), iv.length);
+  return ENC_PREFIX + bytesToBase64(combined);
+}
+
+async function decryptField(value) {
+  if (!value || !value.startsWith(ENC_PREFIX)) return value || '';
+  if (!encKey) return 'Note verrouillée';
+  try {
+    const combined = base64ToBytes(value.slice(ENC_PREFIX.length));
+    const iv = combined.slice(0, 12);
+    const ct = combined.slice(12);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, encKey, ct);
+    return new TextDecoder().decode(pt);
+  } catch {
+    return 'Contenu illisible (déchiffrement impossible)';
+  }
+}
+
+/* Déchiffre en place les champs sensibles d'une note reçue de l'API, avant
+   de l'exposer au reste de l'app — qui manipule ensuite toujours du texte
+   en clair, exactement comme avant l'introduction du chiffrement. */
+async function decryptNote(n) {
+  n.title = await decryptField(n.title);
+  n.description = await decryptField(n.description);
+  n.content = await decryptField(n.content);
+  if (n.items) {
+    for (const it of n.items) it.text = await decryptField(it.text);
+  }
+  return n;
+}
+
 let state = {
   user: null,
   view: 'notes',
@@ -381,10 +561,34 @@ function show(id) {
 function showLogin() { show('screen-login'); }
 
 async function boot() {
+  // Le chiffrement de bout en bout du contenu des notes (voir plus haut)
+  // repose sur l'API WebCrypto, qui n'existe que dans un "contexte
+  // sécurisé" (HTTPS, ou localhost en développement). Sans elle, mieux vaut
+  // un message clair que des erreurs cryptiques partout dans l'app.
+  if (!window.crypto || !window.crypto.subtle) {
+    document.body.innerHTML =
+      '<div style="max-width:32rem;margin:4rem auto;padding:1.5rem;font-family:sans-serif;color:#e6e0e9;">'
+      + '<h1>Connexion non sécurisée</h1><p>notask chiffre le contenu des notes dans le navigateur, ce qui '
+      + "nécessite une connexion HTTPS (l'API de chiffrement du navigateur est désactivée en HTTP). "
+      + 'Vérifiez la configuration HTTPS du serveur (Traefik/Coolify).</p></div>';
+    return;
+  }
+
   const status = await fetch('/api/auth/status', { cache: 'no-store' }).then((r) => r.json());
   if (status.needs_setup) { show('screen-setup'); return; }
 
   if (!token()) { showLogin(); return; }
+
+  // Le jeton de connexion (localStorage) peut survivre à un redémarrage du
+  // navigateur, mais la clé de chiffrement des notes non — jamais persistée
+  // ailleurs qu'en sessionStorage (voir unlockWithPassword()). Sans elle,
+  // impossible de déchiffrer quoi que ce soit : on redemande le mot de
+  // passe plutôt que d'ouvrir une appli à moitié illisible.
+  if (!(await restoreCachedKey())) {
+    setToken(null);
+    showLogin();
+    return;
+  }
   try {
     state.user = await api('/auth/me');
     enterApp();
@@ -455,6 +659,7 @@ $('#form-setup').addEventListener('submit', async (e) => {
       body: { username: $('#setup-user').value, password: pw, is_admin: true },
     });
     setToken(data.access_token);
+    await unlockWithPassword(pw, data.user);
     state.user = data.user;
     enterApp();
   } catch (err) { msg($('#setup-msg'), err.message); }
@@ -463,11 +668,13 @@ $('#form-setup').addEventListener('submit', async (e) => {
 $('#form-login').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
+    const pw = $('#login-pw').value;
     const data = await api('/auth/login', {
       method: 'POST',
-      body: { username: $('#login-user').value, password: $('#login-pw').value },
+      body: { username: $('#login-user').value, password: pw },
     });
     setToken(data.access_token);
+    await unlockWithPassword(pw, data.user);
     state.user = data.user;
     $('#login-pw').value = '';
     msg($('#login-msg'), '');
@@ -475,16 +682,28 @@ $('#form-login').addEventListener('submit', async (e) => {
   } catch (err) { msg($('#login-msg'), err.message); }
 });
 
-$('#btn-logout').addEventListener('click', () => { setToken(null); location.reload(); });
+$('#btn-logout').addEventListener('click', () => { setToken(null); clearEncKey(); location.reload(); });
 $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.view)));
 
 /* -------------------------------- Notes -------------------------------- */
 
+/* Le paramètre "q" n'est plus envoyé au serveur : titre/description/contenu
+   sont chiffrés de bout en bout, une recherche SQL sur le texte chiffré ne
+   peut rien trouver. La recherche se fait donc ici, après déchiffrement. */
+function noteMatchesSearch(n, q) {
+  const needle = q.toLowerCase();
+  return (n.title || '').toLowerCase().includes(needle)
+    || (n.description || '').toLowerCase().includes(needle)
+    || (n.content || '').toLowerCase().includes(needle)
+    || (n.items || []).some((it) => (it.text || '').toLowerCase().includes(needle));
+}
+
 async function loadNotes() {
   const params = new URLSearchParams({ archived: state.showArchived });
-  if (state.search) params.set('q', state.search);
   if (state.labelFilter) params.set('label', state.labelFilter);
-  state.notes = await api('/notes?' + params);
+  const notes = await api('/notes?' + params);
+  await Promise.all(notes.map(decryptNote));
+  state.notes = state.search ? notes.filter((n) => noteMatchesSearch(n, state.search)) : notes;
   renderNotes();
 }
 
@@ -1028,16 +1247,17 @@ $('#nc-add').addEventListener('click', async () => {
 
   if (!title && !content && !(composerChecklist && items.length)) return;
 
-  const body = {
-    title,
-    description: $('#nc-description').value.trim(),
-    content: composerChecklist ? '' : content,
-    is_checklist: composerChecklist,
-    items: composerChecklist ? items : [],
-    icon: state.composerIcon,
-  };
-
   try {
+    const body = {
+      title: await encryptField(title),
+      description: await encryptField($('#nc-description').value.trim()),
+      content: composerChecklist ? '' : await encryptField(content),
+      is_checklist: composerChecklist,
+      items: composerChecklist
+        ? await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })))
+        : [],
+      icon: state.composerIcon,
+    };
     await api('/notes', { method: 'POST', body });
     resetComposer();
     loadNotes();
@@ -1223,24 +1443,24 @@ $('#dn-cancel').addEventListener('click', () => $('#dlg-note').close());
    ferme, comme demandé, au lieu de simplement fermer). */
 async function saveNoteDialog() {
   const n = state.editingNote;
-  const body = {
-    title: $('#dn-title').value,
-    description: $('#dn-description').value,
-    color: n.color,
-    due_at: $('#dn-due').value || null,
-    is_checklist: state.editingIsChecklist,
-    label_ids: state.editingLabelIds,
-    icon: state.editingIcon,
-  };
-  if (state.editingIsChecklist) {
-    body.items = state.editingNoteItems.filter((i) => i.text.trim());
-    body.content = '';
-  } else {
-    body.content = $('#dn-content').value;
-    body.items = [];
-  }
-
   try {
+    const body = {
+      title: await encryptField($('#dn-title').value),
+      description: await encryptField($('#dn-description').value),
+      color: n.color,
+      due_at: $('#dn-due').value || null,
+      is_checklist: state.editingIsChecklist,
+      label_ids: state.editingLabelIds,
+      icon: state.editingIcon,
+    };
+    if (state.editingIsChecklist) {
+      const items = state.editingNoteItems.filter((i) => i.text.trim());
+      body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
+      body.content = '';
+    } else {
+      body.content = await encryptField($('#dn-content').value);
+      body.items = [];
+    }
     await api('/notes/' + n.id, { method: 'PATCH', body });
     $('#dlg-note').close();
     // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
@@ -1418,17 +1638,18 @@ $('#dns-add-item').addEventListener('click', () => {
 async function saveNoteSimpleDialog() {
   const n = state.editingNote;
   if (!n) return;
-  const body = {
-    title: $('#dns-title').value,
-    description: $('#dns-description').value,
-    due_at: $('#dns-due').value || null,
-  };
-  if (state.editingIsChecklist) {
-    body.items = state.editingNoteItems.filter((i) => i.text.trim());
-  } else {
-    body.content = richToText($('#dns-content'));
-  }
   try {
+    const body = {
+      title: await encryptField($('#dns-title').value),
+      description: await encryptField($('#dns-description').value),
+      due_at: $('#dns-due').value || null,
+    };
+    if (state.editingIsChecklist) {
+      const items = state.editingNoteItems.filter((i) => i.text.trim());
+      body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
+    } else {
+      body.content = await encryptField(richToText($('#dns-content')));
+    }
     await api('/notes/' + n.id, { method: 'PATCH', body });
   } catch (err) {
     alert(err.message);
@@ -1451,7 +1672,12 @@ $('#dlg-note-simple').addEventListener('click', (e) => {
 async function loadTasks(bucket) {
   const params = new URLSearchParams();
   if (bucket) params.set('bucket', bucket);
-  state.tasks = await api('/tasks' + (params.toString() ? '?' + params : ''));
+  const tasks = await api('/tasks' + (params.toString() ? '?' + params : ''));
+  await Promise.all(tasks.map(async (t) => {
+    t.text = await decryptField(t.text);
+    t.note_title = await decryptField(t.note_title);
+  }));
+  state.tasks = tasks;
   renderTasks();
 }
 
@@ -1490,7 +1716,7 @@ function renderTasks() {
       card.innerHTML = `
         <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Terminer">
         <div class="task-main">
-          <div class="task-text">${escapeHtml(t.text)}</div>
+          <div class="task-text">${escapeHtml(t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Note sans titre'))}</div>
           <div class="task-meta">
             <span class="${b === 'late' ? 'late' : ''}">${ICONS.clock}${formatDue(t.due_at)}</span>
           </div>
@@ -1513,6 +1739,7 @@ function renderTasks() {
 
 async function ouvrirNoteParId(noteId) {
   const note = await api('/notes/' + noteId);
+  await decryptNote(note);
   openNoteDialog(note);
 }
 
@@ -1609,6 +1836,10 @@ $('#dp-save').addEventListener('click', async () => {
       method: 'POST',
       body: { current_password: $('#dp-current').value, new_password: $('#dp-new').value },
     });
+    // Le mot de passe change, donc la clé qui le protège (KEK) aussi : on
+    // réenveloppe la même clé de chiffrement des notes (déjà en mémoire)
+    // avec la nouvelle, pour ne perdre l'accès à aucune note existante.
+    await rewrapDekForNewPassword($('#dp-new').value);
     state.user.must_change_password = false;
     $('#dlg-password').close();
   } catch (err) { msg($('#dp-msg'), err.message); }

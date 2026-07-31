@@ -61,6 +61,14 @@ def hash_password(password: str) -> str:
     return f"scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${salt.hex()}${key.hex()}"
 
 
+def generate_enc_salt() -> str:
+    """Sel pour la dérivation côté client de la clé de chiffrement des notes
+    (voir User.enc_salt). Purement aléatoire, indépendant du sel de hachage
+    du mot de passe ci-dessus — le serveur ne calcule ni ne connaît jamais
+    la clé de chiffrement elle-même, seulement ce sel public."""
+    return secrets.token_hex(16)
+
+
 def verify_password(password: str, stored: str) -> bool:
     try:
         scheme, n, r, p, salt_hex, key_hex = stored.split("$")

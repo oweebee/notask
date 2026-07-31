@@ -19,6 +19,24 @@ class User(SQLModel, table=True):
     is_admin: bool = False
     is_active: bool = True
     must_change_password: bool = False
+    # --- Chiffrement de bout en bout du contenu des notes (titre/description/
+    # contenu/lignes de checklist) ; voir app.js. Le serveur ne stocke que
+    # deux chaînes opaques, jamais la clé elle-même :
+    #   - enc_salt : sel PBKDF2, dérive une clé de "déverrouillage" (KEK) à
+    #     partir du mot de passe de connexion. Généré à l'inscription, ou à
+    #     la volée à la prochaine connexion pour les comptes créés avant
+    #     cette fonctionnalité (voir routers/auth.py login()).
+    #   - wrapped_dek : la vraie clé qui chiffre les notes (DEK), générée
+    #     aléatoirement une seule fois côté client puis stockée ici chiffrée
+    #     ("enveloppée") par la KEK du moment. Changer son propre mot de
+    #     passe ne fait que réenvelopper cette même DEK avec la nouvelle KEK
+    #     (voir rewrapDekForNewPassword() dans app.js) — aucune note n'est
+    #     donc perdue. Seule une réinitialisation par un administrateur (qui
+    #     ne connaît pas l'ancien mot de passe) casse l'enveloppe : une
+    #     nouvelle DEK est alors générée, et les notes déjà chiffrées avec
+    #     l'ancienne restent définitivement illisibles.
+    enc_salt: Optional[str] = Field(default=None, max_length=64)
+    wrapped_dek: Optional[str] = Field(default=None, max_length=500)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -28,7 +46,16 @@ class UserPublic(SQLModel):
     is_admin: bool
     is_active: bool
     must_change_password: bool
+    enc_salt: Optional[str] = None
+    wrapped_dek: Optional[str] = None
     created_at: datetime
+
+
+class EncKeyIn(SQLModel):
+    """Clé de chiffrement des notes (DEK), déjà enveloppée côté client par
+    la KEK dérivée du mot de passe — le serveur ne fait que la stocker
+    telle quelle, sans jamais pouvoir la déchiffrer."""
+    wrapped_dek: str = Field(max_length=500)
 
 
 class UserCreate(SQLModel):
@@ -80,10 +107,15 @@ class UserSettings(SQLModel, table=True):
 # à l'intérieur de la note.
 
 class NoteBase(SQLModel):
-    title: str = Field(default="", max_length=300)
+    # 2000 plutôt que les 300 caractères d'origine : titre/description sont
+    # potentiellement chiffrés de bout en bout côté client (voir app.js
+    # encryptField()), et le texte chiffré + IV + balise + base64 peut peser
+    # plusieurs fois la taille du texte en clair. Le serveur ne voit qu'une
+    # chaîne opaque, il n'a pas à comprendre son contenu.
+    title: str = Field(default="", max_length=2000)
     # Sous-titre facultatif, affiché en italique entre le titre et le
     # contenu — masqué entièrement s'il est vide (voir NoteOut côté clients).
-    description: str = Field(default="", max_length=300)
+    description: str = Field(default="", max_length=2000)
     content: str = ""
     color: str = Field(default="default", max_length=20)
     pinned: bool = False
@@ -108,8 +140,8 @@ class Note(NoteBase, table=True):
     # optionnel) refuse alors de les sérialiser — même piège que label_ids.
     description: str = Field(
         default="",
-        max_length=300,
-        sa_column=Column(String(300), nullable=False, server_default=""),
+        max_length=2000,
+        sa_column=Column(String(2000), nullable=False, server_default=""),
     )
     # Identifiants des libellés (catégories) attachés à la note.
     # Stocké en JSON plutôt qu'en table de liaison : une note appartenant à
@@ -140,7 +172,8 @@ class Note(NoteBase, table=True):
 class NoteItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     note_id: int = Field(foreign_key="note.id", index=True)
-    text: str = Field(default="", max_length=500)
+    # Cf. NoteBase.title : marge pour le texte chiffré de bout en bout.
+    text: str = Field(default="", max_length=3000)
     checked: bool = False
     position: int = 0
     # Échéance propre à la ligne. Non nulle => la ligne est une tâche.
