@@ -1302,13 +1302,14 @@ function renderNotes() {
     inner += `<div class="palette" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
-        <button data-act="label" title="Libellés" aria-label="Libellés">${ICONS.tag}</button>
         <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
         <span class="sep"></span>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
         <button data-act="delete" title="Mettre à la corbeille" aria-label="Mettre à la corbeille">${ICONS.trash}</button>
       </div>`;
+    // Rangée de libellés : lecture seule ici (voir renderCardLabels()), pas
+    // de bouton + ni de panneau associé sur la carte.
 
     // Échéance : tout en bas de la carte, sous la barre d'options — plus
     // au-dessus des pièces jointes comme avant (déplacée à la demande, au
@@ -1323,8 +1324,7 @@ function renderNotes() {
       </div>`;
     }
 
-    inner += `<div class="note-labels"></div>
-      <div class="label-add-picker" hidden></div>`;
+    inner += `<div class="note-labels"></div>`;
 
     el.innerHTML = inner;
 
@@ -1404,7 +1404,10 @@ function renderNotes() {
     // exclus, pas les espaces vides autour (le séparateur, la marge) — un
     // clic là doit ouvrir la carte comme n'importe où ailleurs.
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.pin-btn, .actions button, .palette, .note-labels, .label-add-picker, .note-attachments, input')) return;
+      // Les libellés en bas de carte sont désormais en lecture seule (plus
+      // aucun élément interactif dedans) : plus besoin de les exclure ici,
+      // cliquer dessus ouvre l'édition rapide comme le reste de la carte.
+      if (e.target.closest('.pin-btn, .actions button, .palette, .note-attachments, input')) return;
       openNoteSimpleDialog(n);
     });
 
@@ -1414,7 +1417,7 @@ function renderNotes() {
     if (dragOk) {
       el.draggable = true;
       el.addEventListener('dragstart', (e) => {
-        if (e.target.closest('.pin-btn, .actions, .palette, .note-labels, .label-add-picker, .note-attachments, input')) {
+        if (e.target.closest('.pin-btn, .actions, .palette, .note-attachments, input')) {
           e.preventDefault();
           return;
         }
@@ -1435,24 +1438,18 @@ function renderNotes() {
 /* Rangée de libellés en bas de la carte (mosaïque) : uniquement ceux déjà
    assignés à cette notask, colorés avec la couleur propre du libellé
    (celle choisie dans le menu latéral via openLabelEditPopup — pas la
-   couleur de la note), pas un aplat générique comme avant. Survol d'une
-   puce = petite croix à droite pour la retirer. L'ajout ne passe plus par
-   un bouton + à la suite des puces (retiré à la demande) : c'est le
-   bouton "Libellés" de la barre d'actions (data-act="label", à côté de
-   couleur/archiver/modifier) qui ouvre la liste des libellés pas encore
-   posés sur cette notask (`.label-add-picker`, même case-à-côté que
-   .palette). Couleur en style inline plutôt qu'en classe .c-* :
+   couleur de la note), pas un aplat générique. Lecture seule à cet
+   endroit — sur demande explicite, ajouter/retirer un libellé n'est plus
+   possible depuis l'accueil (ni croix au survol, ni bouton +), seulement
+   depuis "Modifier" ou l'édition rapide (voir renderNoteLabelChips[Simple]()
+   plus bas). Couleur en style inline plutôt qu'en classe .c-* :
    `.label-chip:hover` a la même spécificité et écraserait sinon la
    couleur au survol (même piège que celui déjà rencontré et corrigé sur
    .drawer-item, voir renderLabelsDrawer()). */
 function renderCardLabels(el, n) {
   const box = el.querySelector('.note-labels');
-  const picker = el.querySelector('.label-add-picker');
-  const toggleBtn = el.querySelector('[data-act="label"]');
-  if (!box || !picker) return;
+  if (!box) return;
   box.innerHTML = '';
-  picker.innerHTML = '';
-  picker.hidden = true;
 
   const assigned = (n.label_ids || [])
     .map((id) => state.labels.find((l) => l.id === id))
@@ -1460,57 +1457,12 @@ function renderCardLabels(el, n) {
 
   for (const l of assigned) {
     const chip = document.createElement('span');
-    chip.className = 'label-chip label-chip-card';
+    chip.className = 'label-chip label-chip-card is-readonly';
     if (l.color && LABEL_COLOR_HEX[l.color]) {
       chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
     }
-    const name = document.createElement('span');
-    name.className = 'label-chip-name';
-    name.textContent = l.name;
-    const x = document.createElement('button');
-    x.type = 'button';
-    x.className = 'label-chip-x';
-    x.setAttribute('aria-label', `Retirer le libellé ${l.name}`);
-    x.innerHTML = ICONS.close;
-    x.onclick = async (e) => {
-      e.stopPropagation();
-      const nextIds = (n.label_ids || []).filter((id) => id !== l.id);
-      await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
-      loadNotes();
-    };
-    chip.append(name, x);
+    chip.textContent = l.name;
     box.appendChild(chip);
-  }
-
-  const remaining = state.labels.filter((l) => !(n.label_ids || []).includes(l.id));
-
-  if (toggleBtn) {
-    toggleBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (!picker.hidden) { picker.hidden = true; return; }
-      picker.innerHTML = '';
-      if (!remaining.length) {
-        picker.innerHTML = '<span class="hint">Aucun libellé disponible — créez-en un dans le menu latéral.</span>';
-      } else {
-        for (const l of remaining) {
-          const opt = document.createElement('button');
-          opt.type = 'button';
-          opt.className = 'label-chip';
-          if (l.color && LABEL_COLOR_HEX[l.color]) {
-            opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
-          }
-          opt.textContent = l.name;
-          opt.onclick = async (e2) => {
-            e2.stopPropagation();
-            const nextIds = [...(n.label_ids || []), l.id];
-            await api('/notes/' + n.id, { method: 'PATCH', body: { label_ids: nextIds } });
-            loadNotes();
-          };
-          picker.appendChild(opt);
-        }
-      }
-      picker.hidden = false;
-    };
   }
 }
 
@@ -1661,7 +1613,9 @@ function renderComposer() {
   $('#nc-items').hidden = !composerChecklist;
   $('#nc-add-item').hidden = !composerChecklist;
   renderComposerChecklistBtn();
-  $('#nc-tools-row').hidden = !composerExpanded;
+  // Le bloc entier (fond arrondi propre, voir .nc-toolbar-block) bascule,
+  // pas seulement la rangée de boutons à l'intérieur.
+  $('#nc-toolbar-block').hidden = !composerExpanded;
   $('#nc-cancel').hidden = !composerExpanded;
   if (!composerChecklist) return;
 

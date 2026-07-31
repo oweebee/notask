@@ -106,56 +106,65 @@
            côté. app.js ne vide jamais entièrement #notes-grid — seules les
            .note y sont retirées/ré-ajoutées à chaque rendu. -->
       <div class="notes-grid" id="notes-grid">
+        <!-- Composeur en deux blocs séparés, comme l'édition rapide
+             (.dns-card + .dns-bottom-bar) : .nc-card porte le texte de la
+             notask, .nc-toolbar-block porte les outils, avec un vrai espace
+             entre les deux plutôt qu'une barre fondue dans la même carte —
+             voir composerExpand()/renderComposer() dans app.js. -->
         <div class="note-composer">
-          <div class="composer-head">
-            <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
-            <input class="title-in" id="nc-title" placeholder="Titre">
+          <div class="nc-card">
+            <div class="composer-head">
+              <button type="button" class="icon-pick-btn" id="nc-icon-btn" aria-label="Choisir une icône"></button>
+              <input class="title-in" id="nc-title" placeholder="Titre">
+            </div>
+            <input class="description-in" id="nc-description" placeholder="Description">
+            <div class="ta-wrap">
+              <div id="nc-content" class="nc-content-editable" contenteditable="true" data-placeholder="Nouvelle notask…"></div>
+              <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
+            </div>
+            <div id="nc-items" hidden></div>
+            <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
+            <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
+                 encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
+                 rien n'est envoyé avant ce moment-là (voir
+                 composerPendingFiles dans app.js) — juste un aperçu
+                 local ici. -->
+            <div class="dns-attachments" id="nc-attachments" hidden></div>
           </div>
-          <input class="description-in" id="nc-description" placeholder="Description">
-          <div class="ta-wrap">
-            <div id="nc-content" class="nc-content-editable" contenteditable="true" data-placeholder="Nouvelle notask…"></div>
-            <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
-          </div>
-          <div id="nc-items" hidden></div>
-          <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
 
-          <!-- Barre d'outils secondaire : masquée par défaut, révélée au clic
-               dans un champ du composeur (voir composerExpand() dans
-               app.js). Mêmes outils que l'édition rapide (mise en forme,
-               pièce jointe, bascule case à cocher, échéance) plus couleur
-               et libellés, réglables dès la création (pas de couleur en
+          <!-- Bloc d'outils séparé : masqué par défaut, révélé au clic dans
+               un champ du composeur (voir composerExpand() dans app.js).
+               Mêmes outils que l'édition rapide (mise en forme, pièce
+               jointe, bascule case à cocher, échéance) plus couleur et
+               libellés, réglables dès la création (pas de couleur en
                édition rapide, réservée à la boîte "Modifier" complète, mais
                une nouvelle notask n'a pas d'étape "Modifier" à part) — pour
                pouvoir créer une carte complète sans repasser ensuite par
                une boîte de dialogue. -->
-          <div class="toolbar composer-tools-row" id="nc-tools-row" hidden>
-            <span id="nc-fmt-group" class="fmt-toolbar" style="margin:0;padding:0;">
-              <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
-              <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
-              <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+          <div class="nc-toolbar-block" id="nc-toolbar-block" hidden>
+            <div class="toolbar composer-tools-row" id="nc-tools-row">
+              <span id="nc-fmt-group" class="fmt-toolbar" style="margin:0;padding:0;">
+                <button type="button" data-fmt="bold" title="Gras" aria-label="Gras">B</button>
+                <button type="button" data-fmt="italic" title="Italique" aria-label="Italique">I</button>
+                <button type="button" data-fmt="underline" title="Souligné" aria-label="Souligné">U</button>
+                <span class="fmt-sep"></span>
+                <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
+              </span>
               <span class="fmt-sep"></span>
-              <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
-            </span>
-            <span class="fmt-sep"></span>
-            <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
-            <button type="button" class="cal-btn" id="nc-labels-btn" title="Libellés" aria-label="Libellés"></button>
-            <button type="button" class="cal-btn" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
-            <span class="fmt-sep"></span>
-            <button type="button" class="cal-btn" id="nc-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
-            <input type="file" id="nc-attach-input" multiple hidden>
-            <span class="fmt-sep"></span>
-            <button type="button" class="cal-btn" id="nc-due-btn" title="Régler l'échéance" aria-label="Échéance"></button>
-            <span id="nc-due-label" class="due-label">Aucune échéance</span>
-            <input type="hidden" id="nc-due">
+              <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
+              <button type="button" class="cal-btn" id="nc-labels-btn" title="Libellés" aria-label="Libellés"></button>
+              <button type="button" class="cal-btn" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
+              <span class="fmt-sep"></span>
+              <button type="button" class="cal-btn" id="nc-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
+              <input type="file" id="nc-attach-input" multiple hidden>
+              <span class="fmt-sep"></span>
+              <button type="button" class="cal-btn" id="nc-due-btn" title="Régler l'échéance" aria-label="Échéance"></button>
+              <span id="nc-due-label" class="due-label">Aucune échéance</span>
+              <input type="hidden" id="nc-due">
+            </div>
+            <div class="palette" id="nc-colors" hidden></div>
+            <div class="label-chips" id="nc-label-chips" hidden></div>
           </div>
-          <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
-               encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
-               rien n'est envoyé avant ce moment-là (voir
-               composerPendingFiles dans app.js) — juste un aperçu
-               local ici. -->
-          <div class="dns-attachments" id="nc-attachments" hidden></div>
-          <div class="palette" id="nc-colors" hidden></div>
-          <div class="label-chips" id="nc-label-chips" hidden></div>
 
           <div class="toolbar" style="margin: .6rem 0 0;">
             <span class="spacer" style="flex:1"></span>

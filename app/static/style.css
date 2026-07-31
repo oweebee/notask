@@ -390,7 +390,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   border: none;
   border-radius: var(--shape-full) 0 0 var(--shape-full);
   padding: .375rem .875rem .375rem .375rem;
-  margin-bottom: .375rem;
+  margin-bottom: 4px;
   color: var(--md-on-surface);
   font-size: .8125rem;
 }
@@ -464,14 +464,27 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 /* ============================== Notes ============================== */
 
+/* Composeur en deux blocs distincts (voir index.html) plutôt qu'une seule
+   carte : même esprit que .dns-card/.dns-bottom-bar en édition rapide,
+   où la barre d'outils est visuellement à part, sous la note, séparée
+   par un espace — pas fondue dans la même surface. .note-composer devient
+   une simple coquille transparente qui empile les deux blocs. */
 .note-composer {
-  /* Écho de la cuillère jaune du logo, atténué (alpha) pour rester discret. */
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  margin-bottom: 1.5rem;
+}
+.nc-card, .nc-toolbar-block {
+  /* Écho de la cuillère jaune du logo, atténué (alpha) pour rester discret —
+     les deux blocs partagent la même teinte, comme .dns-card/.dns-bottom-bar
+     partagent --note-color en édition rapide. */
   background: rgba(133, 102, 20, .55);
   border-radius: var(--shape-md);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.5rem;
   box-shadow: var(--elev-1);
 }
+.nc-card { padding: 1rem 1.25rem; }
+.nc-toolbar-block { padding: .625rem 1rem; }
 .composer-head { display: flex; align-items: center; gap: .625rem; }
 .composer-head .title-in { flex: 1; }
 
@@ -561,12 +574,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   border-color: transparent;
 }
 
-/* Barre d'outils secondaire du composeur (couleur/libellés/case à cocher/
-   échéance) : masquée tant que le titre ou le corps n'a pas été touché
-   (voir composerExpand() dans app.js), marge plus resserrée qu'un
-   .toolbar normal puisqu'elle est intercalée entre le contenu et la
-   rangée Ajouter/Annuler plutôt qu'isolée. */
-.composer-tools-row { margin: .5rem 0 .25rem; }
+/* Barre d'outils secondaire du composeur (mise en forme/couleur/libellés/
+   case à cocher/pièce jointe/échéance) : masquée tant qu'aucun champ n'a
+   été touché (voir composerExpand() dans app.js). Plus de marge propre à
+   ajouter ici — elle vit dans .nc-toolbar-block, qui a déjà son padding. */
+.composer-tools-row { margin: 0; }
 .note-composer .palette {
   display: flex;
   gap: .375rem;
