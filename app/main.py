@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
-from app.routers import attachments, auth, labels, note_versions, notes, settings, tasks, users
+from app.routers import attachments, auth, google, labels, note_versions, notes, settings, tasks, users
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -73,6 +73,7 @@ app.include_router(tasks.router)
 app.include_router(labels.router)
 app.include_router(attachments.router)
 app.include_router(note_versions.router)
+app.include_router(google.router)
 
 
 @app.get("/health", tags=["system"])

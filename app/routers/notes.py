@@ -10,6 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
@@ -93,19 +94,27 @@ def _check_labels(label_ids: Optional[List[int]], user: User, session: Session) 
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Libellé(s) inconnu(s) : {sorted(unknown)}")
 
 
-def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> None:
-    """Remplace les lignes en conservant les échéances des lignes réutilisées."""
+def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> List[NoteItem]:
+    """Remplace les lignes en conservant les échéances des lignes réutilisées.
+    Renvoie les nouvelles lignes (avec leur id, après flush) pour permettre à
+    l'appelant de déclencher leur synchro Google Calendar si besoin."""
     for existing in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
         session.delete(existing)
     session.flush()
+    created = []
     for position, item in enumerate(items):
-        session.add(NoteItem(
+        row = NoteItem(
             note_id=note.id,
             text=item.text,
             checked=item.checked,
             due_at=item.due_at,
+            calendar_title=item.calendar_title,
             position=position,
-        ))
+        )
+        session.add(row)
+        created.append(row)
+    session.flush()
+    return created
 
 
 def _purge_note(note: Note, session: Session) -> None:
@@ -153,6 +162,11 @@ def list_notes(
     session: Session = Depends(get_session),
 ):
     _purge_expired_trash(user, session)
+    # Tirage Google Calendar -> notask (voir google_calendar.pull_changes) :
+    # ne répercute que les dates modifiées/événements supprimés côté Google,
+    # ne fait rien si aucun compte Google n'est connecté. Même schéma
+    # paresseux que la purge de corbeille ci-dessus.
+    gcal.pull_changes(user, session)
 
     if trashed:
         stmt = select(Note).where(Note.user_id == user.id, Note.trashed_at.is_not(None))
@@ -194,9 +208,19 @@ def create_note(
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
     session.add(note)
     session.flush()
-    _replace_items(note, payload.items, session)
+    items = _replace_items(note, payload.items, session)
     session.commit()
     session.refresh(note)
+
+    # Synchro Google Calendar (voir app/google_calendar.py) : n'a d'effet
+    # que si l'utilisateur a un compte Google connecté et que due_at/
+    # calendar_title sont posés ; sans quoi ne fait rien. Volontairement
+    # après le commit ci-dessus : la notask est déjà sauvegardée avant
+    # même de tenter Google, un souci Google ne doit jamais faire échouer
+    # la création de la notask elle-même.
+    gcal.sync_note(note, session)
+    for item in items:
+        gcal.sync_item(item, note, session)
     return note
 
 
@@ -241,13 +265,26 @@ def update_note(
     items = data.pop("items", None)
     for key, value in data.items():
         setattr(note, key, value)
+
+    new_items = None
     if items is not None:
-        _replace_items(note, [NoteItemIn(**i) for i in items], session)
+        new_items = _replace_items(note, [NoteItemIn(**i) for i in items], session)
+
+    # Le titre en clair (calendar_title) n'a de sens que tant que la notask
+    # est effectivement synchronisable — le vider dès qu'elle ne l'est plus
+    # évite qu'un titre en clair traîne en base au-delà du strict nécessaire.
+    if note.due_at is None or note.archived:
+        note.calendar_title = None
 
     note.updated_at = utcnow()
     session.add(note)
     session.commit()
     session.refresh(note)
+
+    gcal.sync_note(note, session)
+    if new_items is not None:
+        for item in new_items:
+            gcal.sync_item(item, note, session)
     return note
 
 
@@ -266,6 +303,7 @@ def delete_note(
         note.trashed_at = utcnow()
         session.add(note)
         session.commit()
+        gcal.sync_note(note, session)  # supprime l'événement Google lié, si présent
         return
     _purge_note(note, session)
     session.commit()
@@ -284,6 +322,7 @@ def restore_note(
     session.add(note)
     session.commit()
     session.refresh(note)
+    gcal.sync_note(note, session)  # recrée l'événement Google si due_at/calendar_title toujours posés
     return note
 
 
@@ -298,15 +337,18 @@ def update_item(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    _owned_note(note_id, user, session)
+    note = _owned_note(note_id, user, session)
     item = session.get(NoteItem, item_id)
     if item is None or item.note_id != note_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")
 
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(item, key, value)
+    if item.due_at is None:
+        item.calendar_title = None  # cf. update_note : hygiène, pas de titre en clair sans échéance
 
     session.add(item)
     session.commit()
     session.refresh(item)
+    gcal.sync_item(item, note, session)
     return item

@@ -4,3 +4,8 @@ sqlmodel==0.0.22
 pydantic==2.10.4
 PyJWT==2.10.1
 python-multipart==0.0.9
+# Appels REST directs à l'API Google (OAuth + Calendar v3) — voir
+# app/google_calendar.py. Choisi plutôt que google-api-python-client /
+# google-auth-oauthlib (bien plus lourds, avec leur propre arbre de
+# dépendances) pour rester cohérent avec le peu de dépendances de ce projet.
+httpx==0.28.1

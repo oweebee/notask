@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-page-fantome-prise-rapide-68';
+const BUILD_VERSION = '2026-08-01-integration-google-calendar-69';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1270,6 +1270,21 @@ function enterApp() {
     msg($('#dp-msg'), 'Votre mot de passe a été défini par un administrateur. Choisissez-en un nouveau.', 'ok');
   }
 
+  // Retour du flux de connexion Google Calendar (voir /api/google/callback
+  // côté serveur, qui redirige ici avec ?google=connected ou ?google=error
+  // après l'échange OAuth). On nettoie l'URL pour ne pas rejouer ce message
+  // à chaque rechargement, puis on ouvre directement le Profil.
+  const googleParam = new URLSearchParams(location.search).get('google');
+  if (googleParam) {
+    history.replaceState(null, '', location.pathname);
+    $('#btn-profil').click();
+    msg(
+      $('#profil-google-msg'),
+      googleParam === 'connected' ? 'Compte Google connecté.' : 'Échec de la connexion à Google, réessayez.',
+      googleParam === 'connected' ? 'ok' : 'error'
+    );
+  }
+
   // Page fantôme (/quick, voir quick.html) : composeur déjà déplié et
   // titre au focus, prêt à écrire dès l'ouverture — c'est tout son intérêt
   // (icône d'écran d'accueil dédiée à la prise de note rapide, voir
@@ -1391,6 +1406,62 @@ $('#btn-profil').addEventListener('click', () => {
   }
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
+  refreshGoogleStatus();
+});
+
+/* -------------------- Connexion Google Calendar -------------------- */
+// Voir /api/google/* côté serveur (app/routers/google.py) et le compromis
+// de chiffrement expliqué dans app/google_calendar.py : seuls le titre en
+// clair et la date des notasks DATÉES sont vus par le serveur pour cette
+// fonctionnalité, tout le reste reste chiffré de bout en bout.
+
+async function refreshGoogleStatus() {
+  const dot = $('#profil-google-dot');
+  const label = $('#profil-google-label');
+  const btnConnect = $('#profil-google-connect');
+  const btnDisconnect = $('#profil-google-disconnect');
+  dot.className = 'profil-google-dot';
+  label.textContent = 'Google Calendar : vérification…';
+  btnConnect.hidden = true;
+  btnDisconnect.hidden = true;
+  try {
+    const st = await api('/google/status');
+    if (!st.connected) {
+      label.textContent = 'Google Calendar : non connecté';
+      btnConnect.hidden = false;
+    } else if (st.needs_reauth) {
+      dot.classList.add('needs-reauth');
+      label.textContent = `Google Calendar : reconnexion nécessaire (${st.email || 'compte inconnu'})`;
+      btnConnect.hidden = false;
+      btnDisconnect.hidden = false;
+    } else {
+      dot.classList.add('connected');
+      label.textContent = `Google Calendar : connecté (${st.email || 'compte Google'})`;
+      btnDisconnect.hidden = false;
+    }
+  } catch {
+    label.textContent = 'Google Calendar : statut indisponible';
+  }
+}
+
+$('#profil-google-connect').addEventListener('click', () => {
+  // Navigation complète (pas un fetch) : Google doit pouvoir rediriger le
+  // navigateur en retour vers /api/google/callback. Le jeton n'est envoyé
+  // qu'à notre propre serveur (voir commentaire en tête de routers/google.py) —
+  // jamais à Google, qui ne reçoit qu'un état opaque à usage unique.
+  location.href = '/api/google/connect?token=' + encodeURIComponent(token());
+});
+
+$('#profil-google-disconnect').addEventListener('click', async () => {
+  $('#profil-google-disconnect').disabled = true;
+  try {
+    await api('/google/disconnect', { method: 'POST' });
+    msg($('#profil-google-msg'), 'Compte Google déconnecté.', 'ok');
+  } catch {
+    msg($('#profil-google-msg'), 'Échec de la déconnexion, réessayez.', 'error');
+  }
+  $('#profil-google-disconnect').disabled = false;
+  refreshGoogleStatus();
 });
 /* Clic sur le fond = fermeture, comme dans les boîtes de note : le bouton
    "Fermer" dédié n'apportait rien. Échap passe par le même chemin, pour
@@ -3020,6 +3091,11 @@ $('#nc-add').addEventListener('click', async () => {
       icon: state.composerIcon,
       color: composerColor,
       due_at: $('#nc-due').value || null,
+      // Miroir en clair du titre, vu par le serveur UNIQUEMENT quand une
+      // échéance est posée — sert à nommer l'événement Google Calendar lié
+      // (voir app/google_calendar.py). Reste vide sans échéance : compromis
+      // de chiffrement volontairement limité au strict nécessaire.
+      calendar_title: $('#nc-due').value ? title : null,
       label_ids: composerLabelIds,
       masked: composerMasked,
     };
@@ -4169,6 +4245,9 @@ async function saveNoteSimpleDialog() {
       title: await encryptField($('#dns-title').value),
       description: await encryptField($('#dns-description').value),
       due_at: $('#dns-due').value || null,
+      // Cf. #nc-add : miroir en clair du titre pour Google Calendar, vidé
+      // dès que la notask n'a plus d'échéance.
+      calendar_title: $('#dns-due').value ? $('#dns-title').value : null,
       // Sans ce champ, basculer le mode avec #dns-toggle-checklist ne
       // survivait pas à la fermeture : is_checklist n'était jamais envoyé,
       // la note rouvrait dans son ancien mode au prochain clic.
@@ -4184,7 +4263,15 @@ async function saveNoteSimpleDialog() {
     // affiché nulle part.
     if (state.editingIsChecklist) {
       const items = state.editingNoteItems.filter((i) => i.text.trim());
-      body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
+      // Cf. plus haut : calculé avant l'écrasement de i.text par sa version
+      // chiffrée juste en dessous (même objet, la clé calendar_title est
+      // évaluée à partir de la valeur d'origine, l'ordre des clés dans le
+      // littéral n'a pas d'importance ici).
+      body.items = await Promise.all(items.map(async (i) => ({
+        ...i,
+        calendar_title: i.due_at ? i.text : null,
+        text: await encryptField(i.text),
+      })));
       body.content = '';
     } else {
       body.content = await encryptField(richToText($('#dns-content')));
@@ -5572,6 +5659,7 @@ async function collecterExport(progres) {
       trashed: !!n.trashed_at,
       items: (n.items || []).map((it) => ({
         text: it.text, checked: it.checked, due_at: it.due_at,
+        calendar_title: it.due_at ? it.text : null,
       })),
       attachments: pieces,
     });
@@ -5718,6 +5806,7 @@ $('#import-file').addEventListener('change', async () => {
           archived: !!n.archived,
           is_checklist: !!n.is_checklist,
           due_at: n.due_at || null,
+          calendar_title: n.due_at ? (n.title || '') : null,
           icon: n.icon || null,
           label_ids: (n.label_ids || [])
             .map((ancienId) => parNom.get(nomParAncienId.get(ancienId)))
@@ -5727,6 +5816,7 @@ $('#import-file').addEventListener('change', async () => {
               text: await encryptField(it.text || ''),
               checked: !!it.checked,
               due_at: it.due_at || null,
+              calendar_title: it.due_at ? (it.text || '') : null,
             })))
             : [],
         };

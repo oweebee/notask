@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlmodel import Session, select
 
+from app import google_calendar as gcal
 from app.db import DATA_DIR, get_session
 from app.deps import get_current_user
 from app.models import (
@@ -226,6 +227,15 @@ def restore_version(
     note.icon = version.icon
     note.label_ids = list(version.label_ids or [])
     note.updated_at = utcnow()
+    # L'instantané ne conserve pas calendar_title (miroir en clair pour
+    # Google Calendar, ajouté après ce système d'historique — voir
+    # app/google_calendar.py) : impossible de savoir s'il correspond encore
+    # à version.due_at ci-dessus. On le vide plutôt que de risquer de
+    # pousser un titre périmé vers un événement Google ; gcal.sync_note()
+    # plus bas supprime alors l'événement existant s'il y en avait un. Il
+    # suffit de rouvrir la notask (édition simple) pour resynchroniser avec
+    # le titre courant.
+    note.calendar_title = None
 
     # Lignes : remplacées à l'identique par celles de l'instantané (mêmes
     # limites que _replace_items() dans notes.py — de nouvelles lignes,
@@ -285,4 +295,5 @@ def restore_version(
     session.add(note)
     session.commit()
     session.refresh(note)
+    gcal.sync_note(note, session)  # cf. commentaire plus haut sur calendar_title vidé
     return note

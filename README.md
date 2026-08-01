@@ -44,11 +44,13 @@ app/
   db.py              moteur SQLite (/data/notask.db)
   security.py        hachage scrypt + jetons JWT
   deps.py            dépendances d'authentification
+  google_calendar.py client REST Google (OAuth + Calendar v3)
   routers/
     auth.py          setup, login, profil, mot de passe
     users.py         gestion des comptes (admin)
     notes.py         notes façon Keep
     tasks.py         listes et tâches façon Tasks
+    google.py        connexion/déconnexion Google Calendar
   static/            interface web (HTML, CSS, JS)
 tests/test_api.py    tests bout en bout
 Dockerfile
@@ -78,6 +80,10 @@ Documentation interactive sur `/docs`.
 | PATCH | `/api/notes/{id}/items/{item_id}` | cocher ou dater une ligne |
 | GET | `/api/tasks` | notes et lignes datées, regroupées |
 | PATCH | `/api/tasks/{kind}/{id}` | terminer (`kind` = `note` ou `item`) |
+| GET | `/api/google/status` | connecté / déconnecté / à reconnecter |
+| GET | `/api/google/connect?token=` | démarre la connexion (redirige vers Google) |
+| GET | `/api/google/callback` | retour de Google (usage interne, pas d'appel direct) |
+| POST | `/api/google/disconnect` | déconnecte le compte Google |
 
 Le jeton est valable 30 jours — adapté à un client Android natif dont les
 widgets d'écran d'accueil interrogent l'API en tâche de fond.
@@ -96,6 +102,52 @@ curl -X PATCH https://notask.exemple.tld/api/settings \
 ```
 
 Limites : 100 clés par utilisateur, 10 000 caractères par valeur texte.
+
+## Google Calendar
+
+Synchro optionnelle, par utilisateur, activable depuis la boîte *Profil* :
+une notask (ou une ligne à cocher) datée devient un événement dans le
+calendrier principal du compte Google connecté. Détail de l'implémentation
+et des compromis dans `app/google_calendar.py`.
+
+**Compromis de chiffrement, accepté explicitement (pas une conséquence
+cachée)** : pour une notask/ligne qui a une échéance, le serveur voit
+désormais son titre en clair (nécessaire pour nommer l'événement Google —
+voir `Note.calendar_title`/`NoteItem.calendar_title` dans `app/models.py`).
+Tout le reste (description, contenu, pièces jointes, notasks sans échéance)
+reste chiffré de bout en bout comme avant, inchangé.
+
+**Sens de la synchro** : dans les deux sens, mais de façon asymétrique du
+fait du chiffrement — une notask crée/modifie/supprime son événement
+Google ; à l'inverse, un changement de **date** fait directement dans
+Google Calendar est répercuté sur la notask, mais un changement de
+**titre** fait côté Google ne peut PAS l'être (le titre réel est chiffré,
+le serveur n'a pas la clé). Événement supprimé côté Google => la notask
+perd sa date (redevient une note ordinaire), jamais supprimée elle-même.
+Notask archivée ou mise à la corbeille => son événement Google est
+supprimé automatiquement.
+
+Aucune tâche planifiée : le tirage des changements côté Google (voir
+`pull_changes()`) se fait paresseusement à chaque chargement de la liste
+des notasks, même principe que la purge de corbeille.
+
+### Créer les identifiants OAuth
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → créer un
+   projet (ou en réutiliser un).
+2. **APIs et services → Bibliothèque** → activer *Google Calendar API*.
+3. **APIs et services → Écran de consentement OAuth** → type *Externe*,
+   renseigner nom de l'appli + e-mail ; en mode *Test*, ajouter son propre
+   compte Google comme utilisateur test (pas besoin de validation Google
+   pour un usage personnel).
+4. **APIs et services → Identifiants → Créer des identifiants → ID client
+   OAuth** → type *Application Web*.
+   URI de redirection autorisée : `https://notask.mondomaine.tld/api/google/callback`
+   (remplacer par le vrai domaine de déploiement — doit correspondre
+   exactement, schéma https compris).
+5. Renseigner `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` (voir tableau des
+   variables d'environnement ci-dessous) dans les réglages d'environnement
+   de Coolify — jamais dans le dépôt Git, ce sont des secrets.
 
 ## Sécurité
 
@@ -117,6 +169,8 @@ Limites : 100 clés par utilisateur, 10 000 caractères par valeur texte.
 | `DATABASE_URL` | `sqlite:///<data>/notask.db` | connexion base |
 | `NOTASK_SECRET_KEY` | générée | clé de signature JWT |
 | `NOTASK_TOKEN_TTL_DAYS` | `30` | durée de validité des jetons |
+| `GOOGLE_CLIENT_ID` | — | ID client OAuth (intégration Google Calendar, voir plus haut) |
+| `GOOGLE_CLIENT_SECRET` | — | secret client OAuth associé |
 
 ## Développement
 

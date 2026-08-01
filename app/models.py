@@ -95,6 +95,69 @@ class UserSettings(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+# ============================ Google Calendar ============================
+# Synchro optionnelle, par utilisateur : une notask (ou une ligne à cocher)
+# datée est répercutée comme événement dans Google Calendar. Compromis de
+# chiffrement explicitement accepté par l'utilisateur (pas supposé) : pour
+# les notasks/lignes AVEC échéance seulement, le serveur voit désormais le
+# titre en clair (voir Note.calendar_title / NoteItem.calendar_title
+# ci-dessous), en plus de la date déjà en clair aujourd'hui (due_at). Le
+# reste (description, contenu, pièces jointes, notasks sans échéance) reste
+# chiffré de bout en bout comme avant, intégralement inchangé.
+#
+# Cette table ne doit JAMAIS être exposée via /api/settings (objet JSON
+# libre renvoyé tel quel au client) : refresh_token/access_token y seraient
+# sinon reservis au client à chaque lecture des réglages. Elle vit dans sa
+# propre table, avec son propre routeur (app/routers/google.py), dont aucune
+# route ne renvoie jamais ces deux champs — seulement un statut
+# connecté/déconnecté/à reconnecter (needs_reauth) et l'e-mail du compte.
+
+class GoogleAccount(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, unique=True)
+    # E-mail du compte Google connecté — affichage seulement, jamais utilisé
+    # pour l'authentification elle-même.
+    email: Optional[str] = Field(default=None, max_length=200)
+    refresh_token: str = Field(max_length=1000)
+    access_token: Optional[str] = Field(default=None, max_length=1000)
+    access_token_expires_at: Optional[datetime] = None
+    # "primary" par défaut : le calendrier principal du compte Google. Pas
+    # de sélecteur de calendrier dans cette première version.
+    calendar_id: str = Field(default="primary", max_length=200)
+    # Jeton de tirage incrémental (Google Calendar Events.list?syncToken=...)
+    # — permet de ne récupérer que ce qui a changé côté Google depuis le
+    # dernier passage, sans tout retélécharger. None => prochain tirage fait
+    # une synchro complète et initialise ce jeton.
+    sync_token: Optional[str] = Field(default=None, max_length=2000)
+    # Posé à vrai dès qu'un rafraîchissement de jeton échoue (refresh_token
+    # révoqué ou expiré côté Google) — c'est le repère affiché côté client
+    # ("reconnexion nécessaire") plutôt que de deviner depuis un code
+    # d'erreur HTTP à chaque fois.
+    needs_reauth: bool = False
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GoogleAccountStatus(SQLModel):
+    """Ce que /api/google/status renvoie — jamais les jetons eux-mêmes."""
+    connected: bool
+    email: Optional[str] = None
+    needs_reauth: bool = False
+
+
+# État CSRF éphémère du flux OAuth (voir app/routers/google.py connect()/
+# callback()). Un identifiant aléatoire opaque tient lieu de paramètre
+# `state` envoyé à Google — la clé JWT du site n'est elle-même jamais
+# transmise à Google, seulement à /api/google/connect (notre propre
+# serveur, en HTTPS). Ligne à usage unique, supprimée dès consommée par
+# callback() ou si expirée (nettoyage paresseux, comme _purge_expired_trash
+# dans routers/notes.py — même philosophie : pas de tâche planifiée).
+class GoogleOAuthState(SQLModel, table=True):
+    state: str = Field(primary_key=True, max_length=64)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 # ================================= Notes =================================
 # La note est le seul objet que l'utilisateur crée.
 #
@@ -147,6 +210,18 @@ class Note(NoteBase, table=True):
     # note déjà en corbeille. Une note en corbeille n'apparaît plus dans
     # aucune autre vue (notes, archives, tâches), voir list_notes()/tasks.py.
     trashed_at: Optional[datetime] = None
+    # --- Synchro Google Calendar (voir bloc "Google Calendar" plus haut) ---
+    # Miroir en clair du titre, envoyé par le client UNIQUEMENT quand due_at
+    # est posée (c'est lui, jamais `title` qui reste chiffré, qui sert à
+    # construire l'événement Google). Remis à None dès que due_at est retiré,
+    # que la notask est archivée ou mise à la corbeille (voir update_note/
+    # delete_note dans routers/notes.py) — évite qu'un titre en clair traîne
+    # au-delà du moment où il sert réellement.
+    calendar_title: Optional[str] = Field(default=None, max_length=2000)
+    # Identifiant de l'événement côté Google, pour le retrouver au moment de
+    # le mettre à jour ou le supprimer. None => jamais synchronisé (compte
+    # non connecté, ou pas encore d'échéance au moment de la création).
+    google_event_id: Optional[str] = Field(default=None, max_length=200)
     # Redéclaré ici avec NOT NULL + server_default '' (contrairement à la
     # version héritée de NoteBase, nullable par défaut) : sans quoi la
     # migration ajoutant cette colonne à une table `note` déjà peuplée
@@ -200,6 +275,11 @@ class NoteItem(SQLModel, table=True):
     position: int = 0
     # Échéance propre à la ligne. Non nulle => la ligne est une tâche.
     due_at: Optional[datetime] = None
+    # Cf. Note.calendar_title/google_event_id — même principe, à l'échelle
+    # de la ligne : une ligne à cocher datée devient elle-même un événement
+    # Google Calendar séparé, indépendant de celui de la notask parente.
+    calendar_title: Optional[str] = Field(default=None, max_length=3000)
+    google_event_id: Optional[str] = Field(default=None, max_length=200)
 
     note: Optional[Note] = Relationship(back_populates="items")
 
@@ -209,12 +289,14 @@ class NoteItemIn(SQLModel):
     text: str = ""
     checked: bool = False
     due_at: Optional[datetime] = None
+    calendar_title: Optional[str] = None
 
 
 class NoteItemUpdate(SQLModel):
     text: Optional[str] = None
     checked: Optional[bool] = None
     due_at: Optional[datetime] = None
+    calendar_title: Optional[str] = None
 
 
 class NoteItemOut(SQLModel):
@@ -223,11 +305,15 @@ class NoteItemOut(SQLModel):
     checked: bool
     position: int
     due_at: Optional[datetime] = None
+    google_event_id: Optional[str] = None
 
 
 class NoteCreate(NoteBase):
     items: List[NoteItemIn] = []
     label_ids: List[int] = []
+    # Cf. Note.calendar_title — miroir en clair du titre, fourni par le
+    # client uniquement quand due_at est posée dès la création.
+    calendar_title: Optional[str] = None
 
 
 class NoteUpdate(SQLModel):
@@ -246,6 +332,8 @@ class NoteUpdate(SQLModel):
     masked: Optional[bool] = None
     # Nouvelle position manuelle (glisser-déposer) ; voir Note.position.
     position: Optional[float] = None
+    # Cf. Note.calendar_title.
+    calendar_title: Optional[str] = None
 
 
 # ============================= Pièces jointes =============================
@@ -297,6 +385,10 @@ class NoteOut(NoteBase):
     updated_at: datetime
     items: List[NoteItemOut] = []
     attachments: List[AttachmentOut] = []
+    # Cf. Note.google_event_id — indicateur "synchronisé avec Google" côté
+    # client, jamais calendar_title en retour (redondant avec title une fois
+    # affiché, inutile de le renvoyer).
+    google_event_id: Optional[str] = None
 
 
 # =============================== Historique ================================

@@ -473,6 +473,23 @@
 <dialog id="dlg-profil">
   <h2>Profil</h2>
   <dl class="profil-infos" id="profil-infos"></dl>
+
+  <!-- Connexion Google Calendar (voir /api/google/* et app/google_calendar.py
+       côté serveur). La pastille de couleur donne le repère visuel demandé :
+       vert = connecté, gris = non connecté, orange = reconnexion nécessaire
+       (jeton Google révoqué/expiré). -->
+  <div class="profil-google" id="profil-google">
+    <div class="profil-google-row">
+      <span class="profil-google-dot" id="profil-google-dot"></span>
+      <span id="profil-google-label">Google Calendar : vérification…</span>
+    </div>
+    <div id="profil-google-msg"></div>
+    <div class="dialog-actions">
+      <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
+      <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
+    </div>
+  </div>
+
   <div class="dialog-actions">
     <button class="btn ghost" id="profil-password" type="button">Changer de mot de passe</button>
     <span class="spacer" style="flex:1"></span>
