@@ -155,6 +155,17 @@ des notasks, même principe que la purge de corbeille.
    - **Variables d'environnement** : `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
      dans les réglages Coolify — jamais dans le dépôt Git, ce sont des secrets.
 
+**Erreur "redirect_uri_mismatch" côté Google** : Uvicorn tourne avec
+`--proxy-headers` (voir Dockerfile) pour que l'URI de redirection calculée
+côté serveur soit bien en `https://` (Traefik termine le TLS et transmet en
+clair en interne — sans ce réglage, Starlette la calculerait en `http://`,
+qui ne correspondrait plus à celle enregistrée dans la console Google).
+Si l'erreur persiste : vérifier que l'URI enregistrée dans Google Cloud
+Console correspond EXACTEMENT (schéma, domaine, `/api/google/callback`,
+sans slash final) à celle utilisée, et qu'un redéploiement complet
+(reconstruction de l'image, pas juste un restart) a bien eu lieu après
+toute modification du Dockerfile.
+
 ## Sécurité
 
 - Mots de passe hachés en **scrypt** (bibliothèque standard, paramètres OWASP),
