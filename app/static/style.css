@@ -1858,12 +1858,19 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    [open], "display:flex" s'appliquait même fermé et la fenêtre restait
    visible en permanence derrière les autres (bug constaté à la vérification :
    dlg-note apparaissait alors même avec open=false). */
+/* height:auto (pas une hauteur fixe) + overflow-y:auto : une notask avec
+   pas mal de contenu (palette de 24 couleurs + plusieurs libellés, par
+   exemple) dépassait la hauteur fixe de 584px, sans aucun moyen d'atteindre
+   le reste (Enregistrer y compris) — coupé net, sans défilement. Même
+   correctif déjà appliqué à #dlg-note-simple juste en dessous, resté oublié
+   ici jusqu'à ce que ça se voie sur une notask assez longue. */
 #dlg-note[open] {
-  height: 584px;
+  min-height: 584px;
+  height: auto;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 /* Édition simple : 584px reste la taille MINIMALE (comportement inchangé
    pour une note courte), mais height:auto plutôt que fixe permet à la
