@@ -2990,7 +2990,39 @@ body.quick-capture .note-composer { display: flex; flex-direction: column; flex:
    échouait pour une raison quelconque (contenu pas encore prêt, par ex.) :
    double sécurité, un composeur replié serait inutilisable ici. */
 body.quick-capture #nc-toolbar-block[hidden] { display: flex !important; }
-body.quick-capture .nc-card { flex: none; }
+/* Pour que la zone de texte (#nc-content) remplisse vraiment tout l'écran
+   restant, `flex: 1` doit être posé à CHAQUE niveau de la chaîne
+   d'ancêtres jusqu'à .note-composer — pas seulement sur #nc-content lui-
+   même : #nc-content est en fait imbriqué dans .ta-wrap, lui-même dans
+   .nc-card (voir index.html), et `flex: 1` sur un enfant n'a aucun effet
+   tant que son PARENT DIRECT n'est pas display:flex. Première version
+   posait `flex: none` sur .nc-card, ce qui coupait net toute la chaîne dès
+   le premier niveau — la zone de texte restait alors bloquée à son
+   min-height (30vh), le reste de l'écran en dessous restant vide. Titre,
+   description, et le bloc d'outils (en bas) gardent leur taille naturelle
+   (aucun flex-grow déclaré dessus) : seule .ta-wrap (donc #nc-content)
+   grandit pour absorber tout l'espace restant. min-height: 0 nécessaire
+   sur les conteneurs flex intermédiaires : sans ça, un enfant flex ne peut
+   par défaut pas devenir plus PETIT que son propre contenu, ce qui aurait
+   empêché #nc-content de se limiter à l'espace réellement disponible. */
+body.quick-capture .nc-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+body.quick-capture .ta-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* Pas d'overflow-y:auto ici volontairement : une notask longue doit faire
+   grandir toute la page (comme le composeur normal, auto-agrandissant),
+   pas défiler dans une petite zone interne isolée — rien dans la chaîne
+   .composer-stack/.note-composer/.nc-card/.ta-wrap ci-dessus ne pose de
+   `height`/`max-height` (seulement des `min-height`), donc rien ne
+   l'empêche de dépasser 100dvh si le texte grandit. */
 body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 
 @media (max-width: 860px) {
