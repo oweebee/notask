@@ -282,23 +282,6 @@
         </thead>
         <tbody id="users-body"></tbody>
       </table>
-
-      <!-- Identifiants OAuth Google (Client ID/Secret) pour toute
-           l'installation — voir /api/google/admin-config. Alternative aux
-           variables d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
-           (Coolify), pour ne pas avoir à en sortir de l'appli. -->
-      <div class="admin-google">
-        <h3>Google Calendar</h3>
-        <p class="admin-google-hint" id="admin-google-source"></p>
-        <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
-        <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
-        <div id="ga-msg"></div>
-        <div class="dialog-actions">
-          <button class="btn danger" id="ga-clear" type="button">Effacer</button>
-          <span class="spacer" style="flex:1"></span>
-          <button class="btn" id="ga-save" type="button">Enregistrer</button>
-        </div>
-      </div>
     </section>
   </main>
 
@@ -491,10 +474,31 @@
   <h2>Profil</h2>
   <dl class="profil-infos" id="profil-infos"></dl>
 
-  <!-- Connexion Google Calendar (voir /api/google/* et app/google_calendar.py
-       côté serveur). La pastille de couleur donne le repère visuel demandé :
-       vert = connecté, gris = non connecté, orange = reconnexion nécessaire
-       (jeton Google révoqué/expiré). -->
+  <!-- Identifiants OAuth Google (Client ID/Secret) pour toute l'installation
+       — voir /api/google/admin-config. Réservés aux administrateurs côté
+       serveur (get_current_admin) ; masqué en entier ici pour un compte non
+       admin (voir refreshGoogleStatus() dans app.js), alternative aux
+       variables d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
+       (Coolify), pour ne pas avoir à en sortir de l'appli. Placé avant la
+       connexion personnelle ci-dessous : il faut ces identifiants avant de
+       pouvoir connecter quoi que ce soit. -->
+  <div class="admin-google" id="admin-google" hidden>
+    <h3>Google Calendar — identifiants de l'installation</h3>
+    <p class="admin-google-hint" id="admin-google-source"></p>
+    <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
+    <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
+    <div id="ga-msg"></div>
+    <div class="dialog-actions">
+      <button class="btn danger" id="ga-clear" type="button">Effacer</button>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn" id="ga-save" type="button">Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Connexion Google Calendar personnelle (voir /api/google/* et
+       app/google_calendar.py côté serveur). La pastille de couleur donne le
+       repère visuel demandé : vert = connecté, gris = non connecté, orange =
+       reconnexion nécessaire (jeton Google révoqué/expiré). -->
   <div class="profil-google" id="profil-google">
     <div class="profil-google-row">
       <span class="profil-google-dot" id="profil-google-dot"></span>

@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-config-google-admin-70';
+const BUILD_VERSION = '2026-08-01-config-google-dans-profil-71';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1345,7 +1345,7 @@ function switchView(view) {
     loadNotes();
   }
   if (view === 'trash') loadTrash();
-  if (view === 'admin') { loadUsers(); loadGoogleAdminConfig(); }
+  if (view === 'admin') loadUsers();
 }
 
 /* ---------------------- Configuration / connexion ---------------------- */
@@ -1406,6 +1406,11 @@ $('#btn-profil').addEventListener('click', () => {
   }
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
+  // Identifiants OAuth de l'installation : réservés aux administrateurs
+  // (le serveur les refuserait de toute façon à un compte non admin, mais
+  // autant ne pas afficher des champs qui échoueraient systématiquement).
+  $('#admin-google').hidden = !state.user.is_admin;
+  if (state.user.is_admin) loadGoogleAdminConfig();
   refreshGoogleStatus();
 });
 
