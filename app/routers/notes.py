@@ -52,6 +52,11 @@ ICON_KEYS = {
     "star", "home", "work", "shopping", "heart", "flag", "book",
     "idea", "travel", "gift", "money", "music",
     "spoonyellow", "spoonblue", "spoons",
+    # Lot ajouté pour étoffer le choix — synchronisé avec ICON_CHOICES
+    # côté client (app.js).
+    "health", "sport", "car", "laptop", "school", "plant", "camera",
+    "game", "tool", "warning", "lock", "globe", "phone", "mail",
+    "coffee", "sun", "moon", "paw", "food", "document",
 }
 
 

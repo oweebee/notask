@@ -512,18 +512,13 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .agenda-empty { padding: 0 0 0 .125rem; text-align: left; font-size: .8125rem; }
 
 /* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),
-   larges de deux cartes, centrés, avec des notes des deux côtés.
-   La règle ci-dessous (grid-column: 2 / span 2) n'est qu'un repli pour le
-   tout premier instant d'affichage : la vraie colonne de départ (centrée
-   selon le nombre RÉEL de colonnes) et la ligne de chaque élément sont
-   calculées et posées en style inline par app.js (voir layoutMosaic()).
-   C'est nécessaire car, vérifié en navigateur headless : le placement
-   automatique de CSS Grid ne comble jamais une colonne restée libre avant un
-   élément explicitement positionné — sans placer nous-mêmes explicitement
-   les quelques notes voisines, elles atterriraient toutes après le composeur
-   et la recherche, jamais à côté. */
+   larges de deux cartes, centrés, avec des notes des deux côtés. Position
+   et largeur (left/width/top) sont calculées et posées en style inline par
+   app.js (voir layoutMosaic()) — la mosaïque est un vrai masonry en
+   positionnement absolu, pas une grille CSS, donc rien ici ne fixe plus
+   l'emplacement lui-même. */
 .notes-grid .composer-stack {
-  grid-column: 2 / span 2;
+  position: absolute;
   margin: 0;
   /* Composeur puis recherche, empilés et solidaires : la recherche suit
      donc automatiquement la hauteur du composeur quand il se déplie. */
@@ -536,7 +531,6 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 @media (max-width: 860px) {
   main { width: 100%; }
-  .notes-grid .note-composer, .notes-grid .search-toolbar { grid-column: 1 / -1; }
 }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
@@ -592,7 +586,8 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    Cartes deux fois plus larges que dans la mosaïque : il ne s'agit plus
    d'un aperçu mais d'un extrait à lire, avec son contexte. */
 .note.search-hit {
-  grid-column: span 2;
+  /* Largeur 2 colonnes posée par layoutMosaic() (voir app.js) — plus une
+     grille CSS, la largeur ne peut plus se déclarer ici. */
   cursor: pointer;
 }
 .hit-nav {
@@ -818,12 +813,30 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .composer-item-row button { flex: none; opacity: .6; }
 .composer-item-row button:hover { opacity: 1; }
 
+/* Vrai masonry en positionnement absolu (voir layoutMosaic() dans app.js) :
+   plus une grille CSS. Un CSS Grid classique impose à chaque RANGÉE la
+   hauteur de son occupant le plus haut — une notask courte à côté d'une
+   très longue laissait un grand vide en dessous d'elle avant la rangée
+   suivante. Ici chaque carte est calée directement sous la carte la plus
+   basse de sa colonne, sans dépendre de ses voisines.
+   --mosaic-min-col/--mosaic-gap : SEULE source de vérité pour ces deux
+   valeurs, lues par app.js (getComputedStyle) plutôt que dupliquées en dur
+   dans le JS — les garder en px (pas rem) pour que la lecture JS n'ait pas
+   à résoudre l'unité. */
 .notes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1rem;
-  align-items: start;
+  position: relative;
+  --mosaic-min-col: 240px;
+  --mosaic-gap: 16px;
 }
+.notes-grid .note, .notes-grid .composer-stack { position: absolute; top: 0; left: 0; }
+/* Repositionnement animé : au resize, à la fin d'un glisser-déposer, ou
+   quand une image chargée en différé change la hauteur d'une carte. Coupé
+   pendant qu'une carte est activement tenue (voir .dragging plus bas) —
+   sinon elle traînerait derrière le pointeur au lieu de le suivre. */
+.notes-grid .note, .notes-grid .composer-stack {
+  transition: left .18s ease, top .18s ease;
+}
+.notes-grid .note.dragging { transition: none; }
 
 /* Carte Material : aucune bordure, c'est le ton de la surface qui la détache
    du fond. L'élévation ne change qu'au survol. */
@@ -956,9 +969,12 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 .note svg { width: 18px; height: 18px; display: block; }
 
-/* Icône associée à la note, au-dessus du titre */
+/* Icône associée à la note, au-dessus du titre — 50% plus grande que la
+   base (20px -> 30px, sur demande explicite) que les icônes fonctionnelles
+   de la barre d'actions (.note svg, 18px), pour bien se distinguer d'un
+   coup d'œil sur la carte. */
 .note-icon { flex: none; display: block; color: var(--md-on-surface-variant); }
-.note-icon svg { width: 20px; height: 20px; display: block; }
+.note-icon svg { width: 30px; height: 30px; display: block; }
 .note { cursor: pointer; }
 
 /* Palette dépliable dans la carte */
@@ -2017,6 +2033,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-code-block {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
+  line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;
   border-radius: var(--shape-xs);
@@ -2025,6 +2042,15 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   white-space: pre-wrap;
   /* Le bouton de copie flotte à droite en tête du bloc : le texte
      s'écoule autour, pas besoin de lui réserver un retrait. */
+}
+/* Plafond de hauteur ~10 lignes, scrollable — sur la CARTE seulement (pas
+   dans les éditeurs, où on veut voir tout ce qu'on tape). Une notask avec
+   plusieurs blocs de code assez longs devenait anormalement haute,
+   déséquilibrant toute la mosaïque à côté d'elle. */
+.note .note-code-block {
+  max-height: calc(10 * 1.5 * .8125rem + 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* Pastille de copie d'un bloc de code, en haut à droite. Visible en
    permanence et non au survol : c'est un raccourci qu'on doit voir pour
@@ -2078,7 +2104,17 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .icon-pick-btn:hover { background: rgba(230,224,233,.16); border-color: var(--md-primary); }
 .icon-pick-btn.has-icon { border-style: solid; border-color: var(--md-outline); background: transparent; }
 
-.icon-popup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .375rem; }
+/* max-height + défilement : la liste est passée de 15 à 35+ icônes,
+   4 colonnes pleines dépasseraient largement une carte ou un petit écran
+   sans ce plafond (~5 rangées visibles, le reste au défilement). */
+.icon-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .375rem;
+  max-height: 13.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .icon-opt {
   width: 34px; height: 34px;
   display: grid;

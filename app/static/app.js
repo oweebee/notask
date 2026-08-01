@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-archive-cadre-blanc-effacer-50';
+const BUILD_VERSION = '2026-08-01-masonry-clipboard-icones-51';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -539,6 +539,30 @@ const ICON_CHOICES = {
   spoonyellow: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></svg>',
   spoonblue: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></svg>',
   spoons: '<svg viewBox="0 0 24 24"><g transform="translate(1.5,1) scale(0.62)"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#ffd54f"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#ffe082"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#ffd54f"/></g><g transform="translate(9,1) scale(0.62)"><ellipse cx="12" cy="9.5" rx="5.5" ry="6.5" fill="#42a5f5"/><ellipse cx="12" cy="9.1" rx="3.4" ry="4.2" fill="#90caf9"/><rect x="10.3" y="14.5" width="3.4" height="7.6" rx="1.7" fill="#42a5f5"/></g></svg>',
+
+  /* Lot ajouté pour étoffer le choix (15 -> 35) — même esprit que les
+     précédentes : formes simples, en couleur, viewBox 0 0 24 24 commun.
+     Synchronisé avec ICON_KEYS côté serveur (app/routers/notes.py). */
+  health: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="#ef5350"/><path d="M11 7h2v4h4v2h-4v4h-2v-4H7v-2h4z" fill="#fff"/></svg>',
+  sport: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ff8a65"/><path d="M12 3.5v17M3.5 12h17M5.8 6.2c2 1.6 2 8 0 11.6M18.2 6.2c-2 1.6-2 8 0 11.6" fill="none" stroke="#d84315" stroke-width="1.2"/></svg>',
+  car: '<svg viewBox="0 0 24 24"><path d="M4.5 14.5 6 9.5a2 2 0 0 1 1.9-1.4h8.2A2 2 0 0 1 18 9.5l1.5 5" fill="none" stroke="#5c6bc0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="14" width="18" height="4.5" rx="1.4" fill="#5c6bc0"/><circle cx="7.5" cy="18.7" r="1.7" fill="#37474f"/><circle cx="16.5" cy="18.7" r="1.7" fill="#37474f"/></svg>',
+  laptop: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="10" rx="1.2" fill="#78909c"/><rect x="5.2" y="6.2" width="13.6" height="7.6" rx=".6" fill="#263238"/><path d="M2.5 18.5h19l-1.5 2H4z" fill="#90a4ae"/><path d="M9.5 8.3 7.6 10l1.9 1.7M14.5 8.3 16.4 10l-1.9 1.7" fill="none" stroke="#80deea" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  school: '<svg viewBox="0 0 24 24"><path d="M12 4 2 8.5 12 13l10-4.5z" fill="#8d6e63"/><path d="M6 10.5v4.3c0 1.4 2.7 2.7 6 2.7s6-1.3 6-2.7v-4.3" fill="none" stroke="#8d6e63" stroke-width="1.5" stroke-linecap="round"/><path d="M20.5 9v6" stroke="#5d4037" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  plant: '<svg viewBox="0 0 24 24"><path d="M12 21V11" stroke="#6d4c41" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M12 12c0-4.5 3.5-8 8-8 0 4.5-3.5 8-8 8z" fill="#66bb6a"/><path d="M12 15c0-3.5-2.7-6.2-6.2-6.2 0 3.5 2.7 6.2 6.2 6.2z" fill="#81c784"/></svg>',
+  camera: '<svg viewBox="0 0 24 24"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-1.8h7l1 1.8h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" fill="#78909c"/><circle cx="12" cy="13" r="3.6" fill="#37474f"/><circle cx="12" cy="13" r="2.1" fill="#90a4ae"/></svg>',
+  game: '<svg viewBox="0 0 24 24"><path d="M6.5 8.5h11a4 4 0 0 1 3.9 4.9l-.6 2.6a2.3 2.3 0 0 1-4-1L16 14H8l-.8 1a2.3 2.3 0 0 1-4 1l-.6-2.6a4 4 0 0 1 3.9-4.9z" fill="#7e57c2"/><path d="M8 10.7v3M6.5 12.2h3" stroke="#ede7f6" stroke-width="1.3" stroke-linecap="round"/><circle cx="15" cy="11" r=".9" fill="#ede7f6"/><circle cx="17" cy="13" r=".9" fill="#ede7f6"/></svg>',
+  tool: '<svg viewBox="0 0 24 24"><path d="M14.7 9.3a4 4 0 0 1-5.4 5.4L4 20l-1-1 5.3-5.3a4 4 0 0 1 5.4-5.4l-2.4 2.4 1.4 1.4z" fill="#8d6e63"/></svg>',
+  warning: '<svg viewBox="0 0 24 24"><path d="M12 3.5 22 20.5H2z" fill="#ffb300"/><rect x="11.1" y="9.5" width="1.8" height="5.5" rx=".9" fill="#5d4037"/><circle cx="12" cy="17.3" r="1.1" fill="#5d4037"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9.5" rx="1.6" fill="#78909c"/><path d="M7.5 11V8a4.5 4.5 0 0 1 9 0v3" fill="none" stroke="#78909c" stroke-width="1.7"/><circle cx="12" cy="15" r="1.6" fill="#263238"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#4dd0e1"/><path d="M3.5 12h17M12 3.5c2.6 2.3 2.6 15 0 17M12 3.5c-2.6 2.3-2.6 15 0 17" fill="none" stroke="#00838f" stroke-width="1.2"/></svg>',
+  phone: '<svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="#455a64"/><rect x="8.2" y="4.7" width="7.6" height="12.6" fill="#cfd8dc"/><circle cx="12" cy="19" r="1" fill="#cfd8dc"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="1.6" fill="#4fc3f7"/><path d="M3.5 6.5 12 13l8.5-6.5" fill="none" stroke="#e1f5fe" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  coffee: '<svg viewBox="0 0 24 24"><path d="M5 9h11v6a3.5 3.5 0 0 1-3.5 3.5H8.5A3.5 3.5 0 0 1 5 15z" fill="#8d6e63"/><path d="M16 10.5h1.5a2.3 2.3 0 0 1 0 4.6H16" fill="none" stroke="#8d6e63" stroke-width="1.5"/><path d="M8 5.5c-.8.9-.8 1.7 0 2.6M11.5 5.5c-.8.9-.8 1.7 0 2.6" stroke="#a1887f" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.6" fill="#ffca28"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9 19 19M19 5l-2.1 2.1M7.1 16.9 5 19" stroke="#ffca28" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  moon: '<svg viewBox="0 0 24 24"><path d="M19 14.5A8 8 0 1 1 9.5 5a6.5 6.5 0 0 0 9.5 9.5z" fill="#7986cb"/></svg>',
+  paw: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="16" rx="5.5" ry="4.3" fill="#a1887f"/><circle cx="5.5" cy="10" r="2.1" fill="#a1887f"/><circle cx="9.3" cy="6.3" r="2.1" fill="#a1887f"/><circle cx="14.7" cy="6.3" r="2.1" fill="#a1887f"/><circle cx="18.5" cy="10" r="2.1" fill="#a1887f"/></svg>',
+  food: '<svg viewBox="0 0 24 24"><path d="M7 2.5v8.6M5 2.5v5.6a2 2 0 0 0 4 0V2.5M7 11.1V21.5" stroke="#ff8a65" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M17 2.5c-1.8 1-2.3 3.4-1.1 6.4.7 1.9.2 2.9-.9 3.6v9" stroke="#ff8a65" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>',
+  document: '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6z" fill="#90a4ae"/><path d="M14 3.5v4h4" fill="#cfd8dc"/><path d="M8.5 12h7M8.5 15.5h7M8.5 19h4" stroke="#455a64" stroke-width="1.3" stroke-linecap="round"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -801,6 +825,37 @@ function afficherBulleCopie(x, y, texte) {
   setTimeout(() => bulle.remove(), 1400);
 }
 
+/* Copie la sélection en conservant sa mise en forme (gras, couleur, code,
+   zone d'archive…), pas seulement le texte brut — sinon coller ailleurs
+   (Word, Gmail, Slack…) perdait toute la mise en forme, même quand la
+   notask en avait. Le presse-papier reçoit les DEUX représentations
+   (text/html ET text/plain) via ClipboardItem : chaque appli cible choisit
+   celle qu'elle sait interpréter, avec le texte brut en repli sinon —
+   writeText() seul ne peut écrire qu'un type à la fois, d'où le passage à
+   l'API plus verbeuse ClipboardItem. */
+async function copierSelectionRiche(sel) {
+  const texte = sel.toString();
+  if (!sel.rangeCount || typeof ClipboardItem === 'undefined') {
+    return navigator.clipboard.writeText(texte);
+  }
+  try {
+    const conteneur = document.createElement('div');
+    conteneur.appendChild(sel.getRangeAt(0).cloneContents());
+    // Nettoie ce qui n'a de sens que DANS l'app : l'icône décorative de la
+    // zone d'archive et la pastille de copie des blocs de code ne sont que
+    // des SVG orphelins une fois collés ailleurs.
+    conteneur.querySelectorAll('.archive-icon-mark, .code-copy-btn').forEach((n) => n.remove());
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/plain': new Blob([texte], { type: 'text/plain' }),
+      'text/html': new Blob([conteneur.innerHTML], { type: 'text/html' }),
+    })]);
+  } catch {
+    // Construction du HTML ou permission refusée : mieux vaut une copie en
+    // texte brut qu'aucune copie.
+    await navigator.clipboard.writeText(texte);
+  }
+}
+
 document.addEventListener('contextmenu', async (e) => {
   // Le menu latéral garde son propre raccourci au clic droit (suppression
   // d'un libellé) : on ne le lui prend pas.
@@ -812,7 +867,7 @@ document.addEventListener('contextmenu', async (e) => {
 
   e.preventDefault();
   try {
-    await navigator.clipboard.writeText(texte);
+    await copierSelectionRiche(sel);
     afficherBulleCopie(e.clientX, e.clientY, 'Copié');
   } catch {
     // Refus du navigateur (page non sécurisée, permission) : on le dit,
@@ -1123,7 +1178,20 @@ $('#profil-password').addEventListener('click', () => {
   $('#dlg-profil').close();
   ouvrirChangementMotDePasse();
 });
-$$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.view)));
+// Un libellé cliqué (bouton .label-item, sans [data-view] — donc pas visé
+// par ce sélecteur, aucun double-déclenchement possible ici) gère lui-même
+// state.labelFilter et son propre appel à switchView() le cas échéant (voir
+// renderLabelsDrawer()). Les VRAIES entrées de menu (notasks, favoris,
+// archives...) ci-dessous doivent en revanche effacer un filtre par
+// libellé resté actif : sinon la liste reste filtrée sans indice visible,
+// il fallait recliquer sur le libellé ou recharger la page pour s'en sortir.
+$$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
+  if (state.labelFilter) {
+    state.labelFilter = null;
+    renderLabelsDrawer();
+  }
+  switchView(b.dataset.view);
+}));
 
 /* -------------------------------- Notes -------------------------------- */
 
@@ -1438,79 +1506,100 @@ function notesReorderable() {
     && !state.deepSearch && !state.labelFilter;
 }
 
-/* Place le composeur, la recherche, ET assez de notes pour les entourer des
-   deux côtés — le tout en colonnes/lignes de grille EXPLICITES, calculées à
-   partir du nombre réel de colonnes.
-   Vérifié en navigateur headless : le placement automatique de CSS Grid ne
-   comble JAMAIS une colonne restée libre avant un élément explicitement
-   positionné (les notes suivantes, en position automatique, atterrissent
-   systématiquement après lui, jamais avant, quel que soit leur ordre dans le
-   DOM). Un simple "grid-column" sur le composeur ne suffit donc pas à faire
-   apparaître des notes à sa gauche : il faut aussi positionner soi-même,
-   explicitement, les quelques notes qui doivent occuper ces cases-là. Les
-   notes suivantes (au-delà de ce qu'il faut pour remplir les deux rangées du
-   composeur et de la recherche) retrouvent un placement 100% automatique à
-   partir de la rangée suivante — inchangé, aucune limite de nombre de notes. */
+/* Vrai masonry (empilement par colonnes), en positionnement absolu — plus
+   une grille CSS. Avec CSS Grid, chaque RANGÉE impose sa hauteur à partir de
+   son occupant le plus haut : une notask courte à côté d'une notask très
+   longue (beaucoup de blocs de code, par exemple) laissait un grand vide en
+   dessous d'elle avant que la rangée suivante ne commence — exactement le
+   défaut signalé. Ici, chaque carte est calée directement sous la carte la
+   plus basse de SA colonne : le même espace vertical partout, sans jamais
+   dépendre de la hauteur des voisines.
+
+   Algorithme glouton classique (type Pinterest) : pour chaque carte, on
+   calcule la hauteur atteinte dans chaque position de colonne(s) possible,
+   et on choisit celle qui minimise cette hauteur. Le bloc composeur+
+   recherche (.composer-stack) est toujours centré en haut, sur 2 colonnes —
+   c'est le seul élément dont la position n'est PAS choisie par l'algorithme,
+   pour rester au milieu quel que soit ce qui l'entoure ensuite. Les cartes
+   de résultat de recherche en profondeur (.search-hit) sont larges de 2
+   colonnes elles aussi, mais suivent l'algorithme glouton normal — plus
+   besoin d'un mode séparé pour elles (voir l'ancienne branche
+   state.deepSearch, disparue : le glouton gère déjà tout seul le fait
+   qu'elles ne trouvent de la place qu'après le composeur). */
 function layoutMosaic() {
   const grid = $('#notes-grid');
-  // Composeur et recherche forment un seul bloc de grille (.composer-stack) :
-  // la recherche reste ainsi collée sous le composeur et suit ses variations
-  // de hauteur. Auparavant ils occupaient deux rangées distinctes, dont la
-  // hauteur était imposée par la note voisine la plus haute — la recherche
-  // se retrouvait alors très loin sous le composeur.
   const stack = $('.composer-stack');
-  const noteEls = $$('#notes-grid .note');
   if (!grid || !stack) return;
 
-  const reset = (el) => { el.style.gridColumn = ''; el.style.gridRow = ''; };
+  const css = getComputedStyle(grid);
+  const minCol = parseFloat(css.getPropertyValue('--mosaic-min-col')) || 240;
+  const gap = parseFloat(css.getPropertyValue('--mosaic-gap')) || 16;
+  const containerWidth = grid.clientWidth;
+  if (containerWidth <= 0) return; // conteneur pas encore mesurable (onglet en fond, etc.)
 
-  if (window.innerWidth <= 860) {
-    reset(stack);
-    noteEls.forEach(reset);
-    return;
+  const cols = Math.max(1, Math.floor((containerWidth + gap) / (minCol + gap)));
+  const colWidth = (containerWidth - gap * (cols - 1)) / cols;
+  const heights = new Array(cols).fill(0);
+
+  // Pose l'élément à la colonne `col` (0-indexée), sur `span` colonnes, à la
+  // hauteur atteinte par la plus haute des colonnes concernées — puis met à
+  // jour ces colonnes avec la nouvelle hauteur (bas de l'élément + espace).
+  const place = (el, col, span) => {
+    el.style.width = (colWidth * span + gap * (span - 1)) + 'px';
+    el.style.left = (col * (colWidth + gap)) + 'px';
+    const top = Math.max(...heights.slice(col, col + span));
+    el.style.top = top + 'px';
+    const bottom = top + el.offsetHeight + gap;
+    for (let i = col; i < col + span; i++) heights[i] = bottom;
+  };
+
+  // Meilleure colonne de départ pour un élément large de `span` colonnes :
+  // celle qui minimise la hauteur atteinte (égalité → la plus à gauche).
+  const bestStart = (span) => {
+    let best = 0, bestH = Infinity;
+    for (let c = 0; c <= cols - span; c++) {
+      const h = Math.max(...heights.slice(c, c + span));
+      if (h < bestH) { bestH = h; best = c; }
+    }
+    return best;
+  };
+
+  const stackSpan = Math.min(2, cols);
+  place(stack, Math.max(0, Math.floor((cols - stackSpan) / 2)), stackSpan);
+
+  for (const el of $$('#notes-grid .note')) {
+    const span = el.classList.contains('search-hit') ? Math.min(2, cols) : 1;
+    place(el, bestStart(span), span);
   }
 
-  const cols = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
-  const span = Math.min(2, cols);
-  const start = Math.max(1, Math.floor((cols - span) / 2) + 1);
-
-  // Recherche en profondeur : les cartes de résultat font elles-mêmes deux
-  // colonnes de large, il n'y a plus de place à leur réserver de part et
-  // d'autre du bloc — on laisse la grille les enchaîner toute seule.
-  if (state.deepSearch) {
-    stack.style.gridColumn = `${start} / span ${span}`;
-    stack.style.gridRow = '1';
-    noteEls.forEach(reset);
-    return;
-  }
-
-  stack.style.gridColumn = `${start} / span ${span}`;
-  stack.style.gridRow = '1';
-
-  // Notes placées explicitement de part et d'autre du bloc, sur la même
-  // rangée : sans ça elles atterriraient toutes après lui (le placement
-  // automatique de CSS Grid ne revient jamais combler une colonne laissée
-  // libre avant un élément positionné explicitement).
-  let noteIdx = 0;
-  for (let c = 1; c < start && noteIdx < noteEls.length; c++, noteIdx++) {
-    noteEls[noteIdx].style.gridColumn = String(c);
-    noteEls[noteIdx].style.gridRow = '1';
-  }
-  for (let c = start + span; c <= cols && noteIdx < noteEls.length; c++, noteIdx++) {
-    noteEls[noteIdx].style.gridColumn = String(c);
-    noteEls[noteIdx].style.gridRow = '1';
-  }
-
-  // Le reste suit un placement automatique normal, à partir de la rangée
-  // suivante (aucune case de la rangée 1 ne reste à combler).
-  for (; noteIdx < noteEls.length; noteIdx++) reset(noteEls[noteIdx]);
+  // Les enfants sont tous en position absolue : sans hauteur explicite, le
+  // conteneur s'effondrerait à 0 et casserait le défilement de la page.
+  grid.style.height = Math.max(0, Math.max(...heights) - gap) + 'px';
 }
 
-let _layoutResizeTimer;
-window.addEventListener('resize', () => {
-  clearTimeout(_layoutResizeTimer);
-  _layoutResizeTimer = setTimeout(layoutMosaic, 150);
-});
+/* Recalcule la mosaïque, avec un court débounce — partagé par toutes les
+   causes de changement de hauteur qui ne sont pas un glisser-déposer actif
+   (celui-ci veut un retour IMMÉDIAT, voir layoutMosaicNow ci-dessous) :
+   redimensionnement de la fenêtre, mais aussi une image (dessin inséré,
+   miniature de pièce jointe) qui finit de se charger après coup et change
+   la hauteur de sa carte. */
+let _layoutTimer;
+function scheduleLayoutMosaic(delay = 80) {
+  clearTimeout(_layoutTimer);
+  _layoutTimer = setTimeout(layoutMosaic, delay);
+}
+
+/* Recalcule au prochain frame, sans attendre le débounce ci-dessus — pour
+   le retour visuel pendant un glisser-déposer (voir le dragover sur
+   #notes-grid plus bas), où un délai de 80ms se voit et fait paraître la
+   mosaïque en retard sur le geste. */
+let _layoutRaf = null;
+function layoutMosaicNow() {
+  if (_layoutRaf) return;
+  _layoutRaf = requestAnimationFrame(() => { _layoutRaf = null; layoutMosaic(); });
+}
+
+window.addEventListener('resize', () => scheduleLayoutMosaic(150));
 
 /* ------------------ Recherche en profondeur (2e barre) ------------------
    Contrairement au tri (1re barre) qui se contente de filtrer la mosaïque,
@@ -1959,6 +2048,11 @@ function renderNotes() {
     el.querySelectorAll('.note-attach-thumb').forEach((img) => {
       const att = (n.attachments || []).find((a) => String(a.id) === img.dataset.att);
       if (!att) return;
+      // La miniature ne se décode qu'APRÈS ce premier rendu : elle change la
+      // hauteur de la carte une fois arrivée, il faut donc recaler la
+      // mosaïque (voir layoutMosaic()) plutôt que rester avec le trou/
+      // chevauchement laissé par la hauteur d'avant.
+      img.addEventListener('load', () => scheduleLayoutMosaic());
       loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
       img.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2096,6 +2190,10 @@ $('#notes-grid').addEventListener('dragover', (e) => {
   if (!target || target.el === dragging) return;
   if (target.before) target.el.before(dragging);
   else target.el.after(dragging);
+  // La mosaïque est en positionnement absolu (voir layoutMosaic()) : sans
+  // ce recalcul, réordonner le DOM ne bouge plus rien à l'écran — un CSS
+  // Grid classique se serait reflowé tout seul, plus maintenant.
+  layoutMosaicNow();
 });
 
 // `itemSelector` par défaut à '.note' : seul le réordonnancement des
@@ -3357,7 +3455,24 @@ brancherBarreFormat('#dns-fmt-toolbar', '#dns-content', '#dns-text-colors', '#dn
    contenteditable en texte façon markdown pour l'enregistrement. */
 function richToText(root) {
   function walk(node) {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent.replace(/\u200b/g, '');
+    // \u00c9chappement des d\u00e9limiteurs : un * / _ / ` tap\u00e9 comme texte normal
+    // (\u00ab vitesse * 2 \u00bb, \u00ab fichier_important \u00bb, un backtick isol\u00e9\u2026) est
+    // indiscernable, une fois enregistr\u00e9 en texte brut, d'un VRAI marqueur
+    // de mise en forme. Sans \u00e9chappement, renderFormatted() le r\u00e9interpr\u00e8te
+    // au rendu suivant \u2014 c'est ce qui produisait des \u00e9toiles et bouts de
+    // texte en italique/code parasites apr\u00e8s enregistrement, quand le
+    // contenu contenait par hasard deux de ces caract\u00e8res sur la m\u00eame ligne
+    // (voire ailleurs dans toute la notask, pour l'italique et le code en
+    // ligne \u2014 voir plus bas pourquoi ces deux-l\u00e0 ont aussi besoin d'une
+    // garde \u00e0 la lecture). Le backslash lui-m\u00eame est doubl\u00e9 en premier,
+    // sinon un backslash tap\u00e9 litt\u00e9ralement fausserait le d\u00e9s\u00e9chappement
+    // inverse dans renderFormatted().
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent
+        .replace(/\u200b/g, '')
+        .replace(/\\/g, '\\\\')
+        .replace(/([*_`])/g, '\\$1');
+    }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName.toLowerCase();
     const inner = () => Array.from(node.childNodes).map(walk).join('');
@@ -3509,6 +3624,10 @@ function hydrateInlineImages(root, note) {
     if (img.src) return;
     const att = list.find((a) => String(a.id) === img.dataset.att);
     if (!att) return;
+    // Comme les miniatures de pièces jointes : l'image change la hauteur de
+    // la carte une fois chargée, il faut recaler la mosaïque (si on est
+    // bien dans #notes-grid — scheduleLayoutMosaic() ne fait rien sinon).
+    img.addEventListener('load', () => scheduleLayoutMosaic());
     loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
   });
 }
@@ -3525,10 +3644,24 @@ function renderFormatted(text) {
     return `<${tag} class="note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
-  html = html.replace(/`([^`\n]+?)`/g, '<code class="note-code-inline">$1</code>');
+  // Garde (?<!\\) sur le code EN LIGNE et l'italique : ce sont les deux
+  // seuls délimiteurs d'UN SEUL caractère. Un */_/` échappé par
+  // richToText() (voir plus haut) reste malgré tout le caractère * ou `
+  // lui-même dans le texte — sans cette garde, la regex le prendrait quand
+  // même pour un délimiteur, et pourrait même s'apparier avec un AUTRE * ou
+  // ` échappé plus loin dans toute la notask, engloutissant tout le texte
+  // entre deux au passage. Gras/souligné/bloc de code n'en ont pas besoin :
+  // ce sont des délimiteurs à 2-3 caractères IDENTIQUES consécutifs, que
+  // l'échappement (caractère par caractère) empêche déjà de se reformer.
+  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, '<code class="note-code-inline">$1</code>');
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
-  html = html.replace(/\*([^\n*]+?)\*/g, '<em>$1</em>');
+  html = html.replace(/(?<!\\)\*([^\n*]+?)(?<!\\)\*/g, '<em>$1</em>');
+  // Déséchappement, à la toute fin — une fois que plus aucune regex de mise
+  // en forme ne va relire le texte. Ordre inverse de l'échappement : les
+  // délimiteurs d'abord (\* → *), le doublement du backslash ensuite
+  // (\\ → \), sinon un backslash tapé littéralement ressortirait mal.
+  html = html.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\');
   return html;
 }
 
