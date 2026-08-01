@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-fix-proxy-headers-oauth-73';
+const BUILD_VERSION = '2026-08-01-recentrage-carte-sur-mosaique-74';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1076,6 +1076,39 @@ function fermerAvecAnimation(dlg) {
   };
   dlg.addEventListener('animationend', terminer);
   setTimeout(() => terminer(null), 500);
+}
+
+/* Recentre horizontalement une boîte sur la mosaïque (#notes-grid) plutôt
+   que sur le viewport entier — le centrage natif d'un <dialog> (showModal())
+   se fait par rapport à TOUT le viewport, or le menu latéral fixe (278px,
+   voir .drawer) décale visuellement le centre réel de la mosaïque vers la
+   droite : une boîte centrée "à la native" déborde alors trop à gauche
+   (par-dessus le menu/sa marge) et n'atteint pas la marge de droite,
+   exactement le défaut signalé. Corrigé en mesurant la position RÉELLE de
+   #notes-grid (ça marche donc aussi bien avec ou sans colonne d'échéances à
+   droite, sans avoir à recalculer la largeur du menu à la main) et en
+   appliquant l'écart via la propriété `translate` — PAS `transform` : les
+   animations d'ouverture/fermeture (dlg-gelatine/-out) animent déjà
+   `transform` (scale), et `translate`/`scale` sont des propriétés CSS
+   distinctes qui se composent automatiquement sans se marcher dessus
+   (contrairement à deux valeurs dans `transform`, où la dernière écraserait
+   l'autre) — voir la spec CSS Transforms niveau 2, `translate` et `rotate`
+   s'appliquent avant `transform` sur l'élément.
+   Ignoré sous 861px : la boîte y passe en plein écran (voir la media query
+   dans style.css), un décalage n'y aurait aucun sens et casserait l'ajustage. */
+function recentrerDialogueSurMosaique(dlg) {
+  if (window.matchMedia('(max-width: 860px)').matches) {
+    dlg.style.translate = '';
+    return;
+  }
+  const grid = $('#notes-grid');
+  if (!grid) { dlg.style.translate = ''; return; }
+  const gridRect = grid.getBoundingClientRect();
+  const dlgRect = dlg.getBoundingClientRect();
+  if (!gridRect.width || !dlgRect.width) { dlg.style.translate = ''; return; }
+  const centreCible = gridRect.left + gridRect.width / 2;
+  const centreActuel = dlgRect.left + dlgRect.width / 2;
+  dlg.style.translate = Math.round(centreCible - centreActuel) + 'px 0px';
 }
 
 function animerOuvertureDialogue(dlg) {
@@ -3552,6 +3585,7 @@ function openNoteSimpleDialog(note) {
   renderNoteLabelChipsSimple();
   applyDialogColor($('#dlg-note-simple'), state.editingColor);
   $('#dlg-note-simple').showModal();
+  recentrerDialogueSurMosaique($('#dlg-note-simple'));
   animerOuvertureDialogue($('#dlg-note-simple'));
   // Retour mobile : referme comme un clic en dehors de la boîte — le
   // listener 'close' existant (voir plus bas) enregistre déjà quoi qu'il
