@@ -1,0 +1,16 @@
+{
+  "name": "notask",
+  "short_name": "notask",
+  "description": "Notasks et tâches chiffrées de bout en bout, avec échéances.",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "fr",
+  "background_color": "#141218",
+  "theme_color": "#141218",
+  "icons": [
+    { "src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

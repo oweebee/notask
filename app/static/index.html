@@ -2,10 +2,23 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>notask</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
+
+<!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
+     avec --md-surface en CSS (#141218). apple-touch-icon pointe pour
+     l'instant vers le SVG du favicon : iOS l'ignore en pratique (il attend
+     un PNG), l'icône d'écran d'accueil retombera sur une capture par
+     défaut tant qu'une version PNG n'aura pas été générée — limite connue,
+     pas un oubli. */-->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#141218">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="notask">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
 </head>
 <body>
 
@@ -57,6 +70,12 @@
 <!-- ============ Application ============ -->
 <div id="screen-app" hidden>
   <header class="topbar">
+    <!-- Uniquement visible sous 860px (voir style.css) : ouvre le menu
+         latéral en panneau replié, avec le même effet gélatine que
+         l'ouverture d'une notask (voir ouvrirMenuMobile() dans app.js). -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn" type="button" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    </button>
     <span class="logo" id="brand-logo"></span>
     <span class="brand">notask</span>
     <span class="spacer"></span>
@@ -69,6 +88,11 @@
   </header>
 
   <div class="shell">
+    <!-- Fond assombri derrière le menu mobile déplié (voir .drawer-backdrop
+         dans style.css) — invisible/inerte sur desktop, où le menu reste
+         toujours affiché dans la grille. Cliquer dessus referme le menu
+         (voir app.js). -->
+    <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
     <aside class="drawer">
       <!-- Teinte jaune/bleue = repère de navigation (couleurs des deux
            cuillères du logo), ne concerne que ce menu — les notes elles-

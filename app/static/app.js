@@ -5,8 +5,18 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-fix-troncature-dlg-note-55';
+const BUILD_VERSION = '2026-08-01-agenda-carrousel-marges-62';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
+
+// PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
+// Après le chargement pour ne jamais retarder l'affichage initial ; l'échec
+// est avalé volontairement (ex. navigation privée) — l'app doit continuer à
+// fonctionner normalement sans installation possible.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 
 const TOKEN_KEY = 'notask_token';
 /* 24 teintes = deux rangées pleines de 12 dans le sélecteur. Trois listes à
@@ -937,6 +947,55 @@ function animerOuvertureDialogue(dlg) {
   dlg.classList.add('dlg-open-anim');
 }
 
+/* --------------------------- Menu mobile (< 860px) ---------------------------
+   Le menu latéral (.drawer) est toujours affiché sur desktop, mais devient
+   un panneau replié sous 860px (voir style.css), ouvert par le bouton
+   hamburger (#mobile-menu-btn dans index.html). Même mécanique d'ouverture
+   que les notes — animerOuvertureDialogue() ci-dessus, réutilisée telle
+   quelle — mais la fermeture ne peut pas réutiliser fermerAvecAnimation() :
+   celle-ci appelle dlg.close(), une méthode propre à <dialog>, et .drawer
+   reste un <aside> tout à fait normal (il doit pouvoir continuer à
+   participer à la grille sur desktop, ce qu'un <dialog> ne permettrait pas
+   facilement). D'où cette petite paire dédiée, qui reprend sinon exactement
+   la même logique (classes dlg-open-anim/dlg-close-anim, minuterie de
+   secours si l'animation ne se déclenche pas). */
+function ouvrirMenuMobile() {
+  const drawer = $('.drawer');
+  $('#drawer-backdrop').hidden = false;
+  drawer.classList.add('mobile-open');
+  animerOuvertureDialogue(drawer);
+}
+
+function fermerMenuMobile() {
+  const drawer = $('.drawer');
+  if (!drawer.classList.contains('mobile-open') || drawer.dataset.fermeture === '1') return;
+  drawer.dataset.fermeture = '1';
+  drawer.classList.remove('dlg-open-anim');
+  drawer.classList.add('dlg-close-anim');
+
+  const terminer = (e) => {
+    if (e && e.target !== drawer) return;
+    if (drawer.dataset.fermeture !== '1') return;
+    delete drawer.dataset.fermeture;
+    drawer.removeEventListener('animationend', terminer);
+    drawer.classList.remove('dlg-close-anim', 'mobile-open');
+    $('#drawer-backdrop').hidden = true;
+  };
+  drawer.addEventListener('animationend', terminer);
+  setTimeout(() => terminer(null), 500);
+}
+
+$('#mobile-menu-btn').addEventListener('click', () => {
+  $('.drawer').classList.contains('mobile-open') ? fermerMenuMobile() : ouvrirMenuMobile();
+});
+// Fond assombri : le cliquer referme, comme le clic sur le fond d'une
+// boîte de dialogue ailleurs dans l'app.
+$('#drawer-backdrop').addEventListener('click', fermerMenuMobile);
+// Sans conséquence si le menu n'est pas ouvert (fermerMenuMobile() ne fait
+// alors rien) : une seule écoute globale, pas besoin de savoir ici si une
+// autre boîte doit aussi réagir à Échap, chacune gère la sienne séparément.
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fermerMenuMobile(); });
+
 /* Palette de couleurs, unique et partagée : couleur de note (carte, boîte
    d'édition, composeur) ET couleur de texte utilisent exactement le même
    nuancier et le même code. Les pastilles portent les classes .c-*, donc
@@ -1064,6 +1123,12 @@ function enterApp() {
 const TASK_VIEWS = { tasks: null, late: 'late', today: 'today', upcoming: 'upcoming' };
 
 function switchView(view) {
+  // Un changement de vue referme le menu mobile s'il était ouvert (voir
+  // ouvrirMenuMobile() plus haut) — rester dessus après avoir choisi une
+  // destination n'aurait aucun sens, et il faudrait sinon un second geste
+  // rien que pour le faire disparaître. Sans effet sur desktop (le menu ne
+  // se replie jamais, la classe 'mobile-open' n'y est jamais posée).
+  fermerMenuMobile();
   state.view = view;
   $$('.drawer-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
 
@@ -1082,6 +1147,15 @@ function switchView(view) {
   // fois que l'un ou l'autre change (pin, archive, éditions...).
   $('.shell').classList.toggle('has-agenda', isNotes);
   $('#agenda-col').hidden = !isNotes;
+  // Sous 860px, .shell.has-agenda devient un carrousel à deux volets
+  // glissés au doigt (accueil, puis la page agenda à sa droite — voir
+  // style.css). Sans ce recalage, revenir sur la vue Notes après être
+  // passé par la page agenda puis être allé voir une autre vue (tâches,
+  // corbeille…) rouvrirait directement sur la page agenda : le défilement
+  // horizontal du conteneur reste où il était, la classe has-agenda est
+  // juste retirée puis reposée. Sans effet sur desktop (le carrousel
+  // n'existe pas, scrollLeft y vaut toujours 0).
+  if (isNotes) $('.shell').scrollLeft = 0;
 
   if (isNotes) {
     state.showArchived = view === 'archives';
@@ -1314,9 +1388,14 @@ function renderLabelsDrawer() {
     if (l.color && LABEL_COLOR_HEX[l.color]) btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], .55);
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
+      // Voir enablePointerReorder() : un glisser qui vient de réordonner
+      // cette ligne se termine par un "click" tout à fait normal — sans ce
+      // garde-fou, relâcher le doigt/la souris après avoir réordonné le
+      // libellé le filtrerait aussi, ce qui n'est pas le geste voulu.
+      if (geleParGlisser(row)) return;
       state.labelFilter = state.labelFilter === l.id ? null : l.id;
       if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
-      else { renderLabelsDrawer(); loadNotes(); }
+      else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
     };
     btn.oncontextmenu = async (e) => {
       e.preventDefault();
@@ -1337,33 +1416,17 @@ function renderLabelsDrawer() {
     edit.onclick = (e) => { e.stopPropagation(); openLabelEditPopup(edit, l); };
 
     row.append(btn, edit);
-
-    // Glisser-déposer pour réordonner manuellement — même mécanique que la
-    // mosaïque de notes (voir getDropTarget()/commitNoteOrder() plus bas),
-    // juste scopée à '.label-row' au lieu de '.note'. Le crayon (édition)
-    // ne doit pas déclencher le geste, sous peine de gêner son propre clic.
-    row.draggable = true;
-    row.addEventListener('dragstart', (e) => {
-      if (e.target.closest('.label-edit-btn')) { e.preventDefault(); return; }
-      row.classList.add('dragging');
-    });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging');
-      commitLabelOrder();
-    });
-
     box.appendChild(row);
   }
 }
 
-$('#labels-list').addEventListener('dragover', (e) => {
-  const dragging = $('#labels-list').querySelector('.label-row.dragging');
-  if (!dragging) return;
-  e.preventDefault();
-  const target = getDropTarget($('#labels-list'), e.clientX, e.clientY, '.label-row');
-  if (!target || target.el === dragging) return;
-  if (target.before) target.el.before(dragging);
-  else target.el.after(dragging);
+// Réordonnancement par glisser (souris, stylet ET tactile) — voir
+// enablePointerReorder() plus bas, juste avant son autre utilisation sur
+// la mosaïque de notes. Le crayon (édition) ne doit pas déclencher le
+// geste, sous peine de gêner son propre clic.
+enablePointerReorder($('#labels-list'), '.label-row', {
+  excludeSelector: '.label-edit-btn',
+  onDrop: commitLabelOrder,
 });
 
 /* Comme commitNoteOrder() : l'ordre visuel du DOM fait foi une fois le
@@ -1541,6 +1604,40 @@ function notesReorderable() {
    déplacement normal (glisser-déposer, redimensionnement, image tardive)
    n'est PAS concerné : ces cartes existent déjà à leur ancienne position
    réelle, la transition y est voulue. */
+/* Recale automatiquement la mosaïque dès qu'une carte OU le bloc composeur
+   change de HAUTEUR, quelle qu'en soit la cause. Alternative choisie après
+   un bug concret : le composeur qui se déplie (barre d'outils révélée au
+   premier clic, voir composerExpand()) chevauchait les cartes voisines au
+   lieu de les repousser, parce qu'aucun appel à layoutMosaic() n'avait été
+   prévu à CET endroit précis. Semer des appels ponctuels dans chaque
+   fonction qui peut changer une hauteur (déplier le composeur, ajouter une
+   pièce jointe, ouvrir la palette de couleur, ajouter un libellé, ajouter
+   une ligne de liste à cocher, glisser la poignée de redimensionnement
+   d'un textarea...) est voué à en oublier — exactement ce qui vient de se
+   produire. Un seul point de vérité qui observe la géométrie réelle, et
+   réagit à N'IMPORTE QUEL changement, connu ou pas encore pensé, est plus
+   robuste.
+   Ne réagit qu'à un changement de HAUTEUR (comparée à la dernière connue) :
+   la LARGEUR, elle, est POSÉE par layoutMosaic() lui-même (voir place()) —
+   y réagir aussi redéclencherait un recalcul à chaque recalcul. */
+const _mosaicHeights = new WeakMap();
+const mosaicResizeObserver = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const entry of entries) {
+    // borderBoxSize (padding + bordure incluses), pas contentRect (qui les
+    // exclut) : place() met en cache offsetHeight, qui les inclut aussi —
+    // comparer contentRect à ce cache les aurait rendus JAMAIS égaux, une
+    // toute première observation semblant alors toujours être un
+    // changement, et redéclenchant un recalcul en boucle douce et sans fin
+    // (inoffensif visuellement, les positions ne bougent pas réellement une
+    // fois stabilisées, mais un vrai gâchis de cycles pour rien).
+    const box = entry.borderBoxSize && entry.borderBoxSize[0];
+    const h = Math.round(box ? box.blockSize : entry.contentRect.height);
+    if (_mosaicHeights.get(entry.target) !== h) { _mosaicHeights.set(entry.target, h); changed = true; }
+  }
+  if (changed) scheduleLayoutMosaic();
+});
+
 function layoutMosaic(instant) {
   const grid = $('#notes-grid');
   const stack = $('.composer-stack');
@@ -1557,6 +1654,11 @@ function layoutMosaic(instant) {
   const colWidth = (containerWidth - gap * (cols - 1)) / cols;
   const heights = new Array(cols).fill(0);
 
+  // Repart d'un suivi propre à chaque calcul : les cartes d'un rendu
+  // précédent (détruites depuis, voir renderNotes()) ne doivent pas rester
+  // observées indéfiniment.
+  mosaicResizeObserver.disconnect();
+
   // Pose l'élément à la colonne `col` (0-indexée), sur `span` colonnes, à la
   // hauteur atteinte par la plus haute des colonnes concernées — puis met à
   // jour ces colonnes avec la nouvelle hauteur (bas de l'élément + espace).
@@ -1565,7 +1667,10 @@ function layoutMosaic(instant) {
     el.style.left = (col * (colWidth + gap)) + 'px';
     const top = Math.max(...heights.slice(col, col + span));
     el.style.top = top + 'px';
-    const bottom = top + el.offsetHeight + gap;
+    const h = el.offsetHeight;
+    _mosaicHeights.set(el, h);
+    mosaicResizeObserver.observe(el);
+    const bottom = top + h + gap;
     for (let i = col; i < col + span; i++) heights[i] = bottom;
   };
 
@@ -1975,7 +2080,6 @@ function renderNotes() {
   $('#notes-empty').textContent = state.showArchived
     ? 'Aucune notask archivée.'
     : state.showFavoritesOnly ? 'Aucun favori.' : 'Aucune notask.';
-  const dragOk = notesReorderable();
 
   for (const n of state.notes) {
     const el = document.createElement('article');
@@ -2146,26 +2250,9 @@ function renderNotes() {
       // cliquer dessus ouvre l'édition rapide comme le reste de la carte.
       if (e.target.closest('.pin-btn, .actions button, .palette, .note-attachments, input')) return;
       if (clicTermineUneSelection(el)) return;
+      if (geleParGlisser(el)) return;
       openNoteSimpleDialog(n);
     });
-
-    // Glisser-déposer pour réorganiser la mosaïque (vue par défaut seulement,
-    // voir notesReorderable). Le geste ne doit pas partir d'un bouton ou
-    // d'une case, sous peine de gêner leurs propres clics.
-    if (dragOk) {
-      el.draggable = true;
-      el.addEventListener('dragstart', (e) => {
-        if (e.target.closest('.pin-btn, .actions, .palette, .note-attachments, input')) {
-          e.preventDefault();
-          return;
-        }
-        el.classList.add('dragging');
-      });
-      el.addEventListener('dragend', () => {
-        el.classList.remove('dragging');
-        commitNoteOrder();
-      });
-    }
 
     grid.appendChild(el);
   }
@@ -2204,25 +2291,180 @@ function renderCardLabels(el, n) {
   }
 }
 
-/* Pendant le survol, on déplace en direct la carte glissée juste avant ou
-   après la carte la plus proche du pointeur — retour visuel immédiat,
-   comme les autres interfaces à glisser-déposer. */
-$('#notes-grid').addEventListener('dragover', (e) => {
-  const dragging = $('#notes-grid').querySelector('.note.dragging');
-  if (!dragging) return;
-  e.preventDefault();
-  const target = getDropTarget($('#notes-grid'), e.clientX, e.clientY);
-  if (!target || target.el === dragging) return;
-  if (target.before) target.el.before(dragging);
-  else target.el.after(dragging);
+/* --------------------- Réordonnancement par glisser (souris + tactile) ---------------------
+   Remplace un ancien glisser-déposer HTML5 natif (draggable="true" /
+   dragstart / dragover / dragend) qui ne fonctionnait tout simplement pas
+   au doigt : sur la quasi-totalité des navigateurs mobiles, un geste
+   tactile ne déclenche jamais "dragstart" — la mosaïque de notasks et la
+   liste de libellés étaient donc totalement impossibles à réordonner sur
+   téléphone, malgré le bouton "+ / -" ou n'importe quel autre contournement.
+   Remplacé par une seule implémentation à base de Pointer Events, qui
+   unifie souris/stylet/tactile : plus de risque de double logique à
+   maintenir en parallèle (une pour desktop, une pour mobile).
+
+   Comportement :
+   - Souris/stylet : le glisser démarre dès que le pointeur s'éloigne de
+     quelques pixels du point d'appui — un simple clic ne bouge jamais rien.
+   - Tactile : le glisser démarre après un bref appui MAINTENU
+     (LONG_PRESS_MS) sans mouvement significatif. Indispensable : sans ce
+     délai, impossible de faire défiler la page en touchant une carte ou
+     un libellé — chaque geste de défilement serait pris pour une tentative
+     de glisser. Tout mouvement avant la fin de l'appui annule le glisser
+     et laisse le défilement natif du navigateur reprendre la main.
+   - Une fois démarré, l'élément suit le pointeur en direct (translate())
+     pendant que la carte/le libellé le plus proche est repéré et permuté
+     dans le DOM — même mécanique de proximité que l'ancien code
+     (getDropTarget(), juste au-dessous), désormais pilotée par
+     pointermove plutôt que par dragover. Après chaque permutation, la
+     position de référence du suivi est ré-ancrée sur l'emplacement réel
+     tout juste atteint (mosaïque en positionnement absolu recalculée via
+     layoutMosaicNow(), ou simple reflow pour les libellés) — sans ce
+     réancrage, l'élément décollerait visiblement du doigt dès la
+     permutation suivante. */
+const LONG_PRESS_MS = 280;
+const DRAG_MOVE_THRESHOLD = 6;
+
+// Marque le geste qui vient de réordonner un élément, pour que le "click"
+// qui suit immanquablement le relâchement du doigt/bouton ne soit pas
+// interprété comme une ouverture de la carte ou un filtre par libellé —
+// même principe que clicTermineUneSelection() pour une sélection de texte.
+const _dragJustHappened = new WeakSet();
+function marquerGesteDeGlisser(el) {
+  _dragJustHappened.add(el);
+  setTimeout(() => _dragJustHappened.delete(el), 0);
+}
+function geleParGlisser(el) {
+  return _dragJustHappened.has(el);
+}
+
+function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap, onDrop, enabled } = {}) {
+  let pending = null; // avant le démarrage effectif : { pointerId, item, startX, startY, timer }
+  let active = null;  // glisser réellement en cours
+
+  function clearPending() {
+    if (pending && pending.timer) clearTimeout(pending.timer);
+    pending = null;
+  }
+
+  function startDrag(item, pointerId, clientX, clientY) {
+    const box = item.getBoundingClientRect();
+    active = {
+      el: item, pointerId,
+      grabX: clientX - box.left, grabY: clientY - box.top,
+      baseLeft: box.left, baseTop: box.top,
+      moved: false,
+    };
+    item.classList.add('dragging');
+    try { item.setPointerCapture(pointerId); } catch { /* déjà relâché entretemps, sans conséquence */ }
+  }
+
+  container.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (active || (enabled && !enabled())) return;
+    const item = e.target.closest(itemSelector);
+    if (!item || !container.contains(item)) return;
+    if (excludeSelector && e.target.closest(excludeSelector)) return;
+
+    clearPending();
+    pending = { pointerId: e.pointerId, item, startX: e.clientX, startY: e.clientY, timer: null };
+    if (e.pointerType === 'touch') {
+      pending.timer = setTimeout(() => {
+        if (!pending || pending.pointerId !== e.pointerId) return;
+        const p = pending;
+        pending = null;
+        startDrag(p.item, p.pointerId, p.startX, p.startY);
+      }, LONG_PRESS_MS);
+
+      // Un appui tactile maintenu déclenche aussi, sur certains navigateurs
+      // (Android notamment), un vrai événement "contextmenu" — qui sur les
+      // libellés ouvre le menu de suppression (voir oncontextmenu, pensé
+      // pour le clic droit desktop). Les deux gestes partagent la même
+      // durée d'appui : sans ce garde-fou, tenir un libellé pour le
+      // réordonner risquerait de faire apparaître la confirmation de
+      // suppression en même temps. Neutralisé pendant toute la fenêtre où
+      // ça pourrait se produire, uniquement pour ce point de contact précis
+      // — le clic droit souris, lui, n'entre jamais dans cette branche.
+      const suppressContextMenu = (ce) => ce.preventDefault();
+      item.addEventListener('contextmenu', suppressContextMenu, { once: true });
+      setTimeout(() => item.removeEventListener('contextmenu', suppressContextMenu), LONG_PRESS_MS + 600);
+    }
+  });
+
+  container.addEventListener('pointermove', (e) => {
+    if (active && e.pointerId === active.pointerId) {
+      e.preventDefault();
+      active.moved = true;
+
+      const target = getDropTarget(container, e.clientX, e.clientY, itemSelector);
+      if (target && target.el !== active.el) {
+        active.el.style.transform = '';
+        if (target.before) target.el.before(active.el);
+        else target.el.after(active.el);
+        if (onSwap) onSwap();
+        const box = active.el.getBoundingClientRect();
+        active.baseLeft = box.left;
+        active.baseTop = box.top;
+      }
+
+      const x = e.clientX - active.grabX - active.baseLeft;
+      const y = e.clientY - active.grabY - active.baseTop;
+      active.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      return;
+    }
+    if (pending && e.pointerId === pending.pointerId) {
+      const dist = Math.hypot(e.clientX - pending.startX, e.clientY - pending.startY);
+      if (dist <= DRAG_MOVE_THRESHOLD) return;
+      if (pending.timer) {
+        // Tactile, appui pas encore assez long : un mouvement franc avant
+        // la fin du délai est un défilement normal, pas un glisser.
+        clearPending();
+      } else {
+        // Souris/stylet, pas d'appui long : le premier mouvement franc
+        // démarre directement le glisser.
+        const p = pending;
+        pending = null;
+        startDrag(p.item, p.pointerId, e.clientX, e.clientY);
+      }
+    }
+  }, { passive: false });
+
+  function endDrag(e) {
+    if (pending && e.pointerId === pending.pointerId) clearPending();
+    if (!active || e.pointerId !== active.pointerId) return;
+    const el = active.el;
+    const moved = active.moved;
+    el.classList.remove('dragging');
+    el.style.transform = '';
+    active = null;
+    if (moved) {
+      marquerGesteDeGlisser(el);
+      if (onDrop) onDrop();
+    }
+  }
+  container.addEventListener('pointerup', endDrag);
+  container.addEventListener('pointercancel', endDrag);
+}
+
+enablePointerReorder($('#notes-grid'), '.note', {
+  // Le geste ne doit pas partir d'un bouton ou d'une case, sous peine de
+  // gêner leurs propres clics ; réservé à la vue par défaut, voir
+  // notesReorderable() — filtrer/rechercher ne mélange pas l'ordre du
+  // sous-ensemble affiché avec celui, complet, des notasks masquées.
+  excludeSelector: '.pin-btn, .actions, .palette, .note-attachments, input',
+  enabled: notesReorderable,
   // La mosaïque est en positionnement absolu (voir layoutMosaic()) : sans
-  // ce recalcul, réordonner le DOM ne bouge plus rien à l'écran — un CSS
-  // Grid classique se serait reflowé tout seul, plus maintenant.
-  layoutMosaicNow();
+  // ce recalcul après chaque permutation, réordonner le DOM ne bouge plus
+  // rien à l'écran — un CSS Grid classique se serait reflowé tout seul,
+  // plus maintenant.
+  onSwap: layoutMosaicNow,
+  onDrop: commitNoteOrder,
 });
 
 // `itemSelector` par défaut à '.note' : seul le réordonnancement des
-// libellés (voir plus bas, renderLabelsDrawer()) passe '.label-row'.
+// libellés (voir renderLabelsDrawer()) passe '.label-row'. Doit rester
+// AVANT enablePointerReorder() dans l'ordre de lecture du fichier — pas
+// une contrainte technique (les déclarations `function` sont hissées),
+// juste pour suivre l'ordre logique : la cible d'abord, le geste ensuite.
 function getDropTarget(container, x, y, itemSelector = '.note') {
   const els = [...container.querySelectorAll(itemSelector + ':not(.dragging)')];
   let best = null;
@@ -3834,11 +4076,16 @@ $('#dlg-note-simple').addEventListener('cancel', (e) => {
    tout autre moyen (Échap, clic à côté, bouton "Fermer sans enregistrer")
    abandonne les annotations sans rien envoyer au serveur. */
 
-/* Résolution de référence du tableau blanc. Ce n'est PAS un format figé :
-   le canvas est dimensionné sur la place réellement disponible à
-   l'ouverture (voir openWhiteboard), pour que la surface dessinable
-   remplisse la fenêtre sans bandes vides. Ces valeurs servent seulement
-   de repère de finesse et de plancher de résolution. */
+/* Résolution de référence du tableau blanc. Ce n'est PAS un format figé,
+   ni un format paysage imposé : le canvas est dimensionné sur la place
+   réellement disponible à l'ouverture (voir openWhiteboard), aussi bien
+   en portrait qu'en paysage, pour que la surface dessinable remplisse la
+   fenêtre sans bandes vides ni déformation. BOARD_WIDTH sert de cible de
+   finesse pour le plus grand des deux côtés du conteneur (largeur sur
+   desktop, le plus souvent hauteur sur téléphone en portrait) ; les deux
+   BOARD_MIN_* sont un plancher de résolution appliqué aux deux axes à la
+   fois, jamais un axe seul, pour ne jamais fausser le rapport largeur/
+   hauteur réel de l'écran. */
 const BOARD_WIDTH = 1600;
 const BOARD_MIN_WIDTH = 640;
 const BOARD_MIN_HEIGHT = 400;
@@ -4072,10 +4319,29 @@ function openWhiteboard(note, source) {
     // Résolution de dessin plus fine que l'affichage (trait net, et le PNG
     // reste exploitable si on l'agrandit ensuite), plafonnée pour ne pas
     // fabriquer un canvas démesuré sur un grand écran.
-    const echelle = Math.min(2, Math.max(1, BOARD_WIDTH / Math.max(1, dispoW)));
+    //
+    // L'échelle se calcule sur le plus GRAND des deux côtés du conteneur,
+    // pas toujours sur la largeur : sur un téléphone en portrait, c'est la
+    // hauteur qui est la plus grande. Cibler systématiquement la largeur
+    // (comme avant) n'avait pas d'effet visible sur un écran large, mais
+    // sur un conteneur étroit et haut, ça pouvait sous-échelonner la
+    // hauteur — sans conséquence tant que le plancher (BOARD_MIN_*) ne
+    // s'en mêlait pas, mais le plancher s'appliquait ensuite AXE PAR AXE,
+    // ce qui pouvait remonter un seul des deux côtés et déformer le
+    // rapport largeur/hauteur réel du conteneur (cercles dessinés ovales
+    // à l'écran, par exemple) sur les conteneurs très courts. Le facteur
+    // correctif ci-dessous applique le plancher aux deux axes ENSEMBLE
+    // (un agrandissement uniforme si besoin), donc le rapport du canvas
+    // reste toujours exactement celui du conteneur, quelle que soit
+    // l'orientation ou la taille de l'écran.
+    const grandCote = Math.max(dispoW, dispoH);
+    const echelle = Math.min(2, Math.max(1, BOARD_WIDTH / Math.max(1, grandCote)));
     const canvas = imgEditorCanvas();
-    canvas.width = Math.max(BOARD_MIN_WIDTH, Math.round(Math.max(1, dispoW) * echelle));
-    canvas.height = Math.max(BOARD_MIN_HEIGHT, Math.round(Math.max(1, dispoH) * echelle));
+    const largeurBrute = Math.max(1, dispoW) * echelle;
+    const hauteurBrute = Math.max(1, dispoH) * echelle;
+    const facteurPlancher = Math.max(BOARD_MIN_WIDTH / largeurBrute, BOARD_MIN_HEIGHT / hauteurBrute, 1);
+    canvas.width = Math.round(largeurBrute * facteurPlancher);
+    canvas.height = Math.round(hauteurBrute * facteurPlancher);
 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);

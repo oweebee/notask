@@ -86,3 +86,17 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+# Servis à la racine (pas sous /static/) : la portée par défaut d'un service
+# worker se limite à son propre dossier et aux dossiers en dessous — un
+# sw.js sous /static/ ne pourrait contrôler que /static/*, jamais les pages
+# de l'app elles-mêmes, servies depuis /.
+@app.get("/manifest.json", include_in_schema=False)
+def manifest():
+    return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")

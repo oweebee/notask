@@ -254,6 +254,25 @@ header.topbar .who {
 .top-entry-blue { background: rgba(66, 165, 245, .30); }
 .top-entry-blue:hover { background: rgba(66, 165, 245, .48); }
 
+/* Bouton hamburger : n'existe visuellement que sous 860px (voir le second
+   bloc @media plus bas) — sur desktop le menu reste affiché en permanence
+   dans la grille, ce bouton n'aurait rien à faire. */
+.mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--md-on-surface);
+  cursor: pointer;
+}
+.mobile-menu-btn:hover { background: rgba(230,224,233,.10); }
+.mobile-menu-btn svg { width: 22px; height: 22px; display: block; }
+
 /* ---- Boîtes Profil et Outils ---- */
 .profil-infos {
   display: grid;
@@ -401,28 +420,91 @@ header.topbar .who {
 #nav-tasks svg { color: #42a5f5; }
 #nav-tasks.active { background: rgba(66,165,245,.16); color: #42a5f5; }
 
-/* Sous 860 px le menu passe au-dessus du contenu, en bandeau défilant ; la
-   colonne d'échéances disparaît complètement, il n'y a plus la place pour
-   une 3e piste de grille. */
+/* Sous 860 px, le menu n'est plus affiché en permanence dans la grille :
+   il devient le MÊME menu que sur desktop (mêmes sections, mêmes
+   libellés, même style — rien n'est redéfini pour .drawer-section/
+   .drawer-sep/.drawer-item ci-dessous, ils gardent leur apparence
+   "desktop" telle quelle), replié par défaut, ouvert en panneau superposé
+   par le bouton hamburger (voir #mobile-menu-btn dans index.html et
+   ouvrirMenuMobile()/fermerMenuMobile() dans app.js).
+
+   La colonne d'échéances (agenda-col) n'a plus la place d'être une 3e
+   piste de grille à côté de la mosaïque — sur demande explicite, elle
+   devient sa propre PAGE verticale, à côté de l'accueil (mosaïque de
+   notasks) plutôt qu'au-dessus ou en dessous : les deux se glissent
+   horizontalement l'une vers l'autre au doigt, comme un carrousel à deux
+   volets. Fait en scroll-snap natif du navigateur (overflow-x + scroll-
+   snap-type) plutôt qu'en gérant le geste à la main en JS : plus fiable
+   (défilement/inertie natifs, pas de conflit avec le défilement vertical
+   de chaque page), et beaucoup moins de code qu'un glisser reconstruit
+   pointeur par pointeur. Uniquement quand .shell.has-agenda est posée
+   (voir switchView() dans app.js) : sur les autres vues (tâches, corbeille,
+   comptes), il n'y a qu'une seule page, pas de carrousel à faire. */
 @media (max-width: 860px) {
   .shell, .shell.has-agenda { grid-template-columns: 1fr; }
-  .agenda-col { display: none !important; }
-  .drawer {
-    position: static;
-    max-height: none;
+  .mobile-menu-btn { display: flex; }
+
+  .shell.has-agenda {
     display: flex;
-    gap: .5rem;
     overflow-x: auto;
-    padding: .5rem 1rem;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
   }
-  .drawer-section, .drawer-sep { display: none; }
-  .drawer-item {
-    width: auto;
-    min-height: 40px;
-    padding: 0 1rem;
-    border-radius: var(--shape-full);
-    white-space: nowrap;
+  .shell.has-agenda > main,
+  .shell.has-agenda > .agenda-col {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
+  /* La redéfinition complète de .agenda-col (position, hauteur, padding)
+     vit plus bas dans ce fichier, groupée avec les autres ajustements
+     "main { width: 100% }" — pas ici : la déclaration DESKTOP de
+     .agenda-col (position:sticky…) est elle-même plus bas que ce bloc-ci,
+     et à spécificité égale (même sélecteur .agenda-col), c'est l'ORDRE
+     D'APPARITION dans le fichier qui tranche, indépendamment de la media
+     query. La poser ici aurait été silencieusement écrasée par la règle
+     desktop, plus bas — piège bête, croisé et évité avant de le commettre. */
+
+  .drawer {
+    /* position:fixed retire complètement .drawer du flux de la grille
+       (comme position:absolute) — main récupère alors toute la largeur
+       disponible, sans laisser de piste vide derrière un menu devenu
+       flottant. */
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    width: min(300px, 84vw);
+    max-height: none;
+    z-index: 2000;
+    background: var(--md-surface-3);
+    box-shadow: var(--elev-3);
+    padding: max(.75rem, env(safe-area-inset-top)) .75rem 2rem max(0px, env(safe-area-inset-left));
+    /* Replié par défaut : retiré du rendu (display:none), pas seulement
+       masqué visuellement — un panneau invisible mais toujours cliquable
+       resterait un piège à interaction juste sous le contenu. */
+    display: none;
+  }
+  /* Classe posée par ouvrirMenuMobile() : transform-origin déjà réglé en
+     JS (même mécanisme que animerOuvertureDialogue() pour les notes) au
+     moment où elle est ajoutée, juste avant la classe d'animation
+     dlg-open-anim. */
+  .drawer.mobile-open { display: block; }
+}
+
+/* Fond assombri derrière le menu mobile déplié (voir #drawer-backdrop dans
+   index.html) — même teinte que le fond des <dialog> (dialog::backdrop),
+   pour rester cohérent visuellement. Toujours dans le DOM mais laissé
+   `hidden` par défaut : jamais affiché sur desktop, où le menu ne se
+   replie pas (voir ouvrirMenuMobile()/fermerMenuMobile() dans app.js). */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1999;
+  background: rgba(0,0,0,.5);
 }
 
 /* La zone centrale (hors menu latéral) n'occupe que 3/4 de l'espace qui lui
@@ -531,6 +613,28 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 
 @media (max-width: 860px) {
   main { width: 100%; }
+  /* Cartes et composeur au plus près du bord de l'écran sur mobile — 8px
+     de chaque côté au lieu des 1.5rem (24px) hérités du desktop, sur
+     demande explicite : la mosaïque (.notes-grid, positionnée à l'intérieur
+     de main sans marge propre à elle) suit directement ce padding, donc
+     rien à changer côté JS (layoutMosaic() lit déjà la largeur réelle du
+     conteneur). Le padding du haut et du bas n'est pas concerné, seuls les
+     côtés gauche/droit sont resserrés. */
+  main { padding-left: 8px; padding-right: 8px; }
+
+  /* Vraie redéfinition mobile de .agenda-col (voir le commentaire dans le
+     premier bloc @media plus haut, qui explique pourquoi elle est ICI et
+     pas là-bas) : sa propre page verticale pleine largeur plutôt qu'une
+     barre latérale étroite à défilement borné. Les groupes existants
+     restent dans le même ordre (en retard, puis aujourd'hui, puis à
+     venir — voir renderAgenda() dans app.js) : en retard tout en haut,
+     les autres à la suite en dessous, tel que demandé. */
+  .agenda-col {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding: 1.5rem 8px 3rem;
+  }
 }
 
 .toolbar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
@@ -852,6 +956,13 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   background: var(--md-surface-2);
   position: relative;
   transition: box-shadow .18s ease;
+  /* Supprime le menu contextuel natif iOS ("Copier"/partage…) qu'un appui
+     tactile maintenu déclenche par défaut sur n'importe quel élément —
+     il apparaîtrait pile pendant la fenêtre d'appui long du réordonnancement
+     tactile (voir enablePointerReorder() dans app.js). N'affecte PAS la
+     sélection de texte elle-même (user-select reste actif) : recopier le
+     texte d'une carte doit continuer à fonctionner normalement. */
+  -webkit-touch-callout: none;
 }
 .note:hover, .note:focus-within { box-shadow: var(--elev-2); }
 /* Petit effet de "décrochage" au moment où la carte est prise pour être
@@ -1530,7 +1641,7 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 /* Ligne de libellé : le crayon n'apparaît qu'au survol de la ligne, en
    overlay à droite — le bouton lui-même reste inchangé (pilule collée à
    gauche, arrondie à droite, couleur propre en fond permanent si réglée). */
-.label-row { position: relative; margin-bottom: 4px; }
+.label-row { position: relative; margin-bottom: 4px; -webkit-touch-callout: none; }
 .label-row.dragging { opacity: .4; }
 .label-edit-btn {
   position: absolute;
@@ -2673,3 +2784,190 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   background: rgba(230,224,233,.08); font-size: .8125rem;
 }
 .history-attach-file svg { width: 16px; height: 16px; flex: none; }
+
+/* ============ Mobile (<860px) : dialogues plein écran, dvh, anti-zoom iOS ============
+   Placé en toute fin de fichier, volontairement : chaque règle ci-dessous
+   reprend EXACTEMENT le même sélecteur que sa règle de base plus haut
+   (même spécificité), donc c'est l'ordre d'apparition dans le fichier qui
+   tranche — pas de !important nécessaire pour la mise en page, seulement
+   pour l'anti-zoom (voir plus bas, raison expliquée sur place).
+
+   Une boîte de dialogue "de bureau" (552px, centrée, coins arrondis) est
+   minuscule et mal cadrée sur un téléphone en portrait. Sous 860px, elles
+   passent donc toutes en plein écran — convention native sur mobile (Keep,
+   Gmail…), pas une fenêtre flottante.
+
+   100dvh plutôt que 100vh : sur iOS Safari, `vh` est calculé barre
+   d'adresse RÉTRACTÉE, donc un élément en `100vh` déborde sous la barre
+   tant qu'elle est visible (juste après l'ouverture, avant tout défilement)
+   — `dvh` (dynamic viewport height) s'ajuste en temps réel à la hauteur
+   réellement visible. Conservé en confiance : `viewport-fit=cover` est
+   déjà posé dans index.html (nécessaire pour que `env(safe-area-inset-*)`
+   ci-dessous produise autre chose que 0). */
+@media (max-width: 860px) {
+  /* Base : couvre dlg-user / dlg-password / dlg-profil, qui n'ont pas de
+     règle de largeur dédiée plus haut et héritent donc simplement de
+     `dialog` (552px) — elles doivent passer en plein écran comme les
+     autres. Les dialogues avec un ID/une classe dédiée ci-dessous héritent
+     de cette base (position/inset/margin) puis ajustent ce qui leur est
+     propre (padding, display interne…) séparément — je ne les répète pas
+     ici pour ne pas les dupliquer. */
+  dialog[open] {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+    overflow-y: auto;
+    /* Recouvre le padding fixe de la règle de base (1.5rem) : sur un
+       écran avec encoche/barre de gestes, on garde au moins cet espace
+       et on l'agrandit là où le système réclame de la marge en plus,
+       plutôt que de la choisir à l'aveugle sans pouvoir vérifier sur un
+       vrai appareil. */
+    padding-top: max(1.5rem, env(safe-area-inset-top));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+
+  /* Édition complète : la boîte occupe tout l'écran, `overflow-y:auto`
+     déjà posé par sa règle de base fait défiler l'ensemble (contenu +
+     libellés + boutons) si ça dépasse — pas de zone morte possible. */
+  #dlg-note[open] {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding-top: max(1.5rem, env(safe-area-inset-top));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+
+  /* Édition simple : coquille transparente (voir son commentaire plus
+     haut), le plein écran profite directement à .dns-card, qui grandit en
+     flex:1 — la marge de respiration devient l'espace de sécurité du
+     système plutôt qu'un chiffre choisi à vue. */
+  #dlg-note-simple[open] {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Boîte Outils (export/import/etc.) : même traitement plein écran que
+     dlg-note, avec défilement interne au cas où le contenu dépasse. */
+  #dlg-outils[open] {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    padding-top: max(1.5rem, env(safe-area-inset-top));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+
+  /* Historique des versions : header/body/footer ont chacun leur propre
+     zone (voir plus haut) — je ne touche qu'à l'enveloppe extérieure, la
+     structure interne à trois bandes n'a pas besoin de changer. */
+  .history-dlg[open] {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+    position: fixed;
+    inset: 0;
+  }
+  .history-header { padding-top: max(1rem, env(safe-area-inset-top)); }
+  .history-footer { padding-bottom: max(.875rem, env(safe-area-inset-bottom)); }
+
+  /* Éditeur d'image / tableau blanc : déjà pensé pour un mode plein écran
+     desktop optionnel (classe .fullscreen, bouton dédié) — sous 860px, ce
+     plein écran devient le mode PAR DÉFAUT (mêmes valeurs), la surface de
+     dessin doit profiter de tout l'écran sur un petit format, pas d'une
+     boîte à 94vw avec des coins arrondis qui grignotent l'espace utile. */
+  .img-editor-dlg[open] {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+    position: fixed;
+    inset: 0;
+  }
+  .img-editor-toolbar { padding-top: max(.625rem, env(safe-area-inset-top)); }
+  .img-editor-actions { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Anti-zoom iOS : Safari zoome automatiquement toute la page quand on
+     touche un champ dont la taille de police CALCULÉE est < 16px. Or la
+     plupart des champs de cette app sont à .75/.8125/.875rem (12-14px)
+     sur desktop, choisis pour la densité visuelle — très bien sur un
+     écran large, mais chaque frappe sur mobile déclencherait un zoom
+     intempestif qu'il faudrait annuler à la main. `!important` assumé ici
+     : les règles de base viennent de sélecteurs très divers (.field
+     input, .toolbar input[type=search], .dn-item-row input[type=text]…),
+     certaines avec une spécificité supérieure à un simple `input` — les
+     reprendre une par une serait fragile (un seul oubli referait
+     réapparaître le zoom). Un `!important` local et ciblé sur une seule
+     propriété, uniquement sous 860px, est le choix le plus fiable. */
+  input, textarea, select, [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
+
+/* ============ Mobile (<860px) : tableau blanc / éditeur d'image, barre d'outils compacte ============
+   La résolution du canvas s'adapte déjà à l'espace réellement disponible
+   et à l'orientation réelle de l'écran (voir openWhiteboard() dans
+   app.js — recalculé pour ne plus jamais déformer le rapport largeur/
+   hauteur). Ici, on ne touche qu'à la barre d'outils : sur un téléphone
+   en portrait, chaque pixel de hauteur pris par la barre est un pixel en
+   moins pour dessiner — elle est donc resserrée pour laisser le plus de
+   place possible au canevas lui-même, sans rien retirer (tous les outils
+   restent, juste plus compacts). */
+@media (max-width: 860px) {
+  .img-editor-toolbar {
+    gap: .5rem;
+    padding: .5rem .625rem;
+    padding-top: max(.5rem, env(safe-area-inset-top));
+  }
+  .img-tool-btn { width: 32px; height: 32px; }
+  .img-tool-btn svg { width: 17px; height: 17px; }
+  .img-editor-colors, .img-editor-size, .img-editor-bg { padding-left: .375rem; }
+  .img-editor-colors .swatch { width: 19px; height: 19px; }
+  .img-editor-size input[type=range] { width: 64px; }
+
+  /* Le tableau blanc doit toucher les bords sur mobile comme sur desktop
+     (déjà le cas via .board-mode, inchangé) ; pour une PHOTO en revanche,
+     la marge desktop (1.25rem) grignote un espace précieux sur un petit
+     écran sans bénéfice visuel équivalent — resserrée, pas supprimée : on
+     veut encore voir que ce n'est pas collé au bord. */
+  .img-editor-canvas-wrap { padding: .5rem; }
+  .img-editor-dlg[open].fullscreen .img-editor-canvas-wrap,
+  .img-editor-dlg[open].board-mode .img-editor-canvas-wrap { padding: 0; }
+}
