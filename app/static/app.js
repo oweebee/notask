@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-masonry-clipboard-icones-51';
+const BUILD_VERSION = '2026-08-01-fix-flash-mosaique-54';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 const TOKEN_KEY = 'notask_token';
@@ -1526,10 +1526,26 @@ function notesReorderable() {
    besoin d'un mode séparé pour elles (voir l'ancienne branche
    state.deepSearch, disparue : le glouton gère déjà tout seul le fait
    qu'elles ne trouvent de la place qu'après le composeur). */
-function layoutMosaic() {
+/* `instant` : coupe la transition left/top le temps de ce calcul — à passer
+   après un rendu COMPLET de la grille (toutes les .note détruites et
+   recréées, voir renderNotes()/renderSearchHits()). Sans ça : chaque carte,
+   fraîche dans le DOM à sa position CSS par défaut (top:0, left:0, voir
+   .notes-grid .note en CSS), se voit poser sa position finale par place()
+   plus bas — mais la lecture de el.offsetHeight qu'il contient force un
+   reflow synchrone à CHAQUE itération de la boucle, qui "fige" au passage
+   la position par défaut des cartes pas encore traitées. Leur position
+   finale, posée l'itération suivante, devient alors un vrai changement de
+   style aux yeux du navigateur, et la transition s'anime — tout le tableau
+   semblait "sauter" depuis le coin en haut à gauche à chaque fermeture de
+   notask (l'affichage se reconstruit entièrement après coup). Un
+   déplacement normal (glisser-déposer, redimensionnement, image tardive)
+   n'est PAS concerné : ces cartes existent déjà à leur ancienne position
+   réelle, la transition y est voulue. */
+function layoutMosaic(instant) {
   const grid = $('#notes-grid');
   const stack = $('.composer-stack');
   if (!grid || !stack) return;
+  if (instant) grid.classList.add('mosaic-instant');
 
   const css = getComputedStyle(grid);
   const minCol = parseFloat(css.getPropertyValue('--mosaic-min-col')) || 240;
@@ -1575,6 +1591,15 @@ function layoutMosaic() {
   // Les enfants sont tous en position absolue : sans hauteur explicite, le
   // conteneur s'effondrerait à 0 et casserait le défilement de la page.
   grid.style.height = Math.max(0, Math.max(...heights) - gap) + 'px';
+
+  if (instant) {
+    // Un reflow force le navigateur à considérer les positions posées
+    // ci-dessus comme déjà "acquises" avant de réautoriser la transition —
+    // sinon le prochain déplacement (drag, redimensionnement...) repartirait
+    // en l'animant depuis zéro au lieu de la vraie position précédente.
+    void grid.offsetHeight;
+    grid.classList.remove('mosaic-instant');
+  }
 }
 
 /* Recalcule la mosaïque, avec un court débounce — partagé par toutes les
@@ -1780,7 +1805,7 @@ function renderSearchHits() {
     cadrerExtrait(el.querySelector('.hit-extract'));
   }
 
-  layoutMosaic();
+  layoutMosaic(true); // rendu complet : positionnement instantané, voir layoutMosaic()
 }
 
 /* --------------------- Masquage "terminal" d'une carte ---------------------
@@ -2145,7 +2170,7 @@ function renderNotes() {
     grid.appendChild(el);
   }
 
-  layoutMosaic();
+  layoutMosaic(true); // rendu complet : positionnement instantané, voir layoutMosaic()
 }
 
 /* Rangée de libellés en bas de la carte (mosaïque) : uniquement ceux déjà
