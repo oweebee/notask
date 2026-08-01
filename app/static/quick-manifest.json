@@ -1,10 +1,10 @@
 {
-  "name": "notask",
-  "short_name": "notask",
-  "description": "Notasks et tâches chiffrées de bout en bout, avec échéances.",
-  "start_url": "/",
+  "name": "notask — prise rapide",
+  "short_name": "notask rapide",
+  "description": "Raccourci d'écran d'accueil vers la prise de note rapide de notask (composeur seul, plein écran).",
+  "start_url": "/quick",
   "scope": "/",
-  "id": "/",
+  "id": "/quick",
   "display": "standalone",
   "orientation": "any",
   "lang": "fr",
@@ -16,14 +16,5 @@
     { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/static/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ],
-  "shortcuts": [
-    {
-      "name": "Prise de note rapide",
-      "short_name": "Rapide",
-      "description": "Ouvre directement le composeur, prêt à écrire.",
-      "url": "/quick",
-      "icons": [{ "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" }]
-    }
   ]
 }

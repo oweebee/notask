@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-persistance-cle-localstorage-64';
+const BUILD_VERSION = '2026-08-01-page-fantome-prise-rapide-68';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -307,7 +307,6 @@ let state = {
   // l'occurrence affichée pour chaque notask (clé = id de la notask).
   deepSearch: '',
   deepCursor: {},
-  tasks: [],
   trashNotes: [],
   editingNote: null,
   editingNoteItems: [],
@@ -321,18 +320,6 @@ let state = {
   editingMasked: false,
   composerIcon: null,
   editingIcon: null,
-};
-
-/* Intitulés courts, pour les en-têtes de colonne de la vue "Notasks
-   Prévues" : la vue n'a plus de titre et ne contient que des notasks, le
-   préfixe "Notasks" n'y apprend rien. BUCKET_LABELS (version longue) reste
-   utilisé par la colonne d'échéances de l'accueil, où les sections
-   voisinent avec la mosaïque. */
-const BUCKET_SHORT = {
-  late: 'en retard',
-  today: 'du jour',
-  upcoming: 'à venir',
-  done: 'terminées',
 };
 
 const BUCKET_LABELS = {
@@ -607,6 +594,33 @@ const ICON_CHOICES = {
   paw: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="16" rx="5.5" ry="4.3" fill="#a1887f"/><circle cx="5.5" cy="10" r="2.1" fill="#a1887f"/><circle cx="9.3" cy="6.3" r="2.1" fill="#a1887f"/><circle cx="14.7" cy="6.3" r="2.1" fill="#a1887f"/><circle cx="18.5" cy="10" r="2.1" fill="#a1887f"/></svg>',
   food: '<svg viewBox="0 0 24 24"><path d="M7 2.5v8.6M5 2.5v5.6a2 2 0 0 0 4 0V2.5M7 11.1V21.5" stroke="#ff8a65" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M17 2.5c-1.8 1-2.3 3.4-1.1 6.4.7 1.9.2 2.9-.9 3.6v9" stroke="#ff8a65" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>',
   document: '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6z" fill="#90a4ae"/><path d="M14 3.5v4h4" fill="#cfd8dc"/><path d="M8.5 12h7M8.5 15.5h7M8.5 19h4" stroke="#455a64" stroke-width="1.3" stroke-linecap="round"/></svg>',
+
+  /* Encore un lot (35 -> 55), sur demande explicite ("pas assez d'icônes") —
+     même esprit : formes simples, en couleur, viewBox 0 0 24 24 commun.
+     Chaque SVG vérifié bien formé (xml.etree) avant intégration, mais pas
+     vu rendu dans un vrai navigateur (aucun disponible dans cet
+     environnement) — à vérifier côté utilisateur. Synchronisé avec
+     ICON_KEYS côté serveur (app/routers/notes.py). */
+  fish: '<svg viewBox="0 0 24 24"><path d="M2.5 12c3-3.5 7.5-5.5 12-4.5 2.3.5 4 2 5 4.5-1 2.5-2.7 4-5 4.5-4.5 1-9-1-12-4.5z" fill="#4fc3f7"/><circle cx="7.5" cy="11.3" r="1" fill="#01579b"/><path d="M19.5 12l2.7-3v6z" fill="#4fc3f7"/></svg>',
+  bird: '<svg viewBox="0 0 24 24"><circle cx="10" cy="14" r="6" fill="#90caf9"/><circle cx="15.5" cy="9.5" r="3.6" fill="#90caf9"/><path d="M18.5 8.5l3-1-1.5 3z" fill="#f9a825"/><circle cx="16.3" cy="8.3" r=".8" fill="#0d47a1"/><path d="M6 17c-1.5 1-2.7 1.3-4 1 1-1.3 1.8-2.3 2.3-3.2z" fill="#64b5f6"/></svg>',
+  tree: '<svg viewBox="0 0 24 24"><rect x="10.7" y="14" width="2.6" height="7.5" rx="1" fill="#6d4c41"/><circle cx="12" cy="9" r="7" fill="#66bb6a"/><circle cx="7.5" cy="11.5" r="4.2" fill="#81c784"/><circle cx="16.5" cy="11.5" r="4.2" fill="#81c784"/></svg>',
+  flower: '<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3" fill="#f06292"/><circle cx="17" cy="12" r="3" fill="#f06292"/><circle cx="12" cy="16.5" r="3" fill="#f06292"/><circle cx="7" cy="12" r="3" fill="#f06292"/><circle cx="12" cy="12" r="2.6" fill="#ffd54f"/><rect x="11" y="16" width="2" height="6" rx="1" fill="#66bb6a"/></svg>',
+  pizza: '<svg viewBox="0 0 24 24"><path d="M12 3 21.5 20.5H2.5z" fill="#ffb74d"/><path d="M12 3 21.5 20.5H2.5z" fill="none" stroke="#e65100" stroke-width="1" stroke-linejoin="round"/><circle cx="11" cy="11.5" r="1.1" fill="#c62828"/><circle cx="14.5" cy="14.5" r="1.1" fill="#c62828"/><circle cx="9.5" cy="16" r="1.1" fill="#c62828"/></svg>',
+  cake: '<svg viewBox="0 0 24 24"><rect x="4" y="12" width="16" height="8" rx="1.4" fill="#f06292"/><rect x="4" y="12" width="16" height="3" fill="#fff176"/><rect x="11" y="4" width="2" height="6" rx="1" fill="#a1887f"/><path d="M12 3.5c-1 1-1 1.8 0 2.8 1-1 1-1.8 0-2.8z" fill="#ffb300"/></svg>',
+  bike: '<svg viewBox="0 0 24 24"><circle cx="6" cy="17" r="4" fill="none" stroke="#5c6bc0" stroke-width="1.8"/><circle cx="18" cy="17" r="4" fill="none" stroke="#5c6bc0" stroke-width="1.8"/><path d="M6 17l4.5-8h4l3.5 8M10.5 9H8.5M14.5 9l2 4" fill="none" stroke="#3949ab" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.5" cy="9" r="1.3" fill="#3949ab"/></svg>',
+  plane: '<svg viewBox="0 0 24 24"><path d="M3 12 20.5 4 13 20l-2-6.5z" fill="#4fc3f7"/><path d="M11 13.5 3 12l8-3z" fill="#0288d1"/></svg>',
+  train: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="12" rx="3" fill="#5c6bc0"/><rect x="6.5" y="6" width="4.5" height="4" rx=".6" fill="#e8eaf6"/><rect x="13" y="6" width="4.5" height="4" rx=".6" fill="#e8eaf6"/><circle cx="8" cy="19" r="1.6" fill="#37474f"/><circle cx="16" cy="19" r="1.6" fill="#37474f"/><path d="M6 16l-2 3M18 16l2 3" stroke="#5c6bc0" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  paintbrush: '<svg viewBox="0 0 24 24"><path d="M15.5 3.5 20.5 8.5 11 18l-6 1.5L6.5 13.5z" fill="#ba68c8"/><path d="M6.5 13.5 4 21l7.5-2.5z" fill="#8e24aa"/></svg>',
+  football: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#f5f5f5" stroke="#263238" stroke-width="1"/><path d="M12 8.3 15 10.5l-1.1 3.6H10.1L9 10.5z" fill="#263238"/></svg>',
+  bed: '<svg viewBox="0 0 24 24"><rect x="2.5" y="11" width="19" height="7" rx="1.4" fill="#8d6e63"/><rect x="3.5" y="8" width="7.5" height="4.5" rx="1" fill="#ffb74d"/><rect x="12" y="8" width="8.5" height="4.5" rx="1" fill="#4fc3f7"/><path d="M3 18v2.5M21 18v2.5" stroke="#5d4037" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  key: '<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="4.3" fill="none" stroke="#ffb300" stroke-width="2"/><path d="M11 11 20 20M16.5 15.5l2-2M19 18l2-2" stroke="#ffb300" stroke-width="2" stroke-linecap="round"/></svg>',
+  umbrella: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 18 0z" fill="#e57373"/><rect x="11.2" y="12" width="1.6" height="8.5" rx=".8" fill="#5d4037"/><path d="M12.8 20c0 1-.8 1.5-1.8 1.5" fill="none" stroke="#5d4037" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="12" r="1" fill="#5d4037"/></svg>',
+  alarm: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="#4fc3f7"/><path d="M12 8.5V13l3 2" stroke="#01579b" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M5 4l-2.5 3M19 4l2.5 3" stroke="#0288d1" stroke-width="1.6" stroke-linecap="round"/><rect x="9.5" y="2.5" width="5" height="1.8" rx=".9" fill="#0288d1"/></svg>',
+  target: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ef5350"/><circle cx="12" cy="12" r="6" fill="#fff"/><circle cx="12" cy="12" r="3" fill="#ef5350"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24"><path d="M6.5 17.5a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.7-1.7A4.3 4.3 0 0 1 17.5 17.5z" fill="#90a4ae"/></svg>',
+  scissors: '<svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4" fill="none" stroke="#78909c" stroke-width="1.6"/><circle cx="6" cy="18" r="2.4" fill="none" stroke="#78909c" stroke-width="1.6"/><path d="M7.8 7.6 20 18M7.8 16.4 20 6" stroke="#78909c" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  magnifier: '<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#42a5f5" stroke-width="2"/><path d="M15.2 15.2 21 21" stroke="#42a5f5" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  gem: '<svg viewBox="0 0 24 24"><path d="M12 3 4 9l8 12 8-12z" fill="#4dd0e1"/><path d="M4 9h16M8 9 12 3l4 6M8 9l4 12M16 9l-4 12" fill="none" stroke="#00acc1" stroke-width=".8"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -1255,9 +1269,20 @@ function enterApp() {
     $('#dlg-password').showModal();
     msg($('#dp-msg'), 'Votre mot de passe a été défini par un administrateur. Choisissez-en un nouveau.', 'ok');
   }
-}
 
-const TASK_VIEWS = { tasks: null, late: 'late', today: 'today', upcoming: 'upcoming' };
+  // Page fantôme (/quick, voir quick.html) : composeur déjà déplié et
+  // titre au focus, prêt à écrire dès l'ouverture — c'est tout son intérêt
+  // (icône d'écran d'accueil dédiée à la prise de note rapide, voir
+  // quick-manifest.json). Le drapeau NOTASK_QUICK_CAPTURE n'est posé QUE
+  // dans quick.html (jamais dans index.html), en dur avant le chargement
+  // de ce fichier — voir aussi le style .quick-capture dans style.css, qui
+  // masque tout le reste, et la sortie en location.reload() dans le
+  // gestionnaire #nc-add plus bas.
+  if (window.NOTASK_QUICK_CAPTURE) {
+    composerExpand();
+    $('#nc-title').focus();
+  }
+}
 
 function switchView(view) {
   // Un changement de vue referme le menu mobile s'il était ouvert (voir
@@ -1270,10 +1295,8 @@ function switchView(view) {
   $$('.drawer-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
 
   const isNotes = view === 'notes' || view === 'archives' || view === 'favorites';
-  const isTasks = view in TASK_VIEWS;
 
   $('#view-notes').hidden = !isNotes;
-  $('#view-tasks').hidden = !isTasks;
   $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
@@ -1305,11 +1328,6 @@ function switchView(view) {
     // pas encore épinglée, donc disparaîtrait aussitôt de la liste).
     $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
-  }
-  if (isTasks) {
-    // Plus de titre de vue : les en-têtes de colonne suffisent à situer
-    // l'utilisateur (voir #view-tasks dans index.html).
-    loadTasks(TASK_VIEWS[view]);
   }
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
@@ -1404,6 +1422,24 @@ $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
   switchView(b.dataset.view);
 }));
 
+// "Notasks Prévues" : pas de [data-view] (voir index.html), donc ignoré par
+// la boucle générique ci-dessus — sans quoi il gagnerait aussi la classe
+// .active en même temps que "Notasks" (même vue 'notes' derrière les deux),
+// un double-surlignage trompeur. Sur demande explicite, plus de vue à part :
+// ce bouton ramène juste à la vue Notes puis fait défiler jusqu'à la
+// colonne d'échéances (à droite sur desktop, deuxième page du carrousel en
+// mobile — voir .shell.has-agenda dans style.css). scrollWidth ne dépasse
+// clientWidth qu'en mobile (le carrousel), donc ce scrollTo ne fait rien de
+// visible sur desktop : la colonne y est déjà affichée en permanence.
+$('#nav-tasks').addEventListener('click', () => {
+  if (state.labelFilter) {
+    state.labelFilter = null;
+    renderLabelsDrawer();
+  }
+  switchView('notes');
+  $('.shell').scrollTo({ left: $('.shell').scrollWidth, behavior: 'smooth' });
+});
+
 /* -------------------------------- Notes -------------------------------- */
 
 /* Le paramètre "q" n'est plus envoyé au serveur : titre/description/contenu
@@ -1467,19 +1503,31 @@ function renderTrash() {
 
     const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
     const title = n.title || 'Notask sans titre';
+    // Pas de troncature ici (un slice() par caractère risquerait de couper
+    // un marqueur en plein milieu, ex. "[c:ffffff]" sans son "[/c]" — il
+    // resterait alors affiché tel quel, en texte brut, faute de pouvoir
+    // être reconnu) : .trash-card-snippet limite déjà l'affichage à 4
+    // lignes en CSS (-webkit-line-clamp), inutile de le refaire ici.
     const snippet = n.is_checklist
       ? `${(n.items || []).length} élément${(n.items || []).length > 1 ? 's' : ''}`
-      : (n.content || '').slice(0, 140);
+      : renderFormatted(n.content || '');
 
     el.innerHTML = `
       <div class="trash-card-title-row">${icon}<h3>${escapeHtml(title)}</h3></div>
       ${n.description ? `<div class="description">${escapeHtml(n.description)}</div>` : ''}
-      ${snippet ? `<div class="trash-card-snippet">${escapeHtml(snippet)}</div>` : ''}
+      ${snippet ? `<div class="trash-card-snippet">${snippet}</div>` : ''}
       <div class="trash-card-meta">${daysLeftInTrash(n.trashed_at)} j avant suppression définitive</div>
       <div class="trash-card-actions">
         <button type="button" class="btn ghost sm" data-act="restore">${ICONS.undo} Restaurer</button>
         <button type="button" class="btn danger sm" data-act="purge">${ICONS.trash} Supprimer définitivement</button>
       </div>`;
+
+    // Même traitement que sur une carte active (voir renderNotes()) :
+    // renderFormatted() ci-dessus ne pose que des <img> sans src pour les
+    // images insérées dans le texte (voir NOTE_IMG_MARK), à déchiffrer et
+    // hydrater après coup.
+    hydrateInlineImages(el, n);
+    ajouterBoutonsCopieCode(el);
 
     el.querySelector('[data-act=restore]').onclick = async () => {
       await api('/notes/' + n.id + '/restore', { method: 'POST' });
@@ -2276,7 +2324,6 @@ function renderNotes() {
     inner += `<div class="palette" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
-        <button data-act="edit" title="Modifier" aria-label="Modifier">${ICONS.edit}</button>
         <span class="sep"></span>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
@@ -2326,7 +2373,6 @@ function renderNotes() {
       });
     });
 
-    el.querySelector('[data-act=edit]').onclick = () => openNoteDialog(n);
     el.querySelector('[data-act=pin]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { pinned: !n.pinned } });
       loadNotes();
@@ -2733,6 +2779,16 @@ $('#nc-icon-btn').addEventListener('click', () => {
 });
 
 function renderComposer() {
+  // Déclenchement DIRECT, en plus du ResizeObserver global (voir
+  // mosaicResizeObserver/layoutMosaic()) : signalé encore chevauchant les
+  // cartes voisines au dépliage du composeur malgré ce dernier — plutôt que
+  // de creuser une éventuelle latence/rate du ResizeObserver sans navigateur
+  // réel sous la main pour le vérifier, on garantit ici le recalcul à la
+  // source du changement de hauteur, qui a lieu à CHAQUE appel de cette
+  // fonction (bascule barre d'outils, libellés, liste à cocher...). Coût
+  // nul si la hauteur n'a pas changé : layoutMosaic() replace alors les
+  // cartes exactement où elles étaient déjà.
+  scheduleLayoutMosaic(0);
   $('#nc-content').hidden = composerChecklist;
   $('#nc-items').hidden = !composerChecklist;
   $('#nc-add-item').hidden = !composerChecklist;
@@ -2919,6 +2975,7 @@ $('.note-composer').addEventListener('paste', (e) => {
   e.preventDefault();
   queueComposerFiles(files);
 });
+brancherCollagePropre($('#nc-content'));
 
 // Glisser-déposer un fichier sur le composeur.
 const ncComposerEl = $('.note-composer');
@@ -3004,6 +3061,15 @@ $('#nc-add').addEventListener('click', async () => {
       }
     }
 
+    // Page fantôme (voir NOTASK_QUICK_CAPTURE, /quick) : un rechargement
+    // complet plutôt que resetComposer() + loadNotes() — plus simple et
+    // plus sûr que de rejouer à la main toute la logique d'expansion du
+    // composeur (voir le bootstrap de app.js) pour être immédiatement prêt
+    // à saisir la note suivante, sans dépendre de l'ordre d'exécution entre
+    // ce gestionnaire asynchrone et un éventuel second gestionnaire posé à
+    // côté.
+    if (window.NOTASK_QUICK_CAPTURE) { location.reload(); return; }
+
     resetComposer();
     loadNotes();
   } catch (err) {
@@ -3066,46 +3132,10 @@ brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', ()
   renderNotes();
 });
 
-/* Les archives sont désormais une entrée du menu latéral, pas un bouton. */
-
-/* --- Dialogue note --- */
-
-function openNoteDialog(note) {
-  state.editingNote = note;
-  // Comparé à l'enregistrement pour décider si un instantané d'historique
-  // est nécessaire — voir noteSnapshotFromNote()/snapshotNoteVersion().
-  state.editingNoteOriginal = noteSnapshotFromNote(note);
-  state.editingIsChecklist = note.is_checklist;
-  state.editingNoteItems = note.items.map((i) => ({
-    text: i.text, checked: i.checked, due_at: i.due_at,
-  }));
-  state.editingLabelIds = [...(note.label_ids || [])];
-  renderNoteLabelChips();
-  state.editingIcon = note.icon || null;
-  renderIconBtn($('#dn-icon-btn'), state.editingIcon);
-
-  $('#dn-title').value = note.title;
-  $('#dn-description').value = note.description || '';
-  $('#dn-content').value = note.content;
-  $('#dn-due').value = note.due_at || '';
-  renderDialogMode();
-  renderNoteDueBtn();
-  applyDialogColor($('#dlg-note'), note.color);
-
-  construirePalette($('#dn-colors'), note.color, (c) => {
-    state.editingNote.color = c;
-    applyDialogColor($('#dlg-note'), c);
-  });
-
-  renderNoteItems();
-  $('#dlg-note').showModal();
-  animerOuvertureDialogue($('#dlg-note'));
-  // Retour mobile = même geste qu'un clic en dehors de la boîte :
-  // enregistre puis ferme (voir saveNoteDialog(), aussi utilisée par le
-  // clic sur le fond juste plus bas) plutôt que d'abandonner les
-  // modifications comme le bouton "Annuler" dédié.
-  suivreAvecHistorique($('#dlg-note'), saveNoteDialog);
-}
+/* Les archives sont désormais une entrée du menu latéral, pas un bouton —
+   les notasks s'ouvrent toutes via l'édition simple (openNoteSimpleDialog,
+   voir plus bas) : l'ancienne boîte "Modifier" complète (#dlg-note) et
+   toute sa gestion en double ont été retirées sur demande explicite. */
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
 function renderDueBtn(btnSel, labelSel, iso) {
@@ -3114,17 +3144,6 @@ function renderDueBtn(btnSel, labelSel, iso) {
   btn.classList.toggle('has-due', !!iso);
   $(labelSel).textContent = iso ? formatDue(iso) : 'Aucune échéance';
 }
-
-function renderNoteDueBtn() {
-  renderDueBtn('#dn-due-btn', '#dn-due-label', $('#dn-due').value || null);
-}
-
-$('#dn-due-btn').addEventListener('click', () => {
-  openCalPopup($('#dn-due-btn'), $('#dn-due').value || null, (iso) => {
-    $('#dn-due').value = iso || '';
-    renderNoteDueBtn();
-  });
-});
 
 function renderNoteDueBtnSimple() {
   renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null);
@@ -3137,74 +3156,19 @@ $('#dns-due-btn').addEventListener('click', () => {
   });
 });
 
-$('#dn-icon-btn').addEventListener('click', () => {
-  openIconPopup($('#dn-icon-btn'), state.editingIcon, (icon) => {
-    state.editingIcon = icon;
-    renderIconBtn($('#dn-icon-btn'), icon);
-  });
-});
-
-/* Bascule entre texte libre et liste à cocher, pour une note déjà existante. */
-function renderDialogMode() {
-  $('#dn-content-field').hidden = state.editingIsChecklist;
-  $('#dn-items-field').hidden = !state.editingIsChecklist;
-  $('#dn-add-item').hidden = !state.editingIsChecklist;
-  $('#dn-toggle-checklist').textContent =
-    state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
-}
-
-$('#dn-toggle-checklist').addEventListener('click', () => {
-  if (!state.editingIsChecklist) {
-    // Texte libre -> liste : chaque ligne déjà écrite devient un élément.
-    const lignes = $('#dn-content').value.split('\n').filter((l) => l.trim());
-    state.editingNoteItems = lignes.length
-      ? lignes.map((l) => ({ text: l.trim(), checked: false, due_at: null }))
-      : [{ text: '', checked: false, due_at: null }];
-    renderNoteItems();
-  } else {
-    // Liste -> texte libre : les lignes deviennent des paragraphes.
-    $('#dn-content').value = state.editingNoteItems.map((i) => i.text).filter(Boolean).join('\n');
-  }
-  state.editingIsChecklist = !state.editingIsChecklist;
-  renderDialogMode();
-});
-
-function renderNoteItems() {
-  const box = $('#dn-items');
-  box.innerHTML = '';
-  state.editingNoteItems.forEach((item, idx) => {
-    const row = document.createElement('div');
-    row.className = 'dn-item-row';
-    row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-      <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
-      <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
-              title="${item.due_at ? formatDue(item.due_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
-      <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
-    const [cb, txt, cal, del] = row.children;
-    cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
-    txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
-    cal.onclick = () => {
-      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso) => {
-        state.editingNoteItems[idx].due_at = iso;
-        renderNoteItems();
-      });
-    };
-    del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItems(); };
-    box.appendChild(row);
-  });
-}
-
-/* Chips de libellés dans une boîte de dialogue d'édition (complète ou
-   simple, voir les deux wrappers ci-dessous). Même présentation que sur la
-   carte (renderCardLabels()) : puces déjà posées, colorées avec la couleur
-   propre du libellé, croix au survol pour la retirer, puis un bouton +
-   après la dernière puce qui ouvre .label-add-picker (élément frère du
-   conteneur de puces, voir index.html) pour poser un libellé restant.
-   Aucun appel API ici (contrairement à la carte) : on modifie seulement
-   state.editingLabelIds, la boîte de dialogue enregistre au moment de sa
-   fermeture (voir saveNoteDialog()/saveNoteSimpleDialog()). Mêmes
-   state.editingLabelIds et state.labels dans les deux dialogues — un seul
-   dialogue est jamais ouvert à la fois, pas de risque de collision. */
+/* Chips de libellés dans la boîte d'édition simple (seule restante — voir
+   plus haut, l'ancienne boîte "Modifier" complète a été retirée). Même
+   présentation que sur la carte (renderCardLabels()) : puces déjà posées,
+   colorées avec la couleur propre du libellé, croix au survol pour la
+   retirer, puis un bouton + après la dernière puce qui ouvre
+   .label-add-picker (élément frère du conteneur de puces, voir index.html)
+   pour poser un libellé restant. Aucun appel API ici (contrairement à la
+   carte) : on modifie seulement state.editingLabelIds, la boîte de
+   dialogue enregistre au moment de sa fermeture (voir
+   saveNoteSimpleDialog()). renderLabelChipsInto() reste générique (elle
+   prenait déjà des sélecteurs en paramètre, pour être partagée avec
+   l'ancienne boîte "Modifier" — gardée telle quelle, un seul appelant de
+   moins ne justifie pas de la simplifier). */
 function renderLabelChipsInto(boxSelector, pickerSelector, getIds, setIds, rerender) {
   const box = $(boxSelector);
   const picker = $(pickerSelector);
@@ -3283,94 +3247,15 @@ function renderLabelChipsInto(boxSelector, pickerSelector, getIds, setIds, reren
 }
 const getEditingLabelIds = () => state.editingLabelIds;
 const setEditingLabelIds = (v) => { state.editingLabelIds = v; };
-function renderNoteLabelChips() {
-  renderLabelChipsInto('#dn-labels', '#dn-labels-picker', getEditingLabelIds, setEditingLabelIds, renderNoteLabelChips);
-}
 function renderNoteLabelChipsSimple() {
   renderLabelChipsInto('#dns-labels', '#dns-labels-picker', getEditingLabelIds, setEditingLabelIds, renderNoteLabelChipsSimple);
 }
 
-$('#dn-add-item').addEventListener('click', () => {
-  state.editingNoteItems.push({ text: '', checked: false, due_at: null });
-  renderNoteItems();
-});
-
-$('#dn-cancel').addEventListener('click', () => fermerAvecAnimation($('#dlg-note')));
-$('#dlg-note').addEventListener('cancel', (e) => {
-  e.preventDefault();
-  fermerAvecAnimation($('#dlg-note'));
-});
-
-/* Sauvegarde du dialogue d'édition complet — utilisée par le bouton
-   Enregistrer, et par le clic en dehors de la fenêtre (qui enregistre puis
-   ferme, comme demandé, au lieu de simplement fermer). */
-async function saveNoteDialog() {
-  const n = state.editingNote;
-  try {
-    // Instantané d'historique seulement si quelque chose a réellement
-    // changé depuis l'ouverture (comparaison en clair, seule fiable) —
-    // sinon fermer/rouvrir la boîte sans rien toucher grignoterait les 10
-    // versions disponibles pour rien.
-    const currentItemsForDiff = state.editingIsChecklist
-      ? state.editingNoteItems.filter((i) => i.text.trim())
-        .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }))
-      : [];
-    const currentForDiff = {
-      title: $('#dn-title').value,
-      description: $('#dn-description').value,
-      content: state.editingIsChecklist ? '' : $('#dn-content').value,
-      color: n.color,
-      due_at: $('#dn-due').value || null,
-      is_checklist: state.editingIsChecklist,
-      icon: state.editingIcon,
-      label_ids: state.editingLabelIds,
-      items: currentItemsForDiff,
-    };
-    if (!notePlainStateEqual(state.editingNoteOriginal, currentForDiff)) {
-      await snapshotNoteVersion(n.id);
-    }
-
-    const body = {
-      title: await encryptField($('#dn-title').value),
-      description: await encryptField($('#dn-description').value),
-      color: n.color,
-      due_at: $('#dn-due').value || null,
-      is_checklist: state.editingIsChecklist,
-      label_ids: state.editingLabelIds,
-      icon: state.editingIcon,
-    };
-    if (state.editingIsChecklist) {
-      const items = state.editingNoteItems.filter((i) => i.text.trim());
-      body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
-      body.content = '';
-    } else {
-      body.content = await encryptField($('#dn-content').value);
-      body.items = [];
-    }
-    await api('/notes/' + n.id, { method: 'PATCH', body });
-    fermerAvecAnimation($('#dlg-note'));
-    // Le dialogue s'ouvre aussi depuis la vue Tâches : on rafraîchit la bonne vue.
-    if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
-    else loadNotes();
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-$('#dn-save').addEventListener('click', saveNoteDialog);
-
-// Cliquer en dehors du contenu (sur le fond du dialogue ou le backdrop, qui
-// ne sont couverts par aucun élément enfant) enregistre puis ferme, plutôt
-// que de fermer sans rien faire.
-$('#dlg-note').addEventListener('click', (e) => {
-  if (e.target === $('#dlg-note')) saveNoteDialog();
-});
-
 /* --- Dialogue d'édition simple, façon Keep ---
-   Ouvert au clic sur le corps d'une note : texte, cases à cocher, échéance,
-   pièces jointes et bascule texte libre/liste s'y modifient — pas de
-   couleur, pas de libellé (réservés à la boîte "Modifier" complète). Toute
-   fermeture enregistre. */
+   Ouvert au clic sur une notask — c'est désormais le SEUL moyen d'éditer
+   (l'ancienne boîte "Modifier" complète, #dlg-note, a été retirée) : texte,
+   cases à cocher, échéance, icône, couleur, libellés, pièces jointes et
+   bascule texte libre/liste s'y modifient tous. Toute fermeture enregistre. */
 
 /* -------------------- Pièces jointes, édition simple -------------------- *
  * Upload/suppression immédiats (pas de bouton Enregistrer sur cette boîte
@@ -3471,7 +3356,10 @@ $('#dns-attach-input').addEventListener('change', (e) => {
 // Coller une image (capture d'écran, image copiée) directement dans la
 // note. Le preventDefault ne se déclenche que s'il y a effectivement un
 // fichier dans le presse-papier, pour laisser le collage de texte normal
-// intact partout ailleurs.
+// intact partout ailleurs (les champs titre/description, en particulier —
+// #dns-content, lui, passe par brancherCollagePropre() juste en dessous,
+// qui nettoie la couleur/police d'un éventuel HTML collé sans toucher au
+// texte brut).
 $('#dlg-note-simple').addEventListener('paste', (e) => {
   const files = Array.from(e.clipboardData ? e.clipboardData.items : [])
     .filter((it) => it.kind === 'file')
@@ -3481,6 +3369,7 @@ $('#dlg-note-simple').addEventListener('paste', (e) => {
   e.preventDefault();
   handleIncomingAttachments(files);
 });
+brancherCollagePropre($('#dns-content'));
 
 // Glisser-déposer un fichier sur la carte en édition simple.
 const dnsCard = document.querySelector('#dlg-note-simple .dns-card');
@@ -3566,6 +3455,8 @@ function openNoteSimpleDialog(note) {
   state.editingMasked = !!note.masked;
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
   $('#dns-colors').hidden = true;
+  state.editingIcon = note.icon || null;
+  renderIconBtn($('#dns-icon-btn'), state.editingIcon);
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
@@ -3586,6 +3477,18 @@ function openNoteSimpleDialog(note) {
   // arrive, aucun besoin d'un callback dédié ici.
   suivreAvecHistorique($('#dlg-note-simple'), () => fermerAvecAnimation($('#dlg-note-simple')));
 }
+
+// Icône de la notask, changeable depuis l'édition simple — même mécanisme
+// que #nc-icon-btn dans le composeur (openIconPopup/renderIconBtn),
+// désormais le seul endroit où une notask EXISTANTE peut aussi en changer
+// (ajouté ici après le retrait de l'ancienne boîte "Modifier" complète, qui
+// portait ce réglage jusque-là).
+$('#dns-icon-btn').addEventListener('click', () => {
+  openIconPopup($('#dns-icon-btn'), state.editingIcon, (icon) => {
+    state.editingIcon = icon;
+    renderIconBtn($('#dns-icon-btn'), icon);
+  });
+});
 
 /* Barre d'outils de mise en forme, édition rapide uniquement. #dns-content
    est une zone contenteditable (pas un <textarea>) : la sélection est donc
@@ -3855,6 +3758,31 @@ function effacerMiseEnForme(el) {
   const nu = document.createTextNode(text);
   range.insertNode(nu);
 
+  // Un collage externe (voir brancherCollagePropre()) peut laisser un
+  // conteneur encore stylé (attribut style — couleur, police...) autour du
+  // point d'insertion, vidé par deleteContents() ci-dessus mais pas
+  // supprimé : le nœud de texte nu réinséré en hérite quand même par
+  // simple héritage CSS, malgré tout balisage retiré. On le fait donc
+  // remonter hors de toute enveloppe encore porteuse d'un style, en la
+  // scindant en deux au besoin (le texte AVANT `nu` et celui APRÈS restent
+  // chacun dans leur propre moitié), jusqu'à retrouver soit la racine
+  // éditable, soit un conteneur sans style — un simple retour à la ligne
+  // pour richToText(), donc sans risque. Utile aussi bien pour du contenu
+  // collé avant ce correctif que pour tout autre cas déjà passé au travers.
+  let noeud = nu;
+  while (noeud.parentNode && noeud.parentNode !== el) {
+    const parent = noeud.parentNode;
+    if (!parent.hasAttribute || !parent.hasAttribute('style') || !parent.getAttribute('style').trim()) break;
+    const grandParent = parent.parentNode;
+    if (!grandParent) break;
+    const apres = parent.cloneNode(false);
+    while (noeud.nextSibling) apres.appendChild(noeud.nextSibling);
+    grandParent.insertBefore(noeud, parent.nextSibling);
+    grandParent.insertBefore(apres, noeud.nextSibling);
+    if (!parent.hasChildNodes()) parent.remove();
+    if (!apres.hasChildNodes()) apres.remove();
+  }
+
   const newRange = document.createRange();
   newRange.selectNodeContents(nu);
   sel.removeAllRanges();
@@ -3953,6 +3881,84 @@ const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
    mis de côté. Aucun rapport avec les notasks archivées (Note.archived),
    qui sont une vue à part ; le nom est celui choisi par l'utilisateur. */
 const NOTE_ARCHIVE_MARK = /\[arch\]([\s\S]*?)\[\/arch\]/g;
+
+/* Collage depuis l'extérieur (page web, Word, Google Docs...) : le
+   navigateur insère par défaut le HTML tel quel dans la zone éditable (la
+   tâche #74 en dépend, pour garder gras/italique/souligné venus d'ailleurs)
+   — mais avec lui viennent aussi tous les styles inline de la source
+   (couleur, police, fond...), souvent pensés pour un fond CLAIR et donc
+   illisibles (texte noir ou gris foncé) une fois collés sur le thème
+   sombre de l'app. On ne garde ici que les balises de notre propre
+   vocabulaire de mise en forme (celui que richToText() sait relire), sans
+   AUCUN attribut : la couleur éventuelle se choisit ensuite à la main,
+   avec notre propre palette. Un lien, une liste, un tableau... (balise pas
+   dans la liste) perd sa balise mais garde son contenu — pareil que ce que
+   richToText() ferait de toute façon à l'enregistrement (case 'default').
+   N'agit que si le presse-papier contient du HTML : un simple texte brut
+   ne peut cacher aucune couleur, le collage natif du navigateur suffit. */
+const PASTE_TAG_WHITELIST = new Set(['B', 'STRONG', 'EM', 'I', 'U', 'BR', 'DIV', 'P', 'SPAN', 'PRE', 'CODE']);
+function nettoyerHtmlColle(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // En profondeur D'ABORD, décision de garder/déballer ENSUITE : un style
+  // planqué plusieurs niveaux sous une balise inconnue (tableau, liste
+  // imbriquée...) doit être nettoyé avant que son ancêtre ne soit déballé
+  // et ses enfants remontés — sinon ces enfants, ajoutés après coup au
+  // niveau du dessus, ne seraient jamais revisités par cette même passe.
+  (function nettoyer(node) {
+    Array.from(node.childNodes).forEach((enfant) => {
+      if (enfant.nodeType === Node.TEXT_NODE) return;
+      if (enfant.nodeType !== Node.ELEMENT_NODE) { node.removeChild(enfant); return; }
+      nettoyer(enfant);
+      if (!PASTE_TAG_WHITELIST.has(enfant.tagName)) {
+        while (enfant.firstChild) node.insertBefore(enfant.firstChild, enfant);
+        node.removeChild(enfant);
+        return;
+      }
+      Array.from(enfant.attributes).forEach((a) => enfant.removeAttribute(a.name));
+    });
+  })(tmp);
+  return tmp.innerHTML;
+}
+
+// Insère un fragment HTML déjà nettoyé à la place de la sélection en cours,
+// puis replace le curseur juste après — même esprit que effacerMiseEnForme()
+// juste au-dessus (manipulation directe du Range, pas execCommand).
+function insererHtmlDansSelection(html) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const frag = document.createDocumentFragment();
+  let dernier = null;
+  while (tmp.firstChild) { dernier = tmp.firstChild; frag.appendChild(tmp.firstChild); }
+  range.insertNode(frag);
+  if (dernier) {
+    const newRange = document.createRange();
+    newRange.setStartAfter(dernier);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  }
+}
+
+// Branché sur la zone éditable elle-même (pas sur un ancêtre) : reçoit
+// l'événement AVANT les gestionnaires de collage d'image posés sur
+// .note-composer/#dlg-note-simple (ordre de bulle DOM, cible d'abord), donc
+// s'efface proprement devant eux quand le presse-papier contient un fichier.
+function brancherCollagePropre(el) {
+  el.addEventListener('paste', (e) => {
+    if (!e.clipboardData) return;
+    const aDesFichiers = Array.from(e.clipboardData.items || []).some((it) => it.kind === 'file');
+    if (aDesFichiers) return; // laissé au gestionnaire de pièce jointe de l'ancêtre
+    const html = e.clipboardData.getData('text/html');
+    if (!html) return; // texte brut : rien à nettoyer, comportement natif intact
+    e.preventDefault();
+    insererHtmlDansSelection(nettoyerHtmlColle(html));
+  });
+}
 
 /* `element.style.color` rend "rgb(r, g, b)" : reconverti en hex pour le
    marqueur. Retourne null si la couleur est absente ou illisible, auquel
@@ -4135,10 +4141,11 @@ async function saveNoteSimpleDialog() {
   await Promise.allSettled(pendingAttachmentUploads);
   pendingAttachmentUploads = [];
   try {
-    // Même logique que saveNoteDialog() : instantané seulement si quelque
-    // chose a réellement changé. L'icône n'est pas éditable depuis cette
-    // boîte : on reprend telle quelle celle de l'état chargé, pour qu'elle
-    // ne déclenche jamais elle-même un faux positif ici.
+    // Instantané seulement si quelque chose a réellement changé — l'icône
+    // est éditable depuis cette boîte (#dns-icon-btn) depuis le retrait de
+    // l'ancienne boîte "Modifier" complète qui portait ce réglage jusque-là,
+    // donc state.editingIcon (et non plus l'icône figée de l'état chargé)
+    // entre bien dans la comparaison.
     const currentItemsForDiff = state.editingIsChecklist
       ? state.editingNoteItems.filter((i) => i.text.trim())
         .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }))
@@ -4150,7 +4157,7 @@ async function saveNoteSimpleDialog() {
       color: state.editingColor || n.color,
       due_at: $('#dns-due').value || null,
       is_checklist: state.editingIsChecklist,
-      icon: (state.editingNoteOriginal && state.editingNoteOriginal.icon) || null,
+      icon: state.editingIcon,
       label_ids: state.editingLabelIds,
       items: currentItemsForDiff,
     };
@@ -4169,11 +4176,12 @@ async function saveNoteSimpleDialog() {
       label_ids: state.editingLabelIds,
       color: state.editingColor || n.color,
       masked: state.editingMasked,
+      icon: state.editingIcon,
     };
     // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
     // celui du mode courant : sinon, après une bascule, l'ancien contenu
     // (lignes de checklist ou texte libre) restait en base sans être
-    // affiché nulle part — même logique que saveNoteDialog() ci-dessus.
+    // affiché nulle part.
     if (state.editingIsChecklist) {
       const items = state.editingNoteItems.filter((i) => i.text.trim());
       body.items = await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })));
@@ -4186,8 +4194,7 @@ async function saveNoteSimpleDialog() {
   } catch (err) {
     alert(err.message);
   }
-  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
-  else loadNotes();
+  loadNotes();
 }
 
 // Pas de bouton Enregistrer/Annuler ici : toute fermeture (clic à côté,
@@ -5043,11 +5050,11 @@ $('#img-editor-download').addEventListener('click', async () => {
 /* ------------------------------- Historique -------------------------------
    Jusqu'à 10 instantanés par notask, pris côté client juste avant un
    changement potentiellement destructeur (voir snapshotNoteVersion() plus
-   bas, appelée depuis saveNoteDialog()/saveNoteSimpleDialog() quand le
-   contenu a réellement changé, avant une suppression de pièce jointe, et
-   avant un enregistrement dans l'éditeur d'image). Liste -> détail d'une
-   version -> restauration, dans #dlg-history, ouvert depuis dlg-note ou
-   dlg-note-simple (bouton "Historique"/icône horloge). */
+   bas, appelée depuis saveNoteSimpleDialog() quand le contenu a réellement
+   changé, avant une suppression de pièce jointe, et avant un enregistrement
+   dans l'éditeur d'image). Liste -> détail d'une version -> restauration,
+   dans #dlg-history, ouvert depuis dlg-note-simple (bouton "Historique"/
+   icône horloge). */
 
 const historyState = { note: null, versions: [], current: null };
 const versionAttachmentCache = new Map();
@@ -5251,8 +5258,8 @@ $('#history-restore').addEventListener('click', async () => {
     return;
   }
   $('#dlg-history').close();
-  // Les deux boîtes d'édition peuvent afficher des champs périmés après une
-  // restauration (elles ne rechargent pas leur contenu en direct) : on les
+  // La boîte d'édition peut afficher des champs périmés après une
+  // restauration (elle ne recharge pas son contenu en direct) : on la
   // referme plutôt que de tenter de resynchroniser chaque champ un par un.
   // close() sur une <dialog> déjà fermée ne fait rien (pas d'erreur).
   // IMPORTANT : dlg-note-simple enregistre à CHAQUE fermeture, y compris
@@ -5263,134 +5270,12 @@ $('#history-restore').addEventListener('click', async () => {
   // est vide, avant de toucher au réseau.
   state.editingNote = null;
   $('#dlg-note-simple').close();
-  $('#dlg-note').close();
-  if (state.view in TASK_VIEWS) loadTasks(TASK_VIEWS[state.view]);
-  else loadNotes();
-});
-
-$('#dn-history-btn').addEventListener('click', () => {
-  if (state.editingNote) openHistoryDialog(state.editingNote);
+  loadNotes();
 });
 $('#dns-history-btn').innerHTML = ICONS.history;
 $('#dns-history-btn').addEventListener('click', () => {
   if (state.editingNote) openHistoryDialog(state.editingNote);
 });
-
-/* -------------------------------- Tâches --------------------------------
-   Aucune création ici : une tâche est une note datée, ou une ligne à cocher
-   datée à l'intérieur d'une note. On ne fait que les lister et les cocher. */
-
-async function loadTasks(bucket) {
-  const params = new URLSearchParams();
-  if (bucket) params.set('bucket', bucket);
-  const tasks = await api('/tasks' + (params.toString() ? '?' + params : ''));
-  await Promise.all(tasks.map(async (t) => {
-    t.text = await decryptField(t.text);
-    t.note_title = await decryptField(t.note_title);
-  }));
-  state.tasks = tasks;
-  renderTasks();
-  updateTaskBadges();
-}
-
-function renderTasks() {
-  const grid = $('#tasks-grid');
-  grid.innerHTML = '';
-  $('#tasks-empty').hidden = state.tasks.length > 0;
-
-  const groupes = {};
-  for (const t of state.tasks) (groupes[t.bucket] ||= []).push(t);
-
-  /* Trois colonnes côte à côte, de gauche à droite : à venir, du jour,
-     en retard. Colonnes toujours affichées même vides, pour que chaque
-     échéance garde sa place et qu'on ne relise pas les en-têtes à chaque
-     fois. Les tâches terminées ne sont pas une échéance : elles restent
-     en pleine largeur, sous les trois colonnes.
-     AUCUNE limite de date ici, volontairement : "à venir" liste toutes
-     les échéances, si lointaines soient-elles. C'est la colonne d'agenda
-     de l'accueil qui, elle, se borne à un mois (voir loadAgenda()) — elle
-     sert à un coup d'œil, cette vue-ci à tout voir. */
-  const colonnes = document.createElement('div');
-  colonnes.className = 'tasks-columns';
-  grid.appendChild(colonnes);
-
-  const conteneurs = {};
-  for (const b of ['upcoming', 'today', 'late']) {
-    const col = document.createElement('section');
-    col.className = 'tasks-col';
-
-    const titre = document.createElement('h2');
-    titre.className = 'tasks-group ' + b;
-    titre.textContent = `${BUCKET_SHORT[b]} (${(groupes[b] || []).length})`;
-    col.appendChild(titre);
-
-    const liste = document.createElement('div');
-    liste.className = 'task-cards';
-    col.appendChild(liste);
-
-    conteneurs[b] = liste;
-    colonnes.appendChild(col);
-  }
-
-  for (const b of ['upcoming', 'today', 'late', 'done']) {
-    if (!groupes[b]) continue;
-
-    let liste = conteneurs[b];
-    if (!liste) {
-      // "done" : hors colonnes, en pleine largeur sous la grille.
-      const titre = document.createElement('h2');
-      titre.className = 'tasks-group ' + b;
-      titre.textContent = `${BUCKET_SHORT[b]} (${groupes[b].length})`;
-      grid.appendChild(titre);
-      liste = document.createElement('div');
-      liste.className = 'task-cards';
-      grid.appendChild(liste);
-    }
-
-    for (const t of groupes[b]) {
-      const card = document.createElement('article');
-      card.className = 'task-card c-' + t.color + (t.done ? ' done' : '');
-
-      // Une tâche issue d'une ligne rappelle toujours la note dont elle vient
-      const origine = t.kind === 'item'
-        ? `<button class="task-origin" title="Ouvrir la notask">
-             ${ICONS.noteRef}<span>${escapeHtml(t.note_title || 'Notask sans titre')}</span>
-           </button>`
-        : '';
-
-      card.innerHTML = `
-        <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Terminer">
-        <div class="task-main">
-          <div class="task-text">${escapeHtml(t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre'))}</div>
-          <div class="task-meta">
-            <span class="${b === 'late' ? 'late' : ''}">${ICONS.clock}${formatDue(t.due_at)}</span>
-          </div>
-          ${origine}
-        </div>`;
-
-      card.querySelector('input').onchange = async (e) => {
-        e.stopPropagation();
-        await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
-        loadTasks(TASK_VIEWS[state.view]);
-      };
-
-      // Clic n'importe où sur la carte (hors case à cocher) = ouvrir la
-      // notask d'origine en édition rapide. Le bouton .task-origin fait la
-      // même chose (voir plus bas) : exclu ici pour ne pas déclencher
-      // l'ouverture deux fois d'affilée.
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('input, .task-origin')) return;
-        if (clicTermineUneSelection(card)) return;
-        ouvrirNoteParId(t.note_id);
-      });
-
-      const lien = card.querySelector('.task-origin');
-      if (lien) lien.onclick = () => ouvrirNoteParId(t.note_id);
-
-      liste.appendChild(card);
-    }
-  }
-}
 
 // Ouvre la notask d'origine d'une tâche (menu de gauche ou colonne agenda
 // à droite) directement en édition rapide, pas la boîte "Modifier" complète
@@ -5403,10 +5288,12 @@ async function ouvrirNoteParId(noteId) {
   openNoteSimpleDialog(note);
 }
 
-/* Rond de comptage de "Notasks Prévues" dans le menu de gauche (les entrées
-   par échéance ont été retirées du menu ; les vues correspondantes existent
-   toujours, seuls leurs raccourcis ont disparu — d'où le garde-fou dans
-   set(), qui ignore simplement un compteur absent).
+/* Rond de comptage de "Notasks Prévues" dans le menu de gauche. Ce bouton
+   ne mène plus à une vue à part (voir la suppression de #view-tasks /
+   renderTasks() / loadTasks() : redondant avec la colonne d'échéances de
+   droite, voir loadAgenda() plus bas) — il ne fait plus que scroller
+   jusqu'à cette colonne (voir le gestionnaire de clic de #nav-tasks). Le
+   badge, lui, reste calculé indépendamment de cette colonne.
    Pas de déchiffrement ici : `bucket` est calculé côté serveur à
    partir de due_at/done, jamais chiffré — on n'a besoin que de ce champ
    pour compter, inutile de déchiffrer texte/titre pour un simple nombre.
@@ -5433,13 +5320,14 @@ async function updateTaskBadges() {
 }
 
 /* --------------------------- Colonne d'échéances --------------------------
-   Aperçu compact des notasks proches, affiché à côté de la mosaïque (voir
+   Aperçu des notasks à échéance, affiché à côté de la mosaïque (voir
    #agenda-col dans index.html et switchView() qui l'active/désactive selon
-   la vue). Borné à un mois pour "à venir" — sans limite, la colonne
-   finirait par afficher toutes les échéances lointaines, ce qui n'a plus
-   rien d'un coup d'œil rapide. À ne pas confondre avec la vue "Notasks
-   Prévues", elle sans aucune limite de date (voir renderTasks()). Les
-   tâches terminées n'y figurent pas. */
+   la vue) — seul point d'accès aux tâches datées, "Notasks Prévues" dans le
+   menu de gauche y renvoie directement (plus de vue à part, voir le
+   gestionnaire de clic de #nav-tasks). Borné à un mois pour "à venir" —
+   sans limite, la colonne finirait par afficher toutes les échéances
+   lointaines, ce qui n'a plus rien d'un coup d'œil rapide. Les tâches
+   terminées n'y figurent pas. */
 async function loadAgenda() {
   let tasks;
   try {
@@ -5487,8 +5375,14 @@ function renderAgenda(items) {
     section.appendChild(h2);
 
     for (const t of groupes[b]) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
+      // <div>, pas <button> : il faut pouvoir héberger une vraie case à
+      // cocher (voir plus bas), et le HTML interdit un <input> à l'intérieur
+      // d'un <button> (contenu interactif imbriqué). Le clic reste géré à la
+      // main ci-dessous, en excluant la case (même schéma que .task-card,
+      // désormais retiré avec la vue "Notasks Prévues" en double).
+      const btn = document.createElement('div');
+      btn.tabIndex = 0;
+      btn.setAttribute('role', 'button');
       // Fond = couleur propre de la note d'origine (même classe .c-* que
       // sur sa carte), pas un simple repère en bordure : on veut
       // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
@@ -5498,12 +5392,32 @@ function renderAgenda(items) {
       // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
       // texte est ainsi toujours décalé de la même largeur.
       const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
-      btn.innerHTML = `<span class="agenda-item-icon">${icon}</span>
+      btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer">
+        <span class="agenda-item-icon">${icon}</span>
         <span class="agenda-item-body">
           <span class="agenda-item-text">${escapeHtml(label)}</span>
           <span class="agenda-item-due">${formatDue(t.due_at)}</span>
         </span>`;
-      btn.addEventListener('click', () => ouvrirNoteParId(t.note_id));
+      btn.querySelector('input').onchange = async (e) => {
+        e.stopPropagation();
+        await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
+        loadAgenda();
+        updateTaskBadges();
+      };
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest('input')) return;
+        ouvrirNoteParId(t.note_id);
+      });
+      // Avant, un vrai <button> gérait Entrée/Espace nativement — repris à
+      // la main puisque ce n'en est plus un (voir plus haut, HTML interdit
+      // un <input> dans un <button>).
+      btn.addEventListener('keydown', (e) => {
+        if (e.target.closest('input')) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          ouvrirNoteParId(t.note_id);
+        }
+      });
       section.appendChild(btn);
     }
     box.appendChild(section);

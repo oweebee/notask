@@ -88,6 +88,19 @@ def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+# Page "fantôme" — non reliée depuis le menu, volontairement : elle n'existe
+# que pour être ajoutée à l'écran d'accueil mobile comme icône À PART (voir
+# quick-manifest.json, avec son propre start_url/id, donc une icône propre
+# indépendante de celle de l'app principale). Même app.js/style.css que la
+# page principale (aucune logique dupliquée : auth, chiffrement, composeur,
+# tout est réutilisé tel quel) — seule une classe sur <body> et un drapeau
+# JS (voir NOTASK_QUICK_CAPTURE dans app.js) changent l'affichage pour ne
+# montrer que le composeur, déjà déplié, plein écran.
+@app.get("/quick", include_in_schema=False)
+def quick_capture():
+    return FileResponse(STATIC_DIR / "quick.html")
+
+
 # Servis à la racine (pas sous /static/) : la portée par défaut d'un service
 # worker se limite à son propre dossier et aux dossiers en dessous — un
 # sw.js sous /static/ ne pourrait contrôler que /static/*, jamais les pages
@@ -95,6 +108,11 @@ def index():
 @app.get("/manifest.json", include_in_schema=False)
 def manifest():
     return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
+
+
+@app.get("/quick-manifest.json", include_in_schema=False)
+def quick_manifest():
+    return FileResponse(STATIC_DIR / "quick-manifest.json", media_type="application/manifest+json")
 
 
 @app.get("/sw.js", include_in_schema=False)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>notask</title>
+<title>notask — rapide</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
 
@@ -13,14 +13,14 @@
      --md-surface plein cadre) : iOS ignore les SVG pour cette icône en
      pratique, il attend un PNG — c'était la cause de l'icône manquante
      (juste la lettre "N" par défaut) sur l'écran d'accueil. -->
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/quick-manifest.json">
 <meta name="theme-color" content="#141218">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="notask">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 </head>
-<body>
+<body class="quick-capture">
 
 <!-- ============ Configuration initiale ============ -->
 <section id="screen-setup" class="gate" hidden>
@@ -504,6 +504,7 @@
   </section>
 </dialog>
 
+<script>window.NOTASK_QUICK_CAPTURE = true;</script>
 <script src="/static/app.js"></script>
 </body>
 </html>

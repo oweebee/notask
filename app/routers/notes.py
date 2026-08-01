@@ -57,6 +57,10 @@ ICON_KEYS = {
     "health", "sport", "car", "laptop", "school", "plant", "camera",
     "game", "tool", "warning", "lock", "globe", "phone", "mail",
     "coffee", "sun", "moon", "paw", "food", "document",
+    # Encore un lot (35 -> 55) — synchronisé avec ICON_CHOICES côté client.
+    "fish", "bird", "tree", "flower", "pizza", "cake", "bike", "plane",
+    "train", "paintbrush", "football", "bed", "key", "umbrella", "alarm",
+    "target", "cloud", "scissors", "magnifier", "gem",
 }
 
 
