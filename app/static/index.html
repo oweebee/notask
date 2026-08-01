@@ -8,17 +8,17 @@
 <link rel="stylesheet" href="/static/style.css">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
-     avec --md-surface en CSS (#141218). apple-touch-icon pointe pour
-     l'instant vers le SVG du favicon : iOS l'ignore en pratique (il attend
-     un PNG), l'icône d'écran d'accueil retombera sur une capture par
-     défaut tant qu'une version PNG n'aura pas été générée — limite connue,
-     pas un oubli. */-->
+     avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
+     vrai PNG (généré depuis favicon.svg, même géométrie exacte, fond
+     --md-surface plein cadre) : iOS ignore les SVG pour cette icône en
+     pratique, il attend un PNG — c'était la cause de l'icône manquante
+     (juste la lettre "N" par défaut) sur l'écran d'accueil. -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#141218">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="notask">
-<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 </head>
 <body>
 

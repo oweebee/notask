@@ -9,13 +9,18 @@
    premier, sinon un redéploiement resterait invisible tant que le cache
    n'expire pas — même philosophie que le Cache-Control: no-cache déjà posé
    côté serveur sur tout le reste (voir main.py). */
-const CACHE_NAME = 'notask-shell-v1';
+const CACHE_NAME = 'notask-shell-v2';
 const SHELL_FILES = [
   '/',
   '/static/style.css',
   '/static/app.js',
   '/static/favicon.svg',
   '/static/manifest.json',
+  '/static/icon-192.png',
+  '/static/icon-512.png',
+  '/static/icon-maskable-192.png',
+  '/static/icon-maskable-512.png',
+  '/static/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {

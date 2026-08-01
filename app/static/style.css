@@ -45,6 +45,12 @@
   --elev-1: 0 1px 3px 1px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.30);
   --elev-2: 0 2px 6px 2px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.30);
   --elev-3: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.30);
+
+  /* Hauteur du clavier virtuel mobile, tenue à jour par l'API
+     VisualViewport (voir app.js) — 0px par défaut (desktop, ou avant le
+     premier calcul JS). Utilisée par .dns-bottom-bar pour rester au-dessus
+     du clavier plutôt que de se faire recouvrir. */
+  --kb-inset: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -621,6 +627,12 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
      conteneur). Le padding du haut et du bas n'est pas concerné, seuls les
      côtés gauche/droit sont resserrés. */
   main { padding-left: 8px; padding-right: 8px; }
+
+  /* Pseudo retiré sur mobile — gagne de la place dans une barre déjà
+     dense (hamburger + logo + Profil/Outils) et évite un décalage du
+     reste de la barre à chaque connexion/déconnexion, quand sa largeur
+     (variable selon la longueur du nom) apparaît/disparaît. */
+  header.topbar .who { display: none; }
 
   /* Vraie redéfinition mobile de .agenda-col (voir le commentaire dans le
      premier bloc @media plus haut, qui explique pourquoi elle est ICI et
@@ -2310,6 +2322,16 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   border-radius: var(--shape-lg);
   padding: .625rem 1rem;
   box-shadow: var(--elev-3);
+  /* Reste au-dessus du clavier virtuel plutôt que de se faire recouvrir
+     (--kb-inset tenu à jour par l'API VisualViewport, voir app.js) : la
+     boîte étant en colonne flexible avec .dns-card en flex:1 juste
+     au-dessus, ce padding supplémentaire pousse naturellement cette barre
+     vers le haut, .dns-card cédant l'espace correspondant — pas besoin de
+     sortir cette barre du flux ni de repositionner quoi que ce soit
+     d'autre. transition pour suivre l'ouverture/fermeture du clavier en
+     douceur plutôt qu'un saut sec. */
+  padding-bottom: calc(.625rem + var(--kb-inset, 0px));
+  transition: padding-bottom .15s ease;
 }
 /* padding:0 en plus de margin:0 : le padding de .fmt-toolbar décalait la
    première ligne vers la droite, si bien que le "B" ne tombait pas à la
@@ -2958,9 +2980,33 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   }
   .img-tool-btn { width: 32px; height: 32px; }
   .img-tool-btn svg { width: 17px; height: 17px; }
-  .img-editor-colors, .img-editor-size, .img-editor-bg { padding-left: .375rem; }
+  .img-editor-size, .img-editor-bg { padding-left: .375rem; }
   .img-editor-colors .swatch { width: 19px; height: 19px; }
   .img-editor-size input[type=range] { width: 64px; }
+
+  /* Les 20 couleurs de la palette (voir IMG_EDITOR_COLORS dans app.js) ne
+     tiennent nulle part sur une largeur de téléphone : en flex-wrap normal,
+     ça se traduisait par une ligne avec seulement 1-2 pastilles visibles
+     avant retour à la ligne, PUIS le bouton "couleur de fond" qui se
+     retrouvait tout seul sur SA propre ligne juste après — trois lignes
+     entières mangées pour un simple choix de couleur. flex-basis:100% force
+     ce groupe sur sa propre ligne (même technique déjà utilisée pour
+     .dns-bottom-bar .palette), mais SANS wrap à l'intérieur : les pastilles
+     défilent horizontalement au doigt à la place. Une seule ligne, toutes
+     les couleurs accessibles, et .img-editor-size/.img-editor-bg qui la
+     suivent dans le DOM se retrouvent groupés ensemble juste en dessous au
+     lieu d'être chacun isolé. */
+  .img-editor-colors {
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-left: 0;
+    padding-bottom: .25rem; /* respire un peu avant le bord du panneau */
+    border-left: none;
+  }
+  .img-editor-colors .swatch { flex: none; }
 
   /* Le tableau blanc doit toucher les bords sur mobile comme sur desktop
      (déjà le cas via .board-mode, inchangé) ; pour une PHOTO en revanche,

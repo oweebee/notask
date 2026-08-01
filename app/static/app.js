@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-agenda-carrousel-marges-62';
+const BUILD_VERSION = '2026-08-01-persistance-cle-localstorage-64';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -16,6 +16,27 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
+}
+
+/* Hauteur du clavier virtuel mobile, tenue à jour dans --kb-inset. Le
+   clavier n'est PAS une rotation/barre d'adresse : les unités dvh/svh/lvh
+   (déjà utilisées ailleurs pour les boîtes plein écran, voir style.css) ne
+   le prennent pas en compte, par définition — il faut l'API VisualViewport
+   pour le détecter. Sur Android Chrome, le viewport de mise en page se
+   redimensionne déjà tout seul avec le clavier (--kb-inset resterait à peu
+   près 0, sans conséquence) ; sur iOS Safari, le clavier recouvre juste le
+   bas de l'écran SANS redimensionner la mise en page — c'est là que la
+   barre d'outils d'une notask ouverte se retrouverait cachée dessous sans
+   ce calcul (voir .dns-bottom-bar dans style.css, qui lit cette variable). */
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const ajusterPourClavier = () => {
+    const hauteurClavier = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb-inset', hauteurClavier + 'px');
+  };
+  vv.addEventListener('resize', ajusterPourClavier);
+  vv.addEventListener('scroll', ajusterPourClavier);
+  ajusterPourClavier();
 }
 
 const TOKEN_KEY = 'notask_token';
@@ -70,11 +91,21 @@ function hexToRgba(hex, alpha) {
      est alors générée, et les notes chiffrées avec l'ancienne restent
      illisibles — c'est la conséquence attendue, pas un bug.
 
-   La DEK déballée (encKey) n'est mise en cache qu'en sessionStorage, jamais
-   localStorage — elle ne survit ni à la fermeture de l'onglet, ni à celle
-   du navigateur, contrairement au jeton de connexion. Conséquence assumée :
-   une nouvelle fenêtre ou un redémarrage du navigateur redemande le mot de
-   passe (voir boot()).
+   La DEK déballée (encKey) est mise en cache en localStorage, comme le
+   jeton de connexion — donc survit à la fermeture de l'onglet/appli et à un
+   redémarrage du navigateur, jusqu'à déconnexion explicite (clearEncKey(),
+   voir seDeconnecter()). Compromis de sécurité choisi EXPLICITEMENT par
+   l'utilisateur (2026-08-01), en connaissance de cause : ça évite de
+   ressaisir le mot de passe à chaque lancement de la PWA installée (où,
+   contrairement à un onglet de navigateur classique, chaque lancement
+   démarre un contexte neuf — sessionStorage y était donc vidé à CHAQUE
+   ouverture, pas seulement de temps en temps), au prix d'une garantie de
+   bout en bout affaiblie : quiconque accède au stockage local de l'appareil
+   (vol, malware, appareil déverrouillé laissé sans surveillance) peut lire
+   les notasks sans connaître le mot de passe, tant qu'aucune déconnexion
+   explicite n'a eu lieu entretemps. Avant ce changement, la DEK n'était
+   jamais mise en cache qu'en sessionStorage, précisément pour éviter ce
+   risque — à rétablir si la décision devait changer un jour.
 
    Format d'un champ chiffré : "e1:" + base64(iv[12 octets] + données
    chiffrées). Une valeur sans ce préfixe est traitée comme du texte en
@@ -160,7 +191,7 @@ async function unlockWithPassword(password, user) {
     user.wrapped_dek = wrapped;
   }
   const raw = await crypto.subtle.exportKey('raw', encKey);
-  sessionStorage.setItem(EKEY_STORAGE, bytesToBase64(new Uint8Array(raw)));
+  localStorage.setItem(EKEY_STORAGE, bytesToBase64(new Uint8Array(raw)));
 }
 
 /* Appelée après un changement de mot de passe volontaire (l'ancien est
@@ -173,11 +204,14 @@ async function rewrapDekForNewPassword(newPassword) {
   await api('/auth/enc-key', { method: 'PUT', body: { wrapped_dek: wrapped } });
 }
 
-/* Reprend la DEK mise en cache en session (même onglet, pas de redémarrage
-   du navigateur) — évite de redemander le mot de passe à chaque rechargement
-   de page tant que l'onglet reste ouvert. */
+/* Reprend la DEK mise en cache en localStorage — survit à un rechargement
+   de page, à la fermeture de l'onglet/appli, et à un redémarrage du
+   navigateur (voir le commentaire d'architecture plus haut : choix
+   explicite de l'utilisateur, 2026-08-01, pour ne pas avoir à ressaisir
+   le mot de passe à chaque lancement de la PWA). Seule une déconnexion
+   explicite (clearEncKey(), voir seDeconnecter()) l'efface. */
 async function restoreCachedKey() {
-  const cached = sessionStorage.getItem(EKEY_STORAGE);
+  const cached = localStorage.getItem(EKEY_STORAGE);
   if (!cached) return false;
   try {
     encKey = await crypto.subtle.importKey('raw', base64ToBytes(cached), 'AES-GCM', true, ['encrypt', 'decrypt']);
@@ -189,7 +223,7 @@ async function restoreCachedKey() {
 
 function clearEncKey() {
   encKey = null;
-  sessionStorage.removeItem(EKEY_STORAGE);
+  localStorage.removeItem(EKEY_STORAGE);
 }
 
 async function encryptField(plain) {
@@ -900,6 +934,105 @@ document.addEventListener('pointerdown', (e) => {
   dernierPointDeClic = { x: e.clientX, y: e.clientY };
 }, true);
 
+/* --------------------- Retour mobile (bouton/geste "précédent") ---------------------
+   Sans ceci, le retour matériel (Android) ou le geste (iOS/Android) quitte
+   carrément le site pendant qu'une notask/l'éditeur d'image est ouvert(e),
+   au lieu de la refermer et de revenir à l'endroit où on en était — parce
+   qu'aux yeux du navigateur, ouvrir une <dialog> n'est pas une "navigation"
+   qu'il pourrait défaire tout seul. On lui en fournit une : une entrée
+   d'historique est ajoutée à l'ouverture d'une boîte suivie (voir chaque
+   showModal() plus bas), que le retour peut alors défaire normalement —
+   popstate referme la boîte (en enregistrant si la fermeture le prévoit,
+   exactement comme un clic en dehors de la boîte) au lieu de laisser le
+   navigateur changer de page. Une seule boîte suivie à la fois : ces
+   boîtes ne s'imbriquent jamais dans cette app. */
+let dlgOuverteParHistorique = null; // { dlg, fermer() }
+
+function suivreAvecHistorique(dlg, fermer) {
+  history.pushState({ notaskDlgOpen: true }, '', location.href);
+  dlgOuverteParHistorique = { dlg, fermer };
+}
+
+// Appelée par CHAQUE fermeture normale (bouton, clic sur le fond, Échap) —
+// retire l'entrée d'historique posée à l'ouverture avec un history.back(),
+// pour ne pas en empiler une à chaque ouverture/fermeture (il aurait sinon
+// fallu appuyer plusieurs fois de suite sur retour pour vraiment quitter
+// l'app). Sans effet si la boîte n'a pas été suivie, ou si son entrée vient
+// justement d'être consommée par le retour lui-même (voir popstate
+// ci-dessous, qui remet dlgOuverteParHistorique à null AVANT de fermer —
+// c'est ce qui rend cet appel-ci idempotent dans ce cas précis).
+function oublierHistoriqueSiPresent(dlg) {
+  if (dlgOuverteParHistorique && dlgOuverteParHistorique.dlg === dlg) {
+    dlgOuverteParHistorique = null;
+    history.back();
+  }
+}
+
+/* --------------------- Fond figé pendant qu'une boîte est ouverte ---------------------
+   Sur mobile, un défilement au doigt démarré à l'intérieur d'une <dialog>
+   modale peut quand même faire bouger la mosaïque DERRIÈRE elle, visible en
+   transparence sous la boîte — le "top layer" d'une dialog modale bloque
+   les clics sur le fond mais pas forcément le geste de défilement tactile
+   lui-même sur tous les navigateurs. Verrouillé ici via position:fixed sur
+   <body> (plus fiable que overflow:hidden seul, insuffisant sur iOS
+   Safari), en conservant la position de défilement pour la restaurer telle
+   quelle à la fermeture — sans ça, la page "sauterait" en haut à chaque
+   ouverture/fermeture de boîte.
+
+   Détection par MutationObserver sur l'attribut "open" (posé/retiré par
+   showModal()/close(), quelle que soit la <dialog>) plutôt qu'en appelant
+   verrouiller/déverrouiller à la main à chaque site d'ouverture : une
+   dialog de plus dans l'app en bénéficie automatiquement, sans rien
+   ajouter ici. Compteur plutôt qu'un simple booléen : gère le cas — réel
+   dans cette app — d'une boîte qui en ouvre une autre par-dessus (le
+   changement de mot de passe depuis Profil, par exemple) sans déverrouiller
+   trop tôt pendant que la première est encore là derrière. */
+let dialoguesOuvertsCompte = 0;
+let scrollAvantVerrouillage = 0;
+
+function verrouillerDefilementFond() {
+  dialoguesOuvertsCompte++;
+  if (dialoguesOuvertsCompte > 1) return;
+  scrollAvantVerrouillage = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${scrollAvantVerrouillage}px`;
+  document.body.style.left = '0';
+  document.body.style.right = '0';
+}
+
+function deverrouillerDefilementFond() {
+  dialoguesOuvertsCompte = Math.max(0, dialoguesOuvertsCompte - 1);
+  if (dialoguesOuvertsCompte > 0) return;
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.left = '';
+  document.body.style.right = '';
+  window.scrollTo(0, scrollAvantVerrouillage);
+}
+
+new MutationObserver((mutations) => {
+  for (const m of mutations) {
+    if (m.attributeName !== 'open') continue;
+    const dlg = m.target;
+    if (dlg.hasAttribute('open')) verrouillerDefilementFond();
+    else deverrouillerDefilementFond();
+  }
+}).observe(document.body, { attributes: true, attributeFilter: ['open'], subtree: true });
+
+// Le menu mobile (voir ouvrirMenuMobile()/fermerMenuMobile() plus bas) est
+// une <aside> superposée, pas une <dialog> — pas suivie par le
+// MutationObserver ci-dessus, mais exposée au même risque (défiler la
+// mosaïque en dessous en touchant à travers le fond assombri). Même
+// mécanisme de verrouillage, appelé directement puisqu'il n'y a que ces
+// deux points d'entrée (pas besoin d'un observer dédié pour un seul cas).
+
+window.addEventListener('popstate', () => {
+  if (!dlgOuverteParHistorique) return;
+  const { dlg, fermer } = dlgOuverteParHistorique;
+  dlgOuverteParHistorique = null;
+  if (dlg.open) fermer();
+});
+
 /* Fermeture animée : la boîte se rétracte vers le point d'où elle est
    sortie (transform-origin posée à l'ouverture, conservée telle quelle),
    nettement plus vite qu'à l'ouverture — on veut relire la note, pas
@@ -911,6 +1044,7 @@ document.addEventListener('pointerdown', (e) => {
    sans lui, la boîte ne se fermerait jamais. */
 function fermerAvecAnimation(dlg) {
   if (!dlg.open || dlg.dataset.fermeture === '1') return;
+  oublierHistoriqueSiPresent(dlg);
   dlg.dataset.fermeture = '1';
   dlg.classList.remove('dlg-open-anim');
   dlg.classList.add('dlg-close-anim');
@@ -964,11 +1098,13 @@ function ouvrirMenuMobile() {
   $('#drawer-backdrop').hidden = false;
   drawer.classList.add('mobile-open');
   animerOuvertureDialogue(drawer);
+  verrouillerDefilementFond();
 }
 
 function fermerMenuMobile() {
   const drawer = $('.drawer');
   if (!drawer.classList.contains('mobile-open') || drawer.dataset.fermeture === '1') return;
+  deverrouillerDefilementFond();
   drawer.dataset.fermeture = '1';
   drawer.classList.remove('dlg-open-anim');
   drawer.classList.add('dlg-close-anim');
@@ -1058,10 +1194,11 @@ async function boot() {
 
   if (!token()) { showLogin(); return; }
 
-  // Le jeton de connexion (localStorage) peut survivre à un redémarrage du
-  // navigateur, mais la clé de chiffrement des notes non — jamais persistée
-  // ailleurs qu'en sessionStorage (voir unlockWithPassword()). Sans elle,
-  // impossible de déchiffrer quoi que ce soit : on redemande le mot de
+  // Le jeton de connexion ET la clé de chiffrement des notes survivent
+  // maintenant tous les deux à un redémarrage (localStorage, voir le
+  // commentaire d'architecture en tête de fichier) — restoreCachedKey()
+  // échoue quand même s'il n'y a vraiment rien en cache (première visite,
+  // ou après une déconnexion explicite) : on redemande alors le mot de
   // passe plutôt que d'ouvrir une appli à moitié illisible.
   if (!(await restoreCachedKey())) {
     setToken(null);
@@ -2963,6 +3100,11 @@ function openNoteDialog(note) {
   renderNoteItems();
   $('#dlg-note').showModal();
   animerOuvertureDialogue($('#dlg-note'));
+  // Retour mobile = même geste qu'un clic en dehors de la boîte :
+  // enregistre puis ferme (voir saveNoteDialog(), aussi utilisée par le
+  // clic sur le fond juste plus bas) plutôt que d'abandonner les
+  // modifications comme le bouton "Annuler" dédié.
+  suivreAvecHistorique($('#dlg-note'), saveNoteDialog);
 }
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
@@ -3439,6 +3581,10 @@ function openNoteSimpleDialog(note) {
   applyDialogColor($('#dlg-note-simple'), state.editingColor);
   $('#dlg-note-simple').showModal();
   animerOuvertureDialogue($('#dlg-note-simple'));
+  // Retour mobile : referme comme un clic en dehors de la boîte — le
+  // listener 'close' existant (voir plus bas) enregistre déjà quoi qu'il
+  // arrive, aucun besoin d'un callback dédié ici.
+  suivreAvecHistorique($('#dlg-note-simple'), () => fermerAvecAnimation($('#dlg-note-simple')));
 }
 
 /* Barre d'outils de mise en forme, édition rapide uniquement. #dns-content
@@ -4283,6 +4429,9 @@ async function openImageEditor(att, note, source) {
     imgEditorSetBackground(imgEditor.bg);
     imgEditor.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
     $('#dlg-image-editor').showModal();
+    // Retour mobile = même geste que le clic en dehors de la boîte :
+    // enregistre puis ferme (voir imgEditorSaveAndClose() plus bas).
+    suivreAvecHistorique($('#dlg-image-editor'), imgEditorSaveAndClose);
   };
   img.onerror = () => alert("Impossible d'afficher cette image.");
   img.src = loaded.url;
@@ -4304,6 +4453,8 @@ function openWhiteboard(note, source) {
   // occupe toute la place, sans bandes noires autour.
   dlg.classList.add('board-mode');
   dlg.showModal();
+  // Retour mobile : idem openImageEditor() ci-dessus.
+  suivreAvecHistorique(dlg, imgEditorSaveAndClose);
 
   // La taille du tableau est calculée SUR la place réellement disponible,
   // pas figée à un format arbitraire : un canvas 1600x1000 dans une
@@ -4689,19 +4840,20 @@ imgEditorCanvas().addEventListener('pointercancel', () => {
   if (IMG_EDITOR_FREEHAND.has(imgEditor.tool)) imgEditorPushHistory();
 });
 
-// Fermeture sans enregistrer : bouton dédié, clic sur le fond, ou Échap
-// (événement natif "cancel" d'un <dialog>) — les trois abandonnent les
-// annotations. Seul le bouton "Enregistrer" ci-dessous envoie quoi que ce
-// soit au serveur.
+// Fermeture sans enregistrer : bouton dédié, ou Échap (événement natif
+// "cancel" d'un <dialog>) — les deux abandonnent les annotations. Le clic
+// sur le fond et le retour mobile ENREGISTRENT (voir imgEditorSaveAndClose()
+// juste en dessous) ; seul ce bouton et Échap abandonnent volontairement.
 $('#img-editor-cancel').addEventListener('click', () => $('#dlg-image-editor').close());
 
-/* Clic à côté = ENREGISTRER puis fermer, comme la boîte d'édition rapide
-   (toute fermeture y enregistre). Perdre un dessin en cours parce qu'on a
-   cliqué à côté serait bien pire que d'enregistrer une version dont on ne
-   voulait pas — celle-ci reste rattrapable par l'historique. Seul le
-   bouton "Fermer sans enregistrer" abandonne volontairement le travail. */
-$('#dlg-image-editor').addEventListener('click', async (e) => {
-  if (e.target !== $('#dlg-image-editor')) return;
+/* Clic à côté, OU retour mobile (voir suivreAvecHistorique() dans
+   openImageEditor()/openWhiteboard()) = ENREGISTRER puis fermer, comme la
+   boîte d'édition rapide (toute fermeture y enregistre). Perdre un dessin
+   en cours parce qu'on a cliqué à côté ou appuyé sur retour serait bien
+   pire que d'enregistrer une version dont on ne voulait pas — celle-ci
+   reste rattrapable par l'historique. Seul le bouton "Fermer sans
+   enregistrer" abandonne volontairement le travail. */
+async function imgEditorSaveAndClose() {
   try {
     await imgEditorPersist();
     imgEditorRefreshCaller();
@@ -4710,6 +4862,10 @@ $('#dlg-image-editor').addEventListener('click', async (e) => {
     return; // on garde la boîte ouverte : le dessin n'est pas perdu
   }
   $('#dlg-image-editor').close();
+}
+$('#dlg-image-editor').addEventListener('click', (e) => {
+  if (e.target !== $('#dlg-image-editor')) return;
+  imgEditorSaveAndClose();
 });
 
 /* Échap : sort d'abord du plein écran s'il est actif, et seulement au
@@ -4724,7 +4880,15 @@ $('#dlg-image-editor').addEventListener('cancel', (e) => {
 
 // Sortir du plein écran quand la boîte se ferme, sinon la classe resterait
 // posée et la prochaine ouverture démarrerait en plein écran sans raison.
+// Ce dialogue n'utilise pas fermerAvecAnimation() (pas d'effet gélatine
+// ici) : toutes ses fermetures passent par .close() directement, donc cet
+// unique écouteur natif "close" est le bon endroit pour nettoyer l'entrée
+// d'historique posée à l'ouverture (voir suivreAvecHistorique() plus
+// haut) — qu'elle vienne du bouton, du clic sur le fond, d'Échap ou du
+// retour mobile lui-même (auquel cas oublierHistoriqueSiPresent() ne fait
+// rien : l'entrée a déjà été consommée par le retour).
 $('#dlg-image-editor').addEventListener('close', () => {
+  oublierHistoriqueSiPresent($('#dlg-image-editor'));
   imgEditorSetFullscreen(false);
   $('#dlg-image-editor').classList.remove('board-mode');
 });
