@@ -84,6 +84,7 @@ Documentation interactive sur `/docs`.
 | GET | `/api/google/connect?token=` | démarre la connexion (redirige vers Google) |
 | GET | `/api/google/callback` | retour de Google (usage interne, pas d'appel direct) |
 | POST | `/api/google/disconnect` | déconnecte le compte Google |
+| GET/PUT/DELETE | `/api/google/admin-config` | Client ID/Secret OAuth de l'installation (admin) |
 
 Le jeton est valable 30 jours — adapté à un client Android natif dont les
 widgets d'écran d'accueil interrogent l'API en tâche de fond.
@@ -145,9 +146,14 @@ des notasks, même principe que la purge de corbeille.
    URI de redirection autorisée : `https://notask.mondomaine.tld/api/google/callback`
    (remplacer par le vrai domaine de déploiement — doit correspondre
    exactement, schéma https compris).
-5. Renseigner `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` (voir tableau des
-   variables d'environnement ci-dessous) dans les réglages d'environnement
-   de Coolify — jamais dans le dépôt Git, ce sont des secrets.
+5. Renseigner le Client ID et le Client Secret obtenus, par l'une des deux
+   voies suivantes (la base est prioritaire si les deux sont renseignées) :
+   - **Depuis l'appli** (le plus simple) : onglet *Comptes* (admin), section
+     *Google Calendar* en bas de page — deux champs, bouton Enregistrer.
+     Stocké en base, jamais renvoyé au client une fois saisi (voir
+     `GoogleAppConfig` dans `app/models.py`).
+   - **Variables d'environnement** : `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+     dans les réglages Coolify — jamais dans le dépôt Git, ce sont des secrets.
 
 ## Sécurité
 

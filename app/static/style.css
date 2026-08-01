@@ -1761,6 +1761,24 @@ table.users th { color: var(--md-on-surface-variant); font-weight: 500; font-siz
 .badge.admin { background: var(--md-primary-container); color: var(--md-on-primary-container); }
 .badge.off { background: var(--md-error-container); color: #f9dedc; }
 
+/* Config Google Calendar (identifiants OAuth) dans l'onglet Comptes — voir
+   /api/google/admin-config. Même famille visuelle que .profil-google
+   (boîte Profil), séparée par une bordure en haut plutôt qu'en dialogue à
+   part : c'est un réglage d'installation, pas un réglage personnel, mais il
+   n'y avait pas d'autre écran admin où le poser. */
+.admin-google {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--md-outline-variant);
+  max-width: 420px;
+}
+.admin-google h3 { margin: 0 0 .25rem; font-size: 1rem; }
+.admin-google-hint {
+  margin: 0 0 1rem;
+  font-size: .8125rem;
+  color: var(--md-on-surface-variant);
+}
+
 /* ============================ Dialogues ============================ */
 
 dialog {

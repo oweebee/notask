@@ -28,8 +28,19 @@ from sqlmodel import Session, select
 
 from app import google_calendar as gcal
 from app.db import get_session
-from app.deps import get_current_user
-from app.models import GoogleAccount, GoogleAccountStatus, GoogleOAuthState, Note, NoteItem, User, utcnow
+from app.deps import get_current_admin, get_current_user
+from app.models import (
+    GoogleAccount,
+    GoogleAccountStatus,
+    GoogleAdminConfigIn,
+    GoogleAdminConfigOut,
+    GoogleAppConfig,
+    GoogleOAuthState,
+    Note,
+    NoteItem,
+    User,
+    utcnow,
+)
 from app.security import decode_access_token
 
 router = APIRouter(prefix="/api/google", tags=["google"])
@@ -76,7 +87,7 @@ def connect(
     token: str = Query(...),
     session: Session = Depends(get_session),
 ):
-    if not gcal.is_configured():
+    if not gcal.is_configured(session):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Intégration Google Calendar non configurée côté serveur (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET manquants)",
@@ -95,7 +106,7 @@ def connect(
     session.add(GoogleOAuthState(state=state, user_id=user.id))
     session.commit()
 
-    url = gcal.build_authorize_url(_redirect_uri(request), state)
+    url = gcal.build_authorize_url(_redirect_uri(request), state, session)
     return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
@@ -122,7 +133,7 @@ def callback(
     session.commit()
 
     try:
-        tokens = gcal.exchange_code(code, _redirect_uri(request))
+        tokens = gcal.exchange_code(code, _redirect_uri(request), session)
     except Exception:
         return RedirectResponse("/?google=error", status_code=status.HTTP_302_FOUND)
 
@@ -188,3 +199,52 @@ def disconnect(
 
     session.delete(account)
     session.commit()
+
+
+# ------------------------- Configuration (admin) -------------------------
+# Identifiants OAuth de l'appli (Client ID/Secret Google Cloud) — une seule
+# ligne pour toute l'installation (GoogleAppConfig), pas par utilisateur.
+# Alternative à GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET en variables
+# d'environnement : les deux fonctionnent, la base est prioritaire (voir
+# google_calendar._client_config()). Réservé aux administrateurs — ce sont
+# des identifiants pour toute l'installation, pas un réglage personnel.
+
+@router.get("/admin-config", response_model=GoogleAdminConfigOut)
+def get_admin_config(
+    admin: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    return GoogleAdminConfigOut(**gcal.config_status(session))
+
+
+@router.put("/admin-config", status_code=status.HTTP_204_NO_CONTENT)
+def set_admin_config(
+    payload: GoogleAdminConfigIn,
+    admin: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    row = session.exec(select(GoogleAppConfig)).first()
+    if row is None:
+        row = GoogleAppConfig()
+    row.client_id = payload.client_id.strip()
+    # Secret vide => on garde l'existant (cf. commentaire sur
+    # GoogleAdminConfigIn) ; s'il n'y en avait pas encore, la config reste
+    # incomplète (is_configured()/config_status() l'ignoreront) plutôt que
+    # d'échouer bruyamment ici.
+    if payload.client_secret and payload.client_secret.strip():
+        row.client_secret = payload.client_secret.strip()
+    row.updated_at = utcnow()
+    session.add(row)
+    session.commit()
+
+
+@router.delete("/admin-config", status_code=status.HTTP_204_NO_CONTENT)
+def clear_admin_config(
+    admin: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    """Revient aux variables d'environnement (si présentes) ou à rien."""
+    row = session.exec(select(GoogleAppConfig)).first()
+    if row is not None:
+        session.delete(row)
+        session.commit()

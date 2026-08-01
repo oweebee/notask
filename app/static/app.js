@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-01-integration-google-calendar-69';
+const BUILD_VERSION = '2026-08-01-config-google-admin-70';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1345,7 +1345,7 @@ function switchView(view) {
     loadNotes();
   }
   if (view === 'trash') loadTrash();
-  if (view === 'admin') loadUsers();
+  if (view === 'admin') { loadUsers(); loadGoogleAdminConfig(); }
 }
 
 /* ---------------------- Configuration / connexion ---------------------- */
@@ -5566,6 +5566,53 @@ $('#btn-new-user').addEventListener('click', () => {
   $('#du-name').value = ''; $('#du-pw').value = ''; $('#du-admin').checked = false;
   msg($('#du-msg'), '');
   $('#dlg-user').showModal();
+});
+
+/* --------------------- Comptes : config Google Calendar --------------------
+   Une seule ligne pour toute l'installation (voir GoogleAppConfig côté
+   serveur) — Client ID/Secret OAuth, alternative aux variables
+   d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Chargée à chaque
+   ouverture de l'onglet Comptes (voir switchView('admin') plus haut). */
+async function loadGoogleAdminConfig() {
+  msg($('#ga-msg'), '');
+  try {
+    const cfg = await api('/google/admin-config');
+    $('#ga-client-id').value = cfg.client_id || '';
+    $('#ga-client-secret').value = '';
+    $('#ga-client-secret').placeholder = cfg.has_secret
+      ? '••••••••  (laisser vide pour ne pas changer)'
+      : '(non renseigné)';
+    const src = { database: 'configuré depuis cet écran', environment: 'configuré via une variable d’environnement', none: 'non configuré' }[cfg.source] || '';
+    $('#admin-google-source').textContent = src ? `Statut : ${src}.` : '';
+  } catch (err) {
+    $('#admin-google-source').textContent = 'Statut indisponible : ' + err.message;
+  }
+}
+
+$('#ga-save').addEventListener('click', async () => {
+  const clientId = $('#ga-client-id').value.trim();
+  if (!clientId) return msg($('#ga-msg'), 'Le Client ID est obligatoire.');
+  try {
+    await api('/google/admin-config', {
+      method: 'PUT',
+      body: { client_id: clientId, client_secret: $('#ga-client-secret').value.trim() || null },
+    });
+    msg($('#ga-msg'), 'Enregistré.', 'ok');
+    loadGoogleAdminConfig();
+  } catch (err) {
+    msg($('#ga-msg'), err.message);
+  }
+});
+
+$('#ga-clear').addEventListener('click', async () => {
+  if (!confirm('Effacer la configuration Google Calendar de cette installation ?\n(Les comptes déjà connectés restent connectés ; seule la création de nouvelles connexions sera bloquée, sauf si des variables d’environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET existent encore.)')) return;
+  try {
+    await api('/google/admin-config', { method: 'DELETE' });
+    msg($('#ga-msg'), 'Configuration effacée.', 'ok');
+    loadGoogleAdminConfig();
+  } catch (err) {
+    msg($('#ga-msg'), err.message);
+  }
 });
 
 $('#du-cancel').addEventListener('click', () => $('#dlg-user').close());

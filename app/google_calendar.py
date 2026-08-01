@@ -24,6 +24,7 @@ ne supprime jamais la notask elle-même.
 """
 
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -32,7 +33,7 @@ from urllib.parse import urlencode
 import httpx
 from sqlmodel import Session, select
 
-from app.models import GoogleAccount, Note, NoteItem, User, utcnow
+from app.models import GoogleAccount, GoogleAppConfig, Note, NoteItem, User, utcnow
 
 log = logging.getLogger("notask.google_calendar")
 
@@ -57,16 +58,34 @@ DEFAULT_DURATION = timedelta(minutes=30)
 HTTP_TIMEOUT = 10.0
 
 
-def _client_config():
-    import os
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    return client_id, client_secret
+def _client_config(session: Session):
+    """Base d'abord (réglage admin, voir GoogleAppConfig/routers/google.py
+    admin-config), variables d'environnement en repli — permet de configurer
+    soit depuis l'écran admin, soit via Coolify, sans que l'un empêche
+    l'autre (pratique en développement local, où les variables restent plus
+    simples que de passer par l'UI)."""
+    row = session.exec(select(GoogleAppConfig)).first()
+    if row and row.client_id and row.client_secret:
+        return row.client_id, row.client_secret
+    return os.getenv("GOOGLE_CLIENT_ID"), os.getenv("GOOGLE_CLIENT_SECRET")
 
 
-def is_configured() -> bool:
-    client_id, client_secret = _client_config()
+def is_configured(session: Session) -> bool:
+    client_id, client_secret = _client_config(session)
     return bool(client_id and client_secret)
+
+
+def config_status(session: Session) -> Dict[str, Any]:
+    """Pour l'écran admin : d'où vient la configuration actuelle (jamais le
+    secret lui-même, voir GoogleAdminConfigOut dans app/models.py)."""
+    row = session.exec(select(GoogleAppConfig)).first()
+    if row and row.client_id and row.client_secret:
+        return {"client_id": row.client_id, "has_secret": True, "source": "database"}
+    env_id = os.getenv("GOOGLE_CLIENT_ID")
+    env_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if env_id and env_secret:
+        return {"client_id": env_id, "has_secret": True, "source": "environment"}
+    return {"client_id": row.client_id if row else None, "has_secret": False, "source": "none"}
 
 
 # ================================ OAuth ================================
@@ -75,8 +94,8 @@ def new_state_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def build_authorize_url(redirect_uri: str, state: str) -> str:
-    client_id, _ = _client_config()
+def build_authorize_url(redirect_uri: str, state: str, session: Session) -> str:
+    client_id, _ = _client_config(session)
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -93,8 +112,8 @@ def build_authorize_url(redirect_uri: str, state: str) -> str:
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str, redirect_uri: str) -> Dict[str, Any]:
-    client_id, client_secret = _client_config()
+def exchange_code(code: str, redirect_uri: str, session: Session) -> Dict[str, Any]:
+    client_id, client_secret = _client_config(session)
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(TOKEN_URL, data={
             "code": code,
@@ -118,8 +137,8 @@ def fetch_email(access_token: str) -> Optional[str]:
         return None
 
 
-def _refresh_access_token(refresh_token: str) -> Dict[str, Any]:
-    client_id, client_secret = _client_config()
+def _refresh_access_token(refresh_token: str, session: Session) -> Dict[str, Any]:
+    client_id, client_secret = _client_config(session)
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(TOKEN_URL, data={
             "refresh_token": refresh_token,
@@ -151,7 +170,7 @@ def _valid_access_token(account: GoogleAccount, session: Session) -> Optional[st
         return account.access_token
 
     try:
-        payload = _refresh_access_token(account.refresh_token)
+        payload = _refresh_access_token(account.refresh_token, session)
     except httpx.HTTPStatusError as exc:
         # 400/401 typique d'un refresh_token révoqué ou expiré côté Google.
         if exc.response is not None and exc.response.status_code in (400, 401):

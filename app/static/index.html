@@ -282,6 +282,23 @@
         </thead>
         <tbody id="users-body"></tbody>
       </table>
+
+      <!-- Identifiants OAuth Google (Client ID/Secret) pour toute
+           l'installation — voir /api/google/admin-config. Alternative aux
+           variables d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
+           (Coolify), pour ne pas avoir à en sortir de l'appli. -->
+      <div class="admin-google">
+        <h3>Google Calendar</h3>
+        <p class="admin-google-hint" id="admin-google-source"></p>
+        <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
+        <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
+        <div id="ga-msg"></div>
+        <div class="dialog-actions">
+          <button class="btn danger" id="ga-clear" type="button">Effacer</button>
+          <span class="spacer" style="flex:1"></span>
+          <button class="btn" id="ga-save" type="button">Enregistrer</button>
+        </div>
+      </div>
     </section>
   </main>
 

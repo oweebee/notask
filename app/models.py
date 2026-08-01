@@ -112,6 +112,39 @@ class UserSettings(SQLModel, table=True):
 # route ne renvoie jamais ces deux champs — seulement un statut
 # connecté/déconnecté/à reconnecter (needs_reauth) et l'e-mail du compte.
 
+class GoogleAppConfig(SQLModel, table=True):
+    """Identifiants OAuth de l'appli (Client ID/Secret Google Cloud), une
+    seule ligne pour toute l'installation — pas par utilisateur, contrairement
+    à GoogleAccount ci-dessous. Configurable depuis l'écran admin (onglet
+    Comptes) plutôt qu'en variables d'environnement uniquement : évite d'avoir
+    à passer par Coolify. Repli sur GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
+    (variables d'environnement) tant qu'aucune ligne n'existe ici — voir
+    google_calendar.py::_client_config(). Comme UserSettings/GoogleAccount,
+    jamais renvoyée telle quelle à un client (voir GoogleAdminConfigOut plus
+    bas, qui ne renvoie jamais client_secret)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    client_id: Optional[str] = Field(default=None, max_length=500)
+    client_secret: Optional[str] = Field(default=None, max_length=500)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GoogleAdminConfigOut(SQLModel):
+    client_id: Optional[str] = None
+    has_secret: bool = False
+    # "database" (configuré depuis l'écran admin), "environment" (variables
+    # d'environnement), "none" (rien de configuré nulle part).
+    source: str = "none"
+
+
+class GoogleAdminConfigIn(SQLModel):
+    client_id: str = Field(min_length=1, max_length=500)
+    # Vide/absent => on garde le secret déjà enregistré (voir set_admin_config
+    # dans routers/google.py) : évite d'avoir à le retaper si seul le Client
+    # ID change, et permet à l'UI de ne jamais réafficher le secret existant
+    # en clair dans le champ.
+    client_secret: Optional[str] = Field(default=None, max_length=500)
+
+
 class GoogleAccount(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, unique=True)
