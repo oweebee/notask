@@ -165,6 +165,15 @@ class GoogleAdminConfigIn(SQLModel):
     client_secret: Optional[str] = Field(default=None, max_length=500)
 
 
+class GoogleCalendarIn(SQLModel):
+    """Agenda de destination choisi dans Profil. Un identifiant d'agenda
+    Google est soit "primary", soit une adresse (…@group.calendar.google.com
+    pour un agenda secondaire) — d'où une simple chaîne, saisissable à la
+    main quand la liste déroulante n'est pas disponible (voir SCOPES dans
+    google_calendar.py)."""
+    calendar_id: str = Field(min_length=1, max_length=200)
+
+
 class GoogleAccount(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, unique=True)

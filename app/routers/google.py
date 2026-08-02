@@ -35,6 +35,7 @@ from app.models import (
     GoogleAdminConfigIn,
     GoogleAdminConfigOut,
     GoogleAppConfig,
+    GoogleCalendarIn,
     GoogleOAuthState,
     Note,
     NoteItem,
@@ -168,6 +169,44 @@ def callback(
     return RedirectResponse("/?google=connected", status_code=status.HTTP_302_FOUND)
 
 
+@router.get("/calendars")
+def list_calendars(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Agendas disponibles + celui actuellement sélectionné, pour le choix
+    de destination dans Profil. `error` non nul = liste indisponible (le
+    client bascule alors sur une saisie manuelle de l'identifiant, voir
+    chargerAgendasGoogle() dans app.js)."""
+    account = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if account is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté")
+    data = gcal.list_calendars(account, session)
+    data["current"] = account.calendar_id
+    return data
+
+
+@router.put("/calendar")
+def set_calendar(
+    payload: GoogleCalendarIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Change l'agenda de destination. Les événements déjà créés sont
+    déplacés (supprimés de l'ancien agenda puis recréés dans le nouveau,
+    voir gcal.change_calendar) — sans quoi ils resteraient orphelins."""
+    account = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if account is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté")
+
+    nouveau = payload.calendar_id.strip()
+    if not nouveau:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Identifiant d'agenda vide")
+
+    resultat = gcal.change_calendar(account, nouveau, session)
+    return {"calendar_id": account.calendar_id, **resultat}
+
+
 @router.post("/disconnect", status_code=status.HTTP_204_NO_CONTENT)
 def disconnect(
     user: User = Depends(get_current_user),
@@ -248,76 +287,3 @@ def clear_admin_config(
     if row is not None:
         session.delete(row)
         session.commit()
-
-
-# ---------------------------- Debug temporaire ----------------------------
-# Endpoint de diagnostic ponctuel : sync_note()/sync_item() avalent toutes
-# leurs exceptions (voir google_calendar.py, en tête de fichier — un souci
-# Google ne doit jamais faire échouer la sauvegarde d'une notask), donc
-# aucune erreur ne remonte jamais au client ni n'est consultable sans accès
-# aux logs serveur. Le temps de diagnostiquer une notask qui reste avec
-# google_event_id=null malgré une resauvegarde, cet endpoint (admin
-# uniquement) refait le même appel Google en clair, SANS avaler l'erreur,
-# pour voir le vrai code HTTP / message renvoyé par Google. À retirer une
-# fois le diagnostic terminé — ce n'est pas un endpoint destiné à rester.
-@router.post("/debug-sync/{note_id}")
-def debug_sync(
-    note_id: int,
-    admin: User = Depends(get_current_admin),
-    session: Session = Depends(get_session),
-):
-    # Tout est dans un seul bloc try/except large (pas seulement autour de
-    # l'appel Google) : la 1re version de cet endpoint renvoyait un 500 brut
-    # ("Internal Server Error", middleware Starlette par défaut) sans le
-    # moindre detail exploitable — vu que TOUT ce qui est en dehors d'un
-    # try/except explicite peut lever. On préfère ici tout attraper et
-    # renvoyer le traceback complet dans la réponse JSON plutôt que de
-    # deviner à l'aveugle sans accès aux logs serveur.
-    import traceback
-
-    info: dict = {"note_id": note_id}
-    try:
-        note = session.get(Note, note_id)
-        if note is None or note.user_id != admin.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
-
-        info["due_at"] = note.due_at.isoformat() if note.due_at else None
-        info["calendar_title"] = note.calendar_title
-        info["google_event_id"] = note.google_event_id
-
-        account = gcal._account_for(note.user_id, session)
-        if account is None:
-            info["step"] = "account"
-            info["error"] = "Aucun compte Google lié pour cet utilisateur."
-            return info
-
-        info["account_email"] = account.email
-        info["account_needs_reauth"] = account.needs_reauth
-        info["account_calendar_id"] = account.calendar_id
-        info["has_refresh_token"] = bool(account.refresh_token)
-
-        import httpx as _httpx
-
-        token = gcal._valid_access_token(account, session)
-        info["access_token_obtained"] = bool(token)
-        if not token:
-            info["step"] = "token"
-            info["needs_reauth_after_attempt"] = account.needs_reauth
-            return info
-
-        with _httpx.Client(timeout=gcal.HTTP_TIMEOUT) as client:
-            resp = client.post(
-                gcal._events_url(account),
-                headers={"Authorization": f"Bearer {token}"},
-                json=gcal._event_body(note.calendar_title or "(sans titre)", note.due_at, "note", note.id),
-            )
-        info["step"] = "create_event"
-        info["status_code"] = resp.status_code
-        info["response_body"] = resp.text[:2000]
-        return info
-    except HTTPException:
-        raise
-    except Exception:
-        info["step"] = "exception"
-        info["traceback"] = traceback.format_exc()
-        return info

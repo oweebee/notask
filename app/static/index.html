@@ -505,6 +505,21 @@
       <span id="profil-google-label">Google Calendar : vérification…</span>
     </div>
     <div id="profil-google-msg"></div>
+
+    <!-- Agenda de destination. Masqué tant que le compte n'est pas connecté.
+         La liste déroulante demande le scope calendar.readonly ; si Google
+         la refuse (compte connecté avant l'ajout de ce scope), le champ de
+         saisie manuelle prend le relais — voir chargerAgendasGoogle(). -->
+    <div class="profil-google-cal" id="profil-google-cal" hidden>
+      <label class="profil-google-cal-label" for="profil-google-cal-select">Agenda de destination</label>
+      <select id="profil-google-cal-select"></select>
+      <input id="profil-google-cal-manuel" type="text" placeholder="Identifiant de l'agenda (ex. xxxx@group.calendar.google.com)" hidden>
+      <p class="profil-google-cal-hint" id="profil-google-cal-hint" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" id="profil-google-cal-save" type="button">Enregistrer l'agenda</button>
+      </div>
+    </div>
+
     <div class="dialog-actions">
       <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
       <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>

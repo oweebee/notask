@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-fix-synchro-google-token-naif-77';
+const BUILD_VERSION = '2026-08-02-choix-agenda-google-78';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1477,10 +1477,83 @@ async function refreshGoogleStatus() {
       label.textContent = `Google Calendar : connecté (${st.email || 'compte Google'})`;
       btnDisconnect.hidden = false;
     }
+    // Le choix de l'agenda n'a de sens qu'une fois le compte relié.
+    $('#profil-google-cal').hidden = !st.connected;
+    if (st.connected) chargerAgendasGoogle();
   } catch {
     label.textContent = 'Google Calendar : statut indisponible';
   }
 }
+
+// Remplit le sélecteur d'agenda de destination. Google refuse
+// calendarList.list sans le scope calendar.readonly : un compte relié avant
+// l'ajout de ce scope reçoit une erreur "scope", auquel cas on bascule sur
+// la saisie manuelle de l'identifiant plutôt que de bloquer la
+// fonctionnalité (l'écriture, elle, ne demande que calendar.events et
+// fonctionne déjà dans n'importe quel agenda).
+async function chargerAgendasGoogle() {
+  const select = $('#profil-google-cal-select');
+  const manuel = $('#profil-google-cal-manuel');
+  const hint = $('#profil-google-cal-hint');
+  select.innerHTML = '';
+  hint.hidden = true;
+  try {
+    const data = await api('/google/calendars');
+    if (data.error || !data.calendars.length) {
+      select.hidden = true;
+      manuel.hidden = false;
+      manuel.value = data.current || '';
+      hint.hidden = false;
+      hint.textContent = data.error === 'scope'
+        ? "Liste indisponible : reconnectez le compte pour autoriser la lecture des agendas. En attendant, collez l'identifiant de l'agenda (Google Agenda → Paramètres de l'agenda → Intégrer l'agenda → ID de l'agenda)."
+        : "Liste des agendas indisponible pour le moment. Saisissez l'identifiant de l'agenda à la main.";
+      return;
+    }
+    select.hidden = false;
+    manuel.hidden = true;
+    for (const cal of data.calendars) {
+      const opt = document.createElement('option');
+      opt.value = cal.id;
+      opt.textContent = cal.primary ? `${cal.summary} (principal)` : cal.summary;
+      if (cal.id === data.current) opt.selected = true;
+      select.append(opt);
+    }
+  } catch {
+    select.hidden = true;
+    manuel.hidden = false;
+    hint.hidden = false;
+    hint.textContent = "Impossible de contacter le serveur pour lister les agendas.";
+  }
+}
+
+$('#profil-google-cal-save').addEventListener('click', async () => {
+  const select = $('#profil-google-cal-select');
+  const manuel = $('#profil-google-cal-manuel');
+  const calendarId = (manuel.hidden ? select.value : manuel.value).trim();
+  if (!calendarId) {
+    msg($('#profil-google-msg'), "Choisissez ou saisissez un agenda.", 'error');
+    return;
+  }
+  const btn = $('#profil-google-cal-save');
+  btn.disabled = true;
+  // Le changement d'agenda déplace les événements existants côté serveur
+  // (suppression dans l'ancien puis recréation dans le nouveau, voir
+  // change_calendar) : ça peut prendre quelques secondes s'il y en a
+  // beaucoup, d'où le retour visuel.
+  msg($('#profil-google-msg'), "Déplacement des événements en cours…", 'ok');
+  try {
+    const r = await api('/google/calendar', {
+      method: 'PUT',
+      body: JSON.stringify({ calendar_id: calendarId }),
+    });
+    let texte = `Agenda de destination enregistré. ${r.moved} événement(s) déplacé(s).`;
+    if (r.orphans) texte += ` ${r.orphans} n'ont pas pu être supprimé(s) de l'ancien agenda, à retirer à la main.`;
+    msg($('#profil-google-msg'), texte, 'ok');
+  } catch {
+    msg($('#profil-google-msg'), "Échec du changement d'agenda, réessayez.", 'error');
+  }
+  btn.disabled = false;
+});
 
 $('#profil-google-connect').addEventListener('click', () => {
   // Navigation complète (pas un fetch) : Google doit pouvoir rediriger le

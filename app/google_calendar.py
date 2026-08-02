@@ -43,7 +43,18 @@ REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 
-SCOPES = "openid email https://www.googleapis.com/auth/calendar.events"
+# calendar.events suffit à créer/modifier/supprimer les événements, y compris
+# dans un agenda secondaire. calendar.readonly n'est demandé QUE pour lister
+# les agendas de l'utilisateur (choix de l'agenda de destination dans Profil) :
+# calendar.events ne donne pas accès à calendarList.list. Un compte connecté
+# avant l'ajout de ce scope continue de fonctionner pour la synchro — seule la
+# liste déroulante des agendas sera indisponible tant qu'il n'est pas reconnecté
+# (l'écran Profil bascule alors sur une saisie manuelle de l'identifiant).
+SCOPES = (
+    "openid email"
+    " https://www.googleapis.com/auth/calendar.events"
+    " https://www.googleapis.com/auth/calendar.readonly"
+)
 
 # Marque tout événement créé par notask, pour ne jamais tirer (pull_changes)
 # le reste de l'agenda Google de l'utilisateur — seuls les événements portant
@@ -311,6 +322,48 @@ def delete_event(account: GoogleAccount, session: Session, event_id: str) -> boo
         return False
 
 
+def list_calendars(account: GoogleAccount, session: Session) -> Dict[str, Any]:
+    """Liste les agendas de l'utilisateur, pour choisir celui de destination.
+
+    Renvoie {"calendars": [...], "error": None} ou {"calendars": [],
+    "error": "..."} — jamais d'exception : l'écran Profil doit rester
+    utilisable même si Google refuse (cas courant : compte connecté avant
+    l'ajout du scope calendar.readonly, voir SCOPES). Seuls les agendas où
+    l'utilisateur peut écrire sont renvoyés (accessRole owner/writer) : y
+    proposer un agenda en lecture seule ne mènerait qu'à un échec à la
+    première synchro."""
+    token = _valid_access_token(account, session)
+    if not token:
+        return {"calendars": [], "error": "reauth"}
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+            resp = client.get(
+                f"{CALENDAR_API}/users/me/calendarList",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"minAccessRole": "writer", "showHidden": "true"},
+            )
+            if resp.status_code == 403:
+                return {"calendars": [], "error": "scope"}
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+    except httpx.HTTPError:
+        log.exception("Échec listage des agendas Google")
+        return {"calendars": [], "error": "network"}
+
+    return {
+        "calendars": [
+            {
+                "id": it.get("id"),
+                "summary": it.get("summary") or it.get("id"),
+                "primary": bool(it.get("primary")),
+            }
+            for it in items
+            if it.get("id")
+        ],
+        "error": None,
+    }
+
+
 def _list_changes_page(account: GoogleAccount, token: str, page_token: Optional[str], sync_token: Optional[str]) -> Dict[str, Any]:
     params = {"singleEvents": "true", "privateExtendedProperty": EXT_PROP_FILTER}
     if page_token:
@@ -468,6 +521,70 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
             session.refresh(item)
     except Exception:
         log.exception("Échec synchro Google Calendar (ligne %s)", item.id)
+
+
+def change_calendar(account: GoogleAccount, new_calendar_id: str, session: Session) -> Dict[str, Any]:
+    """Change l'agenda de destination et y redéplace les événements existants.
+
+    Un événement Google appartient à UN agenda : changer `calendar_id` sans
+    rien faire d'autre laisserait tous les événements déjà créés dans
+    l'ancien agenda, définitivement orphelins (plus aucune notask ne
+    pointerait dessus pour les mettre à jour ou les supprimer). On les
+    supprime donc de l'ANCIEN agenda AVANT de basculer, puis on laisse
+    sync_note()/sync_item() les recréer dans le nouveau.
+
+    L'ordre importe : delete_event() utilise account.calendar_id, la
+    suppression doit donc avoir lieu tant qu'il vaut encore l'ancien.
+    Renvoie un petit compte rendu (déplacés / non supprimés) plutôt que de
+    lever : un échec de nettoyage ne doit pas empêcher le changement."""
+    ancien = account.calendar_id
+    resultat = {"moved": 0, "orphans": 0}
+    if new_calendar_id == ancien:
+        return resultat
+
+    notes = session.exec(
+        select(Note).where(Note.user_id == account.user_id, Note.google_event_id.is_not(None))
+    ).all()
+    items = session.exec(
+        select(NoteItem)
+        .join(Note, NoteItem.note_id == Note.id)
+        .where(Note.user_id == account.user_id, NoteItem.google_event_id.is_not(None))
+    ).all()
+
+    for objet in [*notes, *items]:
+        if delete_event(account, session, objet.google_event_id):
+            resultat["moved"] += 1
+        else:
+            # Suppression impossible (réseau, droits...) : l'événement reste
+            # peut-être dans l'ancien agenda. On oublie quand même la
+            # référence, sinon la notask resterait accrochée à un agenda
+            # qu'elle n'utilise plus et ne serait jamais recréée dans le
+            # nouveau — un orphelin visible vaut mieux qu'une notask muette.
+            resultat["orphans"] += 1
+        objet.google_event_id = None
+        session.add(objet)
+
+    account.calendar_id = new_calendar_id
+    # Le jeton de synchro incrémentale est propre à un agenda : le garder
+    # ferait tirer des changements de l'ancien. On repart d'une synchro
+    # complète sur le nouvel agenda.
+    account.sync_token = None
+    account.updated_at = utcnow()
+    session.add(account)
+    session.commit()
+
+    # Recréation dans le nouvel agenda (chaque appel avale ses propres
+    # erreurs, cf. sync_note/sync_item).
+    for note in notes:
+        session.refresh(note)
+        sync_note(note, session)
+    for item in items:
+        session.refresh(item)
+        note = session.get(Note, item.note_id)
+        if note is not None:
+            sync_item(item, note, session)
+
+    return resultat
 
 
 # ========================= Synchro Google -> notask =========================
