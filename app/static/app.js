@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-lecteur-audio-dans-le-contenu-85';
+const BUILD_VERSION = '2026-08-02-pause-lecture-pendant-capture-86';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -3369,6 +3369,40 @@ function extensionAudio(mime) {
 
 let enregistrementEnCours = null;
 
+/* Lectures interrompues par une capture micro, à reprendre après coup.
+
+   Portée réelle : les notes vocales de l'appli, plus tout <audio>/<video>
+   présent dans la page. Une page web ne peut PAS mettre en pause une autre
+   application (Spotify, YouTube dans un autre onglet, lecteur du
+   téléphone) — aucune API navigateur ne le permet, et prétendre le
+   contraire serait faux. Sur Android, le système coupe généralement de
+   lui-même la lecture en cours quand une appli prend le micro. */
+let lecturesSuspendues = [];
+
+function captureMicroActive() {
+  return !!(enregistrementEnCours || dicteeEnCours);
+}
+
+function suspendreLecturesPourMicro() {
+  // On n'écrase pas une liste déjà constituée : si l'enregistrement démarre
+  // pendant une dictée (ou l'inverse), la seconde capture ne doit pas
+  // repartir d'une liste vide et faire oublier ce qu'il faut reprendre.
+  if (lecturesSuspendues.length) return;
+  lecteursAudio.forEach((a) => { if (!a.paused) { a.pause(); lecturesSuspendues.push(a); } });
+  document.querySelectorAll('audio, video').forEach((el) => {
+    if (!el.paused) { el.pause(); lecturesSuspendues.push(el); }
+  });
+}
+
+function reprendreLecturesApresMicro() {
+  // Tant qu'une capture reste active (dictée lancée pendant un
+  // enregistrement, par exemple), on ne reprend rien.
+  if (captureMicroActive()) return;
+  const aReprendre = lecturesSuspendues;
+  lecturesSuspendues = [];
+  aReprendre.forEach((a) => a.play().catch(() => {}));
+}
+
 async function basculerNoteVocale(btnSel, onFichier) {
   const btn = $(btnSel);
 
@@ -3427,6 +3461,7 @@ async function basculerNoteVocale(btnSel, onFichier) {
     btn.classList.remove('is-recording');
     btn.innerHTML = ICONS.mic;
     btn.title = `Note vocale (${MAX_AUDIO_MB} Mo max)`;
+    reprendreLecturesApresMicro();
 
     if (!morceaux.length) return;
     const type = recorder.mimeType || mime || 'audio/webm';
@@ -3438,6 +3473,10 @@ async function basculerNoteVocale(btnSel, onFichier) {
       alert(`Enregistrement arrêté : limite de ${MAX_AUDIO_MB} Mo atteinte. La partie enregistrée est conservée.`);
     }
   };
+
+  // Toute lecture en cours est mise en pause le temps de l'enregistrement :
+  // sans ça, le micro réenregistrerait le haut-parleur.
+  suspendreLecturesPourMicro();
 
   // timeslice de 1s : sans lui, ondataavailable n'est appelé qu'à l'arrêt et
   // la limite de taille ne pourrait jamais être surveillée en cours de route.
@@ -3523,6 +3562,10 @@ function basculerDictee(btnSel, cibleFn, avantDemarrage) {
     btn.classList.remove('is-recording');
     btn.innerHTML = ICONS.dictee;
     btn.title = 'Dictée vocale (parler pour écrire)';
+    // Après terminer() seulement, pas dans onend : la reconnaissance se
+    // relance d'elle-même après un silence, reprendre la lecture à chaque
+    // relance la ferait hoqueter pendant toute la dictée.
+    reprendreLecturesApresMicro();
   };
 
   reco.onerror = (e) => {
@@ -3543,6 +3586,7 @@ function basculerDictee(btnSel, cibleFn, avantDemarrage) {
     terminer();
   };
 
+  suspendreLecturesPourMicro();
   try {
     reco.start();
   } catch {
@@ -4865,11 +4909,17 @@ function brancherLecteurAudio(bloc, url, blob) {
       redessiner();
     });
     audio.addEventListener('ended', () => {
-      btn.innerHTML = ICONS.play;
       audio.currentTime = 0;
       minuteur.textContent = formatDuree(audio.duration);
       redessiner();
     });
+
+    // Icône pilotée par les ÉVÉNEMENTS du lecteur, et non par le clic : la
+    // lecture peut aussi être interrompue de l'extérieur (démarrage d'un
+    // enregistrement, lecture d'une autre note vocale). Câblée sur le clic,
+    // l'icône affichait alors « pause » sur un lecteur pourtant à l'arrêt.
+    audio.addEventListener('play', () => { btn.innerHTML = ICONS.pause; });
+    audio.addEventListener('pause', () => { btn.innerHTML = ICONS.play; });
 
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -4882,10 +4932,8 @@ function brancherLecteurAudio(bloc, url, blob) {
         // jamais insérés dans le document et resteraient introuvables.
         lecteursAudio.forEach((a) => { if (a !== audio) a.pause(); });
         audio.play().catch(() => {});
-        btn.innerHTML = ICONS.pause;
       } else {
         audio.pause();
-        btn.innerHTML = ICONS.play;
       }
     });
 
