@@ -2454,6 +2454,52 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   margin: .4rem 0;
 }
 
+/* Note vocale insérée dans le corps d'une notask : rectangle occupant toute
+   la largeur, bouton lecture à gauche, forme d'onde au centre, durée à
+   droite. Le bloc est contenteditable="false" côté HTML — il se sélectionne
+   d'un bloc et ne peut pas être disloqué caractère par caractère. */
+.note-audio {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: 100%;
+  box-sizing: border-box;
+  margin: .45rem 0;
+  padding: .5rem .65rem;
+  background: rgba(255,255,255,.07);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--shape-sm);
+  user-select: none;
+}
+.note-audio-play {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,213,79,.18);
+  color: #ffd54f;
+  cursor: pointer;
+}
+.note-audio-play:hover { background: rgba(255,213,79,.3); }
+.note-audio-play svg { width: 17px; height: 17px; }
+.note-audio-wave {
+  flex: 1;
+  min-width: 0; /* sans ça le canvas impose sa largeur et déborde de la carte */
+  height: 34px;
+  cursor: pointer;
+}
+.note-audio-time {
+  flex: none;
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums; /* la durée ne doit pas sautiller en défilant */
+  color: var(--md-on-surface-variant);
+}
+
 /* ============================ Pièces jointes ============================
    Deux contextes : sur la carte (aperçu seul, lecture) et dans l'édition
    simple (miniatures + suppression, voir renderAttachmentsSimple() dans

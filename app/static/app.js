@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-notes-vocales-et-dictee-84';
+const BUILD_VERSION = '2026-08-02-lecteur-audio-dans-le-contenu-85';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -529,6 +529,8 @@ const ICONS = {
   // volontairement distinct du micro seul, les deux boutons étant voisins.
   dictee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="5" height="9.5" rx="2.5"/><path d="M1.8 10.5a4.7 4.7 0 0 0 9.4 0"/><path d="M6.5 15v2.5"/><path d="M14 8h7"/><path d="M14 12h7"/><path d="M14 16h5"/></svg>',
   stop: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7.5" y="5.5" width="3.5" height="13" rx="1"/><rect x="13" y="5.5" width="3.5" height="13" rx="1"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
   fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
 
@@ -1892,6 +1894,7 @@ function renderTrash() {
     // images insérées dans le texte (voir NOTE_IMG_MARK), à déchiffrer et
     // hydrater après coup.
     hydrateInlineImages(el, n);
+    hydrateInlineAudio(el, n);
     ajouterBoutonsCopieCode(el);
 
     el.querySelector('[data-act=restore]').onclick = async () => {
@@ -2718,6 +2721,7 @@ function renderNotes() {
     const emplacement = el.querySelector('.term-slot');
     if (emplacement) emplacement.replaceWith(creerTerminalMasque());
     hydrateInlineImages(el, n);
+    hydrateInlineAudio(el, n);
     ajouterBoutonsCopieCode(el);
 
     // Déchiffrement paresseux des miniatures — chaque image n'est décodée
@@ -3554,9 +3558,21 @@ function basculerDictee(btnSel, cibleFn, avantDemarrage) {
 // --- Composeur ---
 $('#nc-mic-btn').innerHTML = ICONS.mic;
 $('#nc-dictee-btn').innerHTML = ICONS.dictee;
+// mousedown et pas click : au clic, le curseur a déjà quitté la zone de
+// texte et la sélection est perdue. Même approche que le tableau blanc.
+$('#nc-mic-btn').addEventListener('mousedown', () => memoriserCurseur($('#nc-content')));
 $('#nc-mic-btn').addEventListener('click', () => {
   composerExpand();
-  basculerNoteVocale('#nc-mic-btn', (fichier) => queueComposerFiles([fichier]));
+  basculerNoteVocale('#nc-mic-btn', (fichier) => {
+    // La notask n'existe pas encore : pas d'identifiant de pièce jointe.
+    // Marqueur provisoire `[audio:tmpN]` (N = rang dans la file), réécrit
+    // avec le vrai id juste après la création — exactement le mécanisme
+    // déjà en place pour les dessins insérés dans le texte.
+    const idProvisoire = 'tmp' + composerPendingFiles.length;
+    composerPendingFiles.push(fichier);
+    renderComposerAttachments();
+    insererAudioDansContenu(idProvisoire, URL.createObjectURL(fichier), fichier);
+  });
 });
 $('#nc-dictee-btn').addEventListener('click', () => {
   basculerDictee('#nc-dictee-btn', () => $('#nc-content'), composerExpand);
@@ -3565,8 +3581,22 @@ $('#nc-dictee-btn').addEventListener('click', () => {
 // --- Édition rapide ---
 $('#dns-mic-btn').innerHTML = ICONS.mic;
 $('#dns-dictee-btn').innerHTML = ICONS.dictee;
+$('#dns-mic-btn').addEventListener('mousedown', () => memoriserCurseur($('#dns-content')));
 $('#dns-mic-btn').addEventListener('click', () => {
-  basculerNoteVocale('#dns-mic-btn', (fichier) => handleIncomingAttachments([fichier]));
+  basculerNoteVocale('#dns-mic-btn', async (fichier) => {
+    const note = state.editingNote;
+    if (!note) return;
+    try {
+      const created = await uploadAttachment(note.id, fichier);
+      created.meta = { name: fichier.name, mime: fichier.type };
+      if (!note.attachments) note.attachments = [];
+      note.attachments.push(created);
+      renderAttachmentsSimple();
+      insererAudioDansContenu(created.id, URL.createObjectURL(fichier), fichier);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
 });
 $('#dns-dictee-btn').addEventListener('click', () => {
   // En mode liste à cocher, #dns-content est masqué : on dicte alors dans la
@@ -3672,10 +3702,17 @@ $('#nc-add').addEventListener('click', async () => {
       let remplace = false;
       results.forEach((r, i) => {
         if (r.status !== 'fulfilled') return;
-        const marqueur = `![att:tmp${i}]`;
-        if (!contenuFinal.includes(marqueur)) return;
-        contenuFinal = contenuFinal.split(marqueur).join(`![att:${r.value.id}]`);
-        remplace = true;
+        // Deux familles de marqueurs provisoires à réécrire : les dessins
+        // (`![att:tmpN]`) et les notes vocales (`[audio:tmpN]`). Elles
+        // partagent la même file composerPendingFiles, donc le même rang N.
+        for (const [avant, apres] of [
+          [`![att:tmp${i}]`, `![att:${r.value.id}]`],
+          [`[audio:tmp${i}]`, `[audio:${r.value.id}]`],
+        ]) {
+          if (!contenuFinal.includes(avant)) continue;
+          contenuFinal = contenuFinal.split(avant).join(apres);
+          remplace = true;
+        }
       });
       if (remplace && !composerChecklist) {
         await api('/notes/' + created.id, {
@@ -4087,6 +4124,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-description').value = note.description || '';
   $('#dns-content').innerHTML = renderFormatted(note.content || '');
   hydrateInlineImages($('#dns-content'), note);
+  hydrateInlineAudio($('#dns-content'), note);
   ajouterBoutonsCopieCode($('#dns-content'));
   renderDnsMode();
   $('#dns-due').value = note.due_at || '';
@@ -4477,6 +4515,13 @@ function richToText(root) {
       // le contenu porte déjà ses propres retours à la ligne.
       case 'div': {
         if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
+        // Lecteur de note vocale : on ne conserve que le marqueur, jamais
+        // le squelette HTML ni les octets audio (cf. le cas 'img'). Le
+        // retour avant/après évite que le bloc se colle au texte voisin
+        // quand il est réinséré au rendu suivant.
+        if (node.classList.contains('note-audio')) {
+          return node.dataset.att ? `\n[audio:${node.dataset.att}]\n` : '';
+        }
         return '\n' + inner();
       }
       case 'p': return '\n' + inner();
@@ -4496,6 +4541,23 @@ function richToText(root) {
    hydrateInlineImages(). Ce détour évite de mettre une URL temporaire ou
    des octets dans le contenu — seul l'identifiant voyage. */
 const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
+
+/* Note vocale insérée dans le corps d'une notask : `[audio:12]`. Même
+   principe exact que NOTE_IMG_MARK — seul l'identifiant de la pièce jointe
+   voyage dans le texte (donc chiffré avec lui), les octets ne sont
+   déchiffrés qu'au rendu par hydrateInlineAudio(). */
+const NOTE_AUDIO_MARK = /\[audio:(\w+)\]/g;
+
+/* Squelette d'un lecteur de note vocale. contenteditable="false" : sans
+   lui, le bloc serait éditable caractère par caractère dans la zone riche
+   et l'utilisateur pourrait le disloquer sans s'en rendre compte. */
+function audioBlockHtml(attId) {
+  return `<div class="note-audio" data-att="${attId}" contenteditable="false">`
+    + `<button type="button" class="note-audio-play" aria-label="Lire la note vocale">${ICONS.play}</button>`
+    + `<canvas class="note-audio-wave"></canvas>`
+    + `<span class="note-audio-time">--:--</span>`
+    + `</div>`;
+}
 
 /* Texte coloré dans le corps d'une notask : `[c:e53935]texte[/c]`. Même
    principe que le gras/italique — un marqueur dans le texte, donc chiffré
@@ -4678,9 +4740,189 @@ function hydrateInlineImages(root, note) {
   });
 }
 
+/* Contexte audio partagé : un par onglet suffit, et les navigateurs en
+   limitent le nombre — en créer un par note vocale finirait par lever une
+   erreur sur une notask qui en contient plusieurs. Créé à la demande
+   seulement, pour ne pas en ouvrir un si aucune note vocale n'est lue. */
+// Registre des lecteurs créés (new Audio n'insère rien dans le document :
+// impossible de les retrouver par un sélecteur CSS). Sert à n'avoir qu'une
+// note vocale en lecture à la fois.
+const lecteursAudio = new Set();
+
+let _audioCtx = null;
+function contexteAudio() {
+  if (!_audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    _audioCtx = new Ctx();
+  }
+  return _audioCtx;
+}
+
+function formatDuree(secondes) {
+  if (!Number.isFinite(secondes)) return '--:--';
+  const s = Math.max(0, Math.round(secondes));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/* Calcule les crêtes affichées, en moyennant la valeur absolue sur des
+   tranches égales. On ne dessine PAS l'échantillon brut : à 48 kHz un
+   canvas de 300px devrait en afficher des centaines de milliers, ce qui
+   donnerait un pâté illisible et coûterait cher à tracer. */
+function cretesAudio(buffer, nbBarres) {
+  const data = buffer.getChannelData(0);
+  const parTranche = Math.max(1, Math.floor(data.length / nbBarres));
+  const cretes = [];
+  let max = 0;
+  for (let i = 0; i < nbBarres; i++) {
+    let somme = 0;
+    const debut = i * parTranche;
+    const fin = Math.min(data.length, debut + parTranche);
+    for (let j = debut; j < fin; j++) somme += Math.abs(data[j]);
+    const v = fin > debut ? somme / (fin - debut) : 0;
+    cretes.push(v);
+    if (v > max) max = v;
+  }
+  // Normalisation : un enregistrement à faible volume doit rester lisible.
+  return max > 0 ? cretes.map((v) => v / max) : cretes;
+}
+
+function dessinerOnde(canvas, cretes, progression) {
+  const ratio = window.devicePixelRatio || 1;
+  const largeur = canvas.clientWidth || 240;
+  const hauteur = canvas.clientHeight || 36;
+  // Le canvas doit être dimensionné en pixels RÉELS, sinon le tracé est
+  // flou sur les écrans à forte densité (mobile en particulier).
+  canvas.width = Math.round(largeur * ratio);
+  canvas.height = Math.round(hauteur * ratio);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0, 0, largeur, hauteur);
+
+  const n = cretes.length || 1;
+  const pas = largeur / n;
+  const largeurBarre = Math.max(1, pas * 0.6);
+  const milieu = hauteur / 2;
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(2, cretes[i] * (hauteur - 4));
+    const x = i * pas;
+    ctx.fillStyle = (i / n) <= progression ? '#ffd54f' : 'rgba(255,255,255,.32)';
+    ctx.fillRect(x, milieu - h / 2, largeurBarre, h);
+  }
+}
+
+/* Remplace les blocs .note-audio d'un conteneur rendu par un lecteur
+   fonctionnel : audio déchiffré, forme d'onde tracée, bouton lecture.
+   Même logique que hydrateInlineImages(), appelée aux mêmes endroits. */
+function hydrateInlineAudio(root, note) {
+  const list = (note && note.attachments) || [];
+  root.querySelectorAll('.note-audio[data-att]').forEach((bloc) => {
+    if (bloc.dataset.pret === '1') return;
+    const att = list.find((a) => String(a.id) === bloc.dataset.att);
+    if (!att) return;
+    loadAttachment(att)
+      .then((r) => brancherLecteurAudio(bloc, r.url, r.blob))
+      .catch(() => {
+        const minuteur = bloc.querySelector('.note-audio-time');
+        if (minuteur) minuteur.textContent = 'indisponible';
+      });
+  });
+}
+
+/* Rend un bloc .note-audio fonctionnel à partir d'une source déjà
+   disponible. Séparé de hydrateInlineAudio() pour pouvoir brancher aussi
+   une note vocale qu'on vient d'enregistrer : dans le composeur, la notask
+   (et donc la pièce jointe) n'existe pas encore, mais on a déjà le blob en
+   main — sans ce chemin, le lecteur resterait inerte jusqu'au premier
+   rechargement de la page. */
+function brancherLecteurAudio(bloc, url, blob) {
+  if (!bloc || bloc.dataset.pret === '1') return;
+  bloc.dataset.pret = '1';
+
+  const btn = bloc.querySelector('.note-audio-play');
+  const canvas = bloc.querySelector('.note-audio-wave');
+  const minuteur = bloc.querySelector('.note-audio-time');
+  let audio = null;
+  let cretes = null;
+
+  const redessiner = () => {
+    if (!cretes) return;
+    const p = audio && audio.duration ? audio.currentTime / audio.duration : 0;
+    dessinerOnde(canvas, cretes, p);
+  };
+
+  (async () => {
+    audio = new Audio(url);
+    audio.preload = 'metadata';
+    lecteursAudio.add(audio);
+    audio.addEventListener('loadedmetadata', () => {
+      minuteur.textContent = formatDuree(audio.duration);
+      scheduleLayoutMosaic();
+    });
+    audio.addEventListener('timeupdate', () => {
+      minuteur.textContent = formatDuree(audio.duration - audio.currentTime);
+      redessiner();
+    });
+    audio.addEventListener('ended', () => {
+      btn.innerHTML = ICONS.play;
+      audio.currentTime = 0;
+      minuteur.textContent = formatDuree(audio.duration);
+      redessiner();
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // ne pas ouvrir la notask en cliquant sur Lecture
+      if (audio.paused) {
+        // Une seule note vocale à la fois : deux lectures simultanées n'ont
+        // aucun intérêt et rendent les deux inaudibles. On passe par le
+        // registre `lecteursAudio` et PAS par un sélecteur CSS : ces
+        // éléments <audio> sont créés en mémoire (new Audio), ils ne sont
+        // jamais insérés dans le document et resteraient introuvables.
+        lecteursAudio.forEach((a) => { if (a !== audio) a.pause(); });
+        audio.play().catch(() => {});
+        btn.innerHTML = ICONS.pause;
+      } else {
+        audio.pause();
+        btn.innerHTML = ICONS.play;
+      }
+    });
+
+    // Clic sur l'onde = déplacement dans la lecture.
+    canvas.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!audio.duration) return;
+      const rect = canvas.getBoundingClientRect();
+      audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+      redessiner();
+    });
+
+    // Décodage pour la forme d'onde. Volontairement APRÈS le branchement
+    // des contrôles : si le décodage échoue (format non décodable par ce
+    // navigateur, fichier tronqué), la lecture doit rester possible — on se
+    // contente alors d'une onde plate.
+    try {
+      const ctx = contexteAudio();
+      if (!ctx) throw new Error('pas de contexte audio');
+      // slice() : decodeAudioData neutralise l'ArrayBuffer qu'on lui passe,
+      // on ne doit jamais lui donner celui du cache de pièces jointes,
+      // réutilisé ailleurs.
+      const octets = await blob.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(octets.slice(0));
+      cretes = cretesAudio(buffer, 64);
+      minuteur.textContent = formatDuree(buffer.duration);
+    } catch {
+      cretes = new Array(64).fill(0.12);
+    }
+    redessiner();
+  })();
+}
+
 function renderFormatted(text) {
   let html = escapeHtml(text);
   html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
+  html = html.replace(NOTE_AUDIO_MARK, (m, id) => audioBlockHtml(id));
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
@@ -5197,6 +5439,36 @@ function insererImageDansContenu(attId, apercuUrl) {
     editable.append(img, saut);
   }
   inlineDrawRange = null;
+  return true;
+}
+
+/* Insère un lecteur de note vocale à la position mémorisée au moment du
+   clic sur le micro (ou à la fin du contenu si le curseur n'était pas dans
+   la zone de texte). Même mécanique que insererImageDansContenu(), à ceci
+   près que le bloc est un élément de niveau bloc : on l'encadre de sauts de
+   ligne pour pouvoir continuer à écrire au-dessus comme en dessous. */
+function insererAudioDansContenu(attId, url, blob) {
+  const editable = inlineDrawTarget;
+  if (!editable) return false;
+
+  const gabarit = document.createElement('div');
+  gabarit.innerHTML = audioBlockHtml(attId);
+  const bloc = gabarit.firstElementChild;
+  const saut = document.createElement('br');
+
+  if (inlineDrawRange && editable.contains(inlineDrawRange.commonAncestorContainer)) {
+    inlineDrawRange.deleteContents();
+    inlineDrawRange.insertNode(saut);
+    inlineDrawRange.insertNode(bloc);
+  } else {
+    editable.append(bloc, saut);
+  }
+  inlineDrawRange = null;
+
+  // Lecteur immédiatement utilisable, sans attendre un rechargement : on a
+  // déjà les octets en main (cf. brancherLecteurAudio).
+  if (url && blob) brancherLecteurAudio(bloc, url, blob);
+  editable.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 }
 
