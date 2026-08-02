@@ -11,10 +11,90 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9001';
+const APP_VERSION = '0.9002';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
+
+/* ============================== Journal ==============================
+   Journal consultable depuis Outils → Journal, sans passer par la console
+   du navigateur (inaccessible en pratique sur mobile, où se produisent
+   justement la plupart des soucis : micro refusé, réseau qui coupe,
+   synchronisation Google...).
+
+   Placé tout en haut du fichier, AVANT tout le reste : une erreur survenue
+   pendant l'évaluation du script ou au premier rendu doit déjà être
+   capturée. Placé plus bas, ces erreurs-là — les plus intéressantes —
+   seraient perdues.
+
+   Tampon circulaire borné : un journal qui grandit sans fin finirait par
+   peser sur la mémoire d'un onglet laissé ouvert des jours durant. */
+const JOURNAL_MAX = 500;
+const journal = [];
+let journalAuChangement = null;   // rendu de la fenêtre, branché plus bas
+
+function ajouterAuJournal(niveau, source, message, detail) {
+  const entree = {
+    ts: new Date(),
+    niveau,                       // 'error' | 'warn' | 'info' | 'debug'
+    source: source || 'app',
+    message: String(message),
+    detail: detail === undefined ? '' : detailLisible(detail),
+  };
+  journal.push(entree);
+  if (journal.length > JOURNAL_MAX) journal.shift();
+  if (journalAuChangement) journalAuChangement();
+  return entree;
+}
+
+/* Un détail peut être une Error, un objet, un tableau… Tout est ramené à
+   du texte AU MOMENT de la journalisation : garder la référence laisserait
+   voir l'état de l'objet au moment de la CONSULTATION, pas au moment de
+   l'incident — trompeur pour un journal. */
+function detailLisible(v) {
+  if (v instanceof Error) return v.stack || `${v.name}: ${v.message}`;
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    // Références circulaires, objets natifs non sérialisables.
+    return String(v);
+  }
+}
+
+const log = {
+  error: (source, message, detail) => ajouterAuJournal('error', source, message, detail),
+  warn: (source, message, detail) => ajouterAuJournal('warn', source, message, detail),
+  info: (source, message, detail) => ajouterAuJournal('info', source, message, detail),
+  debug: (source, message, detail) => ajouterAuJournal('debug', source, message, detail),
+};
+
+/* Erreurs non rattrapées et promesses rejetées : ce sont exactement celles
+   qui n'apparaissent nulle part dans l'interface et qu'on ne peut pas
+   deviner autrement. */
+window.addEventListener('error', (e) => {
+  const ou = e.filename ? ` (${String(e.filename).split('/').pop()}:${e.lineno})` : '';
+  ajouterAuJournal('error', 'navigateur', (e.message || 'Erreur inconnue') + ou, e.error);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  ajouterAuJournal('error', 'promesse', 'Promesse rejetée sans traitement', e.reason);
+});
+
+/* console.error/warn recopiés dans le journal — sans les remplacer : la
+   sortie console normale doit rester intacte pour le débogage sur poste
+   fixe. Beaucoup de code (y compris des bibliothèques) ne signale ses
+   soucis que par ce canal. */
+['error', 'warn'].forEach((niveau) => {
+  const original = console[niveau].bind(console);
+  console[niveau] = (...args) => {
+    original(...args);
+    try {
+      ajouterAuJournal(niveau, 'console', args.map((a) => (typeof a === 'string' ? a : detailLisible(a))).join(' '));
+    } catch { /* le journal ne doit jamais casser un appel console */ }
+  };
+});
+
+log.info('app', `Démarrage de notask ${APP_VERSION}`);
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
 // Après le chargement pour ne jamais retarder l'affichage initial ; l'échec
@@ -366,11 +446,21 @@ async function api(path, options = {}) {
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
-  if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
+  if (res.status === 401) {
+    log.warn('api', `401 sur ${options.method || 'GET'} ${path} — session expirée`);
+    setToken(null); showLogin(); throw new Error('Session expirée');
+  }
   if (res.status === 204) return null;
 
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && data.detail) || 'Erreur ' + res.status);
+  if (!res.ok) {
+    // Journalisé ici, au seul endroit par lequel passent tous les appels :
+    // les appelants, eux, se contentent souvent d'un message générique et
+    // la vraie cause renvoyée par le serveur se perdait.
+    log.error('api', `${res.status} sur ${options.method || 'GET'} ${path}`, (data && data.detail) || null);
+    throw new Error((data && data.detail) || 'Erreur ' + res.status);
+  }
+  log.debug('api', `${res.status} ${options.method || 'GET'} ${path}`);
   return data;
 }
 
@@ -6619,8 +6709,141 @@ $('#btn-outils').addEventListener('click', () => {
   $('#archive-pw').value = '';
   $('#import-file').value = '';
   msg($('#outil-msg'), '');
+  majCompteJournal();
   $('#dlg-outils').showModal();
   animerOuvertureDialogue($('#dlg-outils'));
+});
+
+/* ------------------------- Fenêtre de journal ------------------------- */
+
+const LOGS_NIVEAUX = {
+  error: { libelle: 'ERREUR', classe: 'est-error' },
+  warn: { libelle: 'AVERT.', classe: 'est-warn' },
+  info: { libelle: 'INFO', classe: 'est-info' },
+  debug: { libelle: 'DÉTAIL', classe: 'est-debug' },
+};
+
+// 'debug' décoché par défaut : il contient un appel réussi par requête et
+// noierait les lignes réellement utiles.
+let logsNiveauxActifs = new Set(['error', 'warn', 'info']);
+
+function majCompteJournal() {
+  const erreurs = journal.filter((e) => e.niveau === 'error').length;
+  const el = $('#logs-compte');
+  if (!el) return;
+  el.textContent = erreurs
+    ? `${erreurs} erreur${erreurs > 1 ? 's' : ''} enregistrée${erreurs > 1 ? 's' : ''}`
+    : `${journal.length} entrée${journal.length > 1 ? 's' : ''}`;
+  el.classList.toggle('a-des-erreurs', erreurs > 0);
+}
+
+function horodatageJournal(d) {
+  const p = (n, l = 2) => String(n).padStart(l, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+function entreesJournalFiltrees() {
+  const q = ($('#logs-recherche').value || '').trim().toLowerCase();
+  return journal.filter((e) => {
+    if (!logsNiveauxActifs.has(e.niveau)) return false;
+    if (!q) return true;
+    return (e.message + ' ' + e.source + ' ' + e.detail).toLowerCase().includes(q);
+  });
+}
+
+function renderJournal() {
+  const box = $('#logs-liste');
+  if (!box) return;
+  const entrees = entreesJournalFiltrees();
+  box.innerHTML = '';
+
+  if (!entrees.length) {
+    box.innerHTML = '<p class="logs-vide">Aucune entrée pour ces filtres.</p>';
+    return;
+  }
+
+  // Plus récent en haut : on ouvre le journal pour voir ce qui vient de se
+  // passer, pas pour faire défiler l'historique depuis le démarrage.
+  for (const e of [...entrees].reverse()) {
+    const meta = LOGS_NIVEAUX[e.niveau] || LOGS_NIVEAUX.info;
+    const ligne = document.createElement('div');
+    ligne.className = `logs-ligne ${meta.classe}`;
+    ligne.innerHTML = `
+      <span class="logs-heure">${horodatageJournal(e.ts)}</span>
+      <span class="logs-niveau">${meta.libelle}</span>
+      <span class="logs-source">${escapeHtml(e.source)}</span>
+      <span class="logs-message">${escapeHtml(e.message)}</span>`;
+    if (e.detail) {
+      // Détail replié : une pile d'appels par ligne rendrait la liste
+      // illisible alors qu'on ne l'ouvre que sur une entrée à la fois.
+      const det = document.createElement('details');
+      det.className = 'logs-detail';
+      det.innerHTML = `<summary>détail</summary><pre>${escapeHtml(e.detail)}</pre>`;
+      ligne.appendChild(det);
+    }
+    box.appendChild(ligne);
+  }
+}
+
+// Rafraîchissement en direct, uniquement quand la fenêtre est ouverte :
+// re-rendre la liste à chaque entrée alors qu'elle est fermée serait du
+// travail pur perte.
+journalAuChangement = () => {
+  majCompteJournal();
+  if ($('#dlg-logs').open) renderJournal();
+};
+
+$('#logs-open').addEventListener('click', () => {
+  renderJournal();
+  $('#dlg-logs').showModal();
+  animerOuvertureDialogue($('#dlg-logs'));
+});
+
+$('#logs-filtres').addEventListener('click', (e) => {
+  const chip = e.target.closest('.logs-chip');
+  if (!chip) return;
+  const niveau = chip.dataset.niveau;
+  if (logsNiveauxActifs.has(niveau)) logsNiveauxActifs.delete(niveau);
+  else logsNiveauxActifs.add(niveau);
+  chip.classList.toggle('is-on');
+  renderJournal();
+});
+
+$('#logs-recherche').addEventListener('input', renderJournal);
+
+$('#logs-vider').addEventListener('click', () => {
+  journal.length = 0;
+  majCompteJournal();
+  renderJournal();
+});
+
+$('#logs-copier').addEventListener('click', async () => {
+  // Texte brut : c'est ce qu'on colle dans un rapport de bug. On copie ce
+  // qui est FILTRÉ à l'écran, pas tout le journal — sinon le filtre qu'on
+  // vient de poser pour isoler le problème ne servirait à rien.
+  const texte = entreesJournalFiltrees()
+    .map((e) => `${e.ts.toISOString()} [${e.niveau.toUpperCase()}] ${e.source} — ${e.message}`
+      + (e.detail ? `\n${e.detail}` : ''))
+    .join('\n');
+  const entete = `notask ${APP_VERSION} — ${navigator.userAgent}\n\n`;
+  try {
+    await navigator.clipboard.writeText(entete + texte);
+    $('#logs-copier').textContent = 'Copié';
+    setTimeout(() => { $('#logs-copier').textContent = 'Copier'; }, 1500);
+  } catch {
+    // Presse-papiers refusé (contexte non sécurisé, permission) : on ne
+    // laisse pas l'utilisateur sans solution.
+    alert("Copie impossible depuis ce navigateur. Sélectionnez le texte à la main.");
+  }
+});
+
+$('#logs-fermer').addEventListener('click', () => fermerAvecAnimation($('#dlg-logs')));
+$('#dlg-logs').addEventListener('click', (e) => {
+  if (e.target === $('#dlg-logs')) fermerAvecAnimation($('#dlg-logs'));
+});
+$('#dlg-logs').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  fermerAvecAnimation($('#dlg-logs'));
 });
 $('#dlg-outils').addEventListener('click', (e) => {
   if (e.target === $('#dlg-outils')) fermerAvecAnimation($('#dlg-outils'));

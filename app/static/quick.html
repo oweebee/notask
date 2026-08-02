@@ -493,6 +493,7 @@
        pouvoir connecter quoi que ce soit. -->
   <div class="admin-google" id="admin-google" hidden>
     <h3>Google Calendar — identifiants de l'installation</h3>
+    <p class="aide">Créés dans Google Cloud Console. Communs à tous les comptes.</p>
     <p class="admin-google-hint" id="admin-google-source"></p>
     <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
     <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
@@ -519,6 +520,7 @@
        repère visuel demandé : vert = connecté, gris = non connecté, orange =
        reconnexion nécessaire (jeton Google révoqué/expiré). -->
   <div class="profil-google" id="profil-google">
+    <p class="aide">Les notasks datées deviennent des événements de votre agenda.</p>
     <div class="profil-google-row">
       <span class="profil-google-dot" id="profil-google-dot"></span>
       <span id="profil-google-label">Google Calendar : vérification…</span>
@@ -531,6 +533,7 @@
          saisie manuelle prend le relais — voir chargerAgendasGoogle(). -->
     <div class="profil-google-cal" id="profil-google-cal" hidden>
       <label class="profil-google-cal-label" for="profil-google-cal-select">Agenda de destination</label>
+      <p class="aide">Changer d'agenda y déplace les événements déjà créés.</p>
       <!-- Champ + bouton sur UNE seule ligne : deux rangées d'actions
            empilées (une pour l'agenda, une pour connecter/déconnecter)
            mangeaient de la hauteur pour rien et donnaient des boutons
@@ -559,6 +562,7 @@
 
   <section class="outil-bloc">
     <h3>sauvegarde</h3>
+    <p class="aide">Archive chiffrée de toutes vos notasks. Sans ce mot de passe, elle est irrécupérable.</p>
     <div class="field">
       <label for="archive-pw">Mot de passe de l'archive</label>
       <input id="archive-pw" type="password" autocomplete="off">
@@ -573,6 +577,44 @@
     <input type="file" id="import-file" accept=".notask,application/octet-stream" hidden>
     <div id="outil-msg"></div>
   </section>
+
+  <!-- Journal : une ligne dédiée, le détail vit dans sa propre fenêtre
+       (#dlg-logs) pour ne pas gonfler la boîte Outils. -->
+  <section class="outil-bloc">
+    <h3>journal</h3>
+    <div class="outil-ligne">
+      <p class="outil-ligne-texte">
+        Erreurs et événements récents, à joindre à un signalement.
+        <span class="outil-ligne-compte" id="logs-compte"></span>
+      </p>
+      <button class="btn ghost" id="logs-open" type="button">Ouvrir le journal</button>
+    </div>
+  </section>
+</dialog>
+
+<!-- Fenêtre de journal. Volontairement séparée de #dlg-outils : elle
+     s'ouvre par-dessus et se referme sans quitter les Outils. -->
+<dialog id="dlg-logs">
+  <h2>Journal</h2>
+
+  <div class="logs-barre">
+    <div class="logs-filtres" id="logs-filtres">
+      <button type="button" class="logs-chip is-on" data-niveau="error">Erreurs</button>
+      <button type="button" class="logs-chip is-on" data-niveau="warn">Avertissements</button>
+      <button type="button" class="logs-chip is-on" data-niveau="info">Infos</button>
+      <button type="button" class="logs-chip" data-niveau="debug">Détails</button>
+    </div>
+    <input type="search" id="logs-recherche" placeholder="Filtrer…">
+  </div>
+
+  <div class="logs-liste" id="logs-liste"></div>
+
+  <div class="dialog-actions">
+    <button class="btn danger" id="logs-vider" type="button">Vider</button>
+    <span class="spacer" style="flex:1"></span>
+    <button class="btn ghost" id="logs-copier" type="button">Copier</button>
+    <button class="btn" id="logs-fermer" type="button">Fermer</button>
+  </div>
 </dialog>
 
 <script>window.NOTASK_QUICK_CAPTURE = true;</script>

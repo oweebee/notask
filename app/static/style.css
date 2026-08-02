@@ -376,6 +376,160 @@ header.topbar .who {
 .outil-actions { display: flex; gap: .5rem; margin-top: .25rem; }
 #dlg-outils[open] { width: min(552px, 94vw); } /* +20%, même bump que la base dialog */
 
+/* Note descriptive sous un titre de réglage : volontairement discrète et
+   sur une seule ligne. Elle situe l'option, elle ne la documente pas — un
+   paragraphe ici serait lu par personne et alourdirait chaque écran. */
+.aide {
+  margin: -.25rem 0 .6rem;
+  font-size: .75rem;
+  line-height: 1.35;
+  color: var(--md-on-surface-variant);
+  opacity: .85;
+}
+
+/* Ligne d'accès au journal dans Outils : texte à gauche, bouton à droite. */
+.outil-ligne {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.outil-ligne-texte {
+  flex: 1;
+  min-width: 12rem;
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.4;
+  color: var(--md-on-surface-variant);
+}
+.outil-ligne-compte {
+  display: block;
+  margin-top: .15rem;
+  font-size: .75rem;
+  color: var(--md-on-surface-variant);
+}
+/* Un décompte d'erreurs doit se distinguer du simple nombre d'entrées :
+   c'est la seule information de cet écran qui appelle une action. */
+.outil-ligne-compte.a-des-erreurs { color: #ff8a80; font-weight: 500; }
+
+/* ------------------------------ Journal ------------------------------ */
+#dlg-logs[open] { width: min(920px, 94vw); }
+.logs-barre {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: .6rem;
+}
+.logs-filtres { display: flex; gap: .35rem; flex-wrap: wrap; }
+.logs-chip {
+  padding: .3rem .65rem;
+  font-size: .75rem;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+}
+.logs-chip.is-on {
+  background: rgba(255,255,255,.14);
+  color: var(--md-on-surface);
+  border-color: transparent;
+}
+#logs-recherche {
+  flex: 1;
+  min-width: 9rem;
+  padding: .4rem .65rem;
+  font: inherit;
+  font-size: .8125rem;
+  color: var(--md-on-surface);
+  background: var(--md-surface-2);
+  border: none;
+  border-radius: var(--shape-xs);
+}
+
+.logs-liste {
+  /* Hauteur bornée + défilement : le journal peut compter des centaines de
+     lignes, la fenêtre ne doit pas s'étirer hors de l'écran. */
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--shape-xs);
+  background: rgba(0,0,0,.22);
+}
+.logs-vide {
+  margin: 0;
+  padding: 1.25rem;
+  text-align: center;
+  font-size: .8125rem;
+  color: var(--md-on-surface-variant);
+}
+.logs-ligne {
+  display: grid;
+  /* Colonnes fixes pour heure/niveau/source : alignées d'une ligne à
+     l'autre, l'oeil descend en colonne au lieu de chercher où commence
+     chaque champ. Le message prend le reste. */
+  grid-template-columns: auto auto auto 1fr;
+  align-items: baseline;
+  gap: .1rem .6rem;
+  padding: .35rem .6rem;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  font-size: .78125rem;
+}
+.logs-ligne:last-child { border-bottom: none; }
+.logs-heure {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .72rem;
+  color: var(--md-on-surface-variant);
+}
+.logs-niveau {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .68rem;
+  letter-spacing: .04em;
+}
+.logs-source {
+  font-size: .7rem;
+  padding: .05rem .35rem;
+  border-radius: 4px;
+  background: rgba(255,255,255,.09);
+  color: var(--md-on-surface-variant);
+}
+.logs-message {
+  color: var(--md-on-surface);
+  overflow-wrap: anywhere; /* une URL longue ne doit pas élargir la fenêtre */
+}
+.logs-ligne.est-error { border-left-color: #ff5252; background: rgba(255,82,82,.07); }
+.logs-ligne.est-error .logs-niveau { color: #ff8a80; }
+.logs-ligne.est-warn { border-left-color: #ffb74d; }
+.logs-ligne.est-warn .logs-niveau { color: #ffcc80; }
+.logs-ligne.est-info { border-left-color: #64b5f6; }
+.logs-ligne.est-info .logs-niveau { color: #90caf9; }
+.logs-ligne.est-debug { border-left-color: rgba(255,255,255,.2); }
+.logs-ligne.est-debug .logs-niveau,
+.logs-ligne.est-debug .logs-message { color: var(--md-on-surface-variant); }
+
+.logs-detail { grid-column: 1 / -1; margin-top: .2rem; }
+.logs-detail summary {
+  cursor: pointer;
+  font-size: .72rem;
+  color: var(--md-on-surface-variant);
+}
+.logs-detail pre {
+  margin: .3rem 0 0;
+  padding: .5rem .6rem;
+  max-height: 220px;
+  overflow: auto;
+  background: rgba(0,0,0,.35);
+  border-radius: var(--shape-xs);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .72rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface-variant);
+}
+
 /* ===================== Menu latéral (navigation drawer) ===================== */
 
 .shell {
