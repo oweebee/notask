@@ -248,3 +248,64 @@ def clear_admin_config(
     if row is not None:
         session.delete(row)
         session.commit()
+
+
+# ---------------------------- Debug temporaire ----------------------------
+# Endpoint de diagnostic ponctuel : sync_note()/sync_item() avalent toutes
+# leurs exceptions (voir google_calendar.py, en tête de fichier — un souci
+# Google ne doit jamais faire échouer la sauvegarde d'une notask), donc
+# aucune erreur ne remonte jamais au client ni n'est consultable sans accès
+# aux logs serveur. Le temps de diagnostiquer une notask qui reste avec
+# google_event_id=null malgré une resauvegarde, cet endpoint (admin
+# uniquement) refait le même appel Google en clair, SANS avaler l'erreur,
+# pour voir le vrai code HTTP / message renvoyé par Google. À retirer une
+# fois le diagnostic terminé — ce n'est pas un endpoint destiné à rester.
+@router.post("/debug-sync/{note_id}")
+def debug_sync(
+    note_id: int,
+    admin: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    note = session.get(Note, note_id)
+    if note is None or note.user_id != admin.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    account = gcal._account_for(note.user_id, session)
+    if account is None:
+        return {"step": "account", "error": "Aucun compte Google lié pour cet utilisateur."}
+
+    info: dict = {
+        "note_id": note.id,
+        "due_at": note.due_at.isoformat() if note.due_at else None,
+        "calendar_title": note.calendar_title,
+        "google_event_id": note.google_event_id,
+        "account_email": account.email,
+        "account_needs_reauth": account.needs_reauth,
+        "account_calendar_id": account.calendar_id,
+        "has_refresh_token": bool(account.refresh_token),
+    }
+
+    import httpx as _httpx
+
+    token = gcal._valid_access_token(account, session)
+    info["access_token_obtained"] = bool(token)
+    if not token:
+        info["step"] = "token"
+        info["needs_reauth_after_attempt"] = account.needs_reauth
+        return info
+
+    try:
+        with _httpx.Client(timeout=gcal.HTTP_TIMEOUT) as client:
+            resp = client.post(
+                gcal._events_url(account),
+                headers={"Authorization": f"Bearer {token}"},
+                json=gcal._event_body(note.calendar_title or "(sans titre)", note.due_at, "note", note.id),
+            )
+        info["step"] = "create_event"
+        info["status_code"] = resp.status_code
+        info["response_body"] = resp.text[:2000]
+    except Exception as exc:
+        info["step"] = "create_event"
+        info["exception"] = f"{type(exc).__name__}: {exc}"
+
+    return info
