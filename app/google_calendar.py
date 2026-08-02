@@ -363,7 +363,16 @@ def sync_note(note: Note, session: Session) -> None:
             note.due_at is not None
             and not note.archived
             and note.trashed_at is None
-            and bool(note.calendar_title)
+            # `is not None`, PAS une simple vérité (bool(...)) : une notask
+            # sans titre envoie calendar_title="" (chaîne vide, jamais None
+            # tant que due_at est posée — voir #nc-add dans app.js), et
+            # bool("") vaut False en Python. Avec un simple bool(...), une
+            # notask datée mais sans titre ne synchronisait jamais — bug
+            # trouvé après un signalement ("je ne vois pas ma notask dans
+            # Google Calendar" sur une note sans titre). _event_body()
+            # affiche déjà "(sans titre)" pour ce cas, la synchro doit donc
+            # avoir lieu.
+            and note.calendar_title is not None
         )
         changed = False
         if should_have_event:
@@ -412,7 +421,8 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
             item.due_at is not None
             and not note.archived
             and note.trashed_at is None
-            and bool(item.calendar_title)
+            # cf. sync_note : `is not None`, pas bool(...).
+            and item.calendar_title is not None
         )
         changed = False
         if should_have_event:
