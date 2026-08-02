@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-pause-lecture-pendant-capture-86';
+const BUILD_VERSION = '2026-08-02-pieces-jointes-non-visuelles-en-bas-87';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -504,6 +504,11 @@ const ICONS = {
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3.5 12 9 17.5"/><path d="M15 6.5 20.5 12 15 17.5"/></svg>',
   attach: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8.5 9.5 16a3 3 0 0 1-4.2-4.2l8-8a4.5 4.5 0 0 1 6.4 6.4l-8.1 8.1a2 2 0 0 1-2.8-2.8l7-7"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/></svg>',
+  // Distingue une image d'un fichier quelconque dans les LISTES de pièces
+  // jointes, qui n'affichent plus de vignette (le rendu visuel est réservé
+  // au corps de la notask).
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M4 16.5l4.5-4 3.5 3 3-2.5 5 4.5"/></svg>',
+  audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4"/><path d="M8 7v10"/><path d="M12 4.5v15"/><path d="M16 8v8"/><path d="M20 10.5v3"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.5H5.5A2 2 0 0 0 3.5 5.5v6l9.6 9.6a2 2 0 0 0 2.8 0l5.8-5.8a2 2 0 0 0 0-2.8z"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/></svg>',
 
@@ -2675,16 +2680,14 @@ function renderNotes() {
       inner += `<div class="body">${renderFormatted(n.content)}</div>`;
     }
 
-    if (n.attachments && n.attachments.length) {
-      const images = n.attachments.filter((a) => (a.meta && a.meta.mime || '').startsWith('image/'));
-      const files = n.attachments.filter((a) => !(a.meta && a.meta.mime || '').startsWith('image/'));
+    // Sous le trait : aucun rendu visuel (plus de vignettes d'images). Le
+    // visuel — image affichée, lecteur de note vocale — n'existe que dans le
+    // CORPS de la notask, là où l'élément a été inséré. Ici on ne donne
+    // qu'un décompte de ce qui est joint, tout type confondu.
+    const jointes = n.attachments || [];
+    if (jointes.length) {
       inner += '<div class="note-attachments">';
-      for (const a of images) {
-        inner += `<img class="note-attach-thumb" data-att="${a.id}" alt="">`;
-      }
-      if (files.length) {
-        inner += `<div class="note-attach-files">${ICONS.file}<span>${files.length} fichier${files.length > 1 ? 's' : ''}</span></div>`;
-      }
+      inner += `<div class="note-attach-files">${ICONS.file}<span>${jointes.length} fichier${jointes.length > 1 ? 's' : ''}</span></div>`;
       inner += '</div>';
     }
     }   // fin du bloc "notask non masquée"
@@ -2724,23 +2727,9 @@ function renderNotes() {
     hydrateInlineAudio(el, n);
     ajouterBoutonsCopieCode(el);
 
-    // Déchiffrement paresseux des miniatures — chaque image n'est décodée
-    // qu'une fois (voir le cache dans loadAttachment()), donc un ré-rendu
-    // de la grille ne recoûte rien pour les pièces jointes déjà vues.
-    el.querySelectorAll('.note-attach-thumb').forEach((img) => {
-      const att = (n.attachments || []).find((a) => String(a.id) === img.dataset.att);
-      if (!att) return;
-      // La miniature ne se décode qu'APRÈS ce premier rendu : elle change la
-      // hauteur de la carte une fois arrivée, il faut donc recaler la
-      // mosaïque (voir layoutMosaic()) plutôt que rester avec le trou/
-      // chevauchement laissé par la hauteur d'avant.
-      img.addEventListener('load', () => scheduleLayoutMosaic());
-      loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {});
-      img.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openImageEditor(att, n, 'card');
-      });
-    });
+    // (Plus de miniatures de pièces jointes à hydrater ici : la carte
+    // n'affiche plus qu'un décompte sous le trait, le visuel étant réservé
+    // au corps de la notask — voir renderFormatted/hydrateInlineImages.)
 
     el.querySelector('[data-act=pin]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { pinned: !n.pinned } });
@@ -3301,22 +3290,31 @@ function renderComposerAttachments() {
   const box = $('#nc-attachments');
   box.innerHTML = '';
   box.hidden = composerPendingFiles.length === 0;
+  // Cf. renderAttachmentsSimple() : liste non visuelle, le rendu intégré
+  // est réservé au corps de la notask.
   composerPendingFiles.forEach((file, idx) => {
-    const isImage = (file.type || '').startsWith('image/');
+    const type = file.type || '';
+    const isImage = type.startsWith('image/');
+    const isAudio = type.startsWith('audio/');
     const chip = document.createElement('div');
-    chip.className = 'dns-attach-chip' + (isImage ? ' is-image' : '');
-    if (isImage) {
-      chip.innerHTML = `<img class="dns-attach-thumb" alt="${escapeHtml(file.name || '')}">
-        <button type="button" class="dns-attach-remove" title="Retirer">${ICONS.close}</button>`;
-      chip.querySelector('img').src = URL.createObjectURL(file);
-    } else {
-      chip.innerHTML = `<span class="dns-attach-icon">${ICONS.file}</span>
-        <span class="dns-attach-name" title="${escapeHtml(file.name || '')}">${escapeHtml(file.name || 'Fichier')}</span>
-        <span class="dns-attach-size">${formatFileSize(file.size)}</span>
-        <button type="button" class="dns-attach-remove" title="Retirer">${ICONS.close}</button>`;
-    }
+    chip.className = 'dns-attach-chip';
+    chip.innerHTML = `<span class="dns-attach-icon">${isImage ? ICONS.image : isAudio ? ICONS.audio : ICONS.file}</span>
+      <span class="dns-attach-name" title="${escapeHtml(file.name || '')}">${escapeHtml(file.name || 'Fichier')}</span>
+      <span class="dns-attach-size">${formatFileSize(file.size)}</span>
+      <button type="button" class="dns-attach-remove" title="Retirer">${ICONS.close}</button>`;
     chip.querySelector('.dns-attach-remove').addEventListener('click', () => {
       composerPendingFiles.splice(idx, 1);
+      // Un marqueur provisoire référence le RANG dans composerPendingFiles :
+      // retirer un fichier décale tous les suivants. Sans cette
+      // renumérotation, un dessin ou une note vocale déjà inséré dans le
+      // texte pointerait après coup vers le mauvais fichier — et la
+      // réécriture des marqueurs à la création (voir #nc-add) figerait
+      // l'erreur. On renumérote directement dans le DOM plutôt que de
+      // réécrire le contenu, pour ne pas déplacer le curseur de l'utilisateur.
+      $('#nc-content').querySelectorAll('[data-att^="tmp"]').forEach((el) => {
+        const rang = Number(el.dataset.att.slice(3));
+        if (Number.isInteger(rang) && rang > idx) el.dataset.att = 'tmp' + (rang - 1);
+      });
       renderComposerAttachments();
     });
     box.appendChild(chip);
@@ -3977,34 +3975,35 @@ function renderAttachmentsSimple() {
   box.hidden = list.length === 0;
   box.innerHTML = '';
 
+  // Liste volontairement NON visuelle : pas de vignette d'image, pas de
+  // lecteur audio. Le rendu intégré (image affichée, onde et bouton de
+  // lecture) n'a lieu que dans le CORPS de la notask, à l'endroit où
+  // l'élément a été inséré. Ici, tout ce qui est joint apparaît de la même
+  // façon — une ligne de fichier qu'on peut ouvrir — y compris ce qui est
+  // déjà visible dans le corps.
   for (const att of list) {
-    const isImage = (att.meta && att.meta.mime || '').startsWith('image/');
+    const mime = (att.meta && att.meta.mime) || '';
+    const isImage = mime.startsWith('image/');
+    const isAudio = mime.startsWith('audio/');
+    const name = (att.meta && att.meta.name) || 'Fichier';
     const chip = document.createElement('div');
-    chip.className = 'dns-attach-chip' + (isImage ? ' is-image' : '');
-
-    if (isImage) {
-      chip.innerHTML = `<img class="dns-attach-thumb" alt="${escapeHtml(att.meta.name || '')}">
-        <button type="button" class="dns-attach-remove" title="Supprimer">${ICONS.close}</button>`;
-      const img = chip.querySelector('img');
-      loadAttachment(att).then((r) => { img.src = r.url; }).catch(() => {
-        chip.classList.add('is-broken');
-      });
-      img.addEventListener('click', () => openImageEditor(att, state.editingNote, 'dns'));
-    } else {
-      const name = (att.meta && att.meta.name) || 'Fichier';
-      chip.innerHTML = `<span class="dns-attach-icon">${ICONS.file}</span>
-        <span class="dns-attach-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
-        <span class="dns-attach-size">${formatFileSize(att.size)}</span>
-        <button type="button" class="dns-attach-remove" title="Supprimer">${ICONS.close}</button>`;
-      chip.querySelector('.dns-attach-name').addEventListener('click', async () => {
-        try {
-          const r = await loadAttachment(att);
-          const a = document.createElement('a');
-          a.href = r.url; a.download = r.name;
-          a.click();
-        } catch (err) { alert(err.message); }
-      });
-    }
+    chip.className = 'dns-attach-chip';
+    chip.innerHTML = `<span class="dns-attach-icon">${isImage ? ICONS.image : isAudio ? ICONS.audio : ICONS.file}</span>
+      <span class="dns-attach-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      <span class="dns-attach-size">${formatFileSize(att.size)}</span>
+      <button type="button" class="dns-attach-remove" title="Supprimer">${ICONS.close}</button>`;
+    chip.querySelector('.dns-attach-name').addEventListener('click', async () => {
+      // Une image « s'ouvre » dans l'éditeur d'image (seul point d'entrée
+      // pour la retoucher, la vignette cliquable ayant disparu) ; tout le
+      // reste se télécharge.
+      if (isImage) { openImageEditor(att, state.editingNote, 'dns'); return; }
+      try {
+        const r = await loadAttachment(att);
+        const a = document.createElement('a');
+        a.href = r.url; a.download = r.name;
+        a.click();
+      } catch (err) { alert(err.message); }
+    });
 
     chip.querySelector('.dns-attach-remove').addEventListener('click', async () => {
       if (!confirm('Supprimer définitivement cette pièce jointe ?')) return;

@@ -2512,13 +2512,6 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   gap: .375rem;
   margin-top: .625rem;
 }
-.note-attach-thumb {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: var(--shape-xs);
-  background: rgba(0,0,0,.18);
-}
 .note-attach-files {
   display: flex;
   align-items: center;
@@ -2555,23 +2548,6 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    100% la force sur sa propre ligne dans le flex-wrap, les chips fichiers
    (non recadrées) continuent de se ranger normalement à côté les unes des
    autres. */
-.dns-attach-chip.is-image {
-  padding: 0;
-  overflow: hidden;
-  flex: 1 1 100%;
-  width: auto;
-  height: auto;
-  max-width: none;
-}
-.dns-attach-thumb {
-  width: 100%;
-  height: auto;
-  max-height: 55vh;
-  object-fit: contain;
-  display: block;
-  cursor: zoom-in;
-  background: rgba(0,0,0,.18);
-}
 .dns-attach-chip.is-broken { opacity: .5; }
 .dns-attach-icon { flex: none; display: flex; color: var(--md-on-surface-variant); }
 .dns-attach-icon svg { width: 18px; height: 18px; }
@@ -2608,16 +2584,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   background: transparent;
   transition: background .15s, color .15s;
 }
-.dns-attach-chip.is-image .dns-attach-remove {
-  position: absolute;
-  top: .5rem;
-  right: .5rem;
-  background: rgba(0,0,0,.72);
-  color: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,.45);
-}
 .dns-attach-remove:hover { background: var(--md-error); color: var(--md-on-error); }
-.dns-attach-chip.is-image .dns-attach-remove:hover { background: var(--md-error); color: var(--md-on-error); }
 .dns-attach-remove svg { width: 14px; height: 14px; }
 
 /* Glisser-déposer un fichier sur la carte en édition simple, ou sur le
