@@ -33,6 +33,10 @@ if exist ".git\index.lock" (
   echo [INFO] Verrou .git\index.lock detecte, suppression...
   del /f /q ".git\index.lock" >nul 2>&1
 )
+if exist ".git\HEAD.lock" (
+  echo [INFO] Verrou .git\HEAD.lock detecte, suppression...
+  del /f /q ".git\HEAD.lock" >nul 2>&1
+)
 
 git remote get-url origin >nul 2>&1
 if errorlevel 1 (
