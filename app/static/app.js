@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-plage-horaire-et-recherche-etendue-82';
+const BUILD_VERSION = '2026-08-02-fix-largeur-popup-date-83';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -789,21 +789,27 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
     if (!toggle.checked) erreur.hidden = true;
   };
 
+  // Largeur mesurée plutôt que codée en dur : les 250/260px d'origine
+  // étaient devenus faux en élargissant le popup (champ date tronqué), et
+  // le popup débordait alors du bord droit. offsetWidth est disponible dès
+  // l'insertion dans le document, juste au-dessus.
+  const largeur = pop.offsetWidth;
+  const marge = 8;
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
-    let top = anchorRect.bottom - dialogRect.top + 6;
+    const top = anchorRect.bottom - dialogRect.top + 6;
     let left = anchorRect.left - dialogRect.left;
-    left = Math.min(left, dialogRect.width - 250);
+    left = Math.min(left, dialogRect.width - largeur - marge);
     pop.style.top = `${top}px`;
-    pop.style.left = `${Math.max(8, left)}px`;
+    pop.style.left = `${Math.max(marge, left)}px`;
   } else {
     const rect = anchor.getBoundingClientRect();
     const top = rect.bottom + window.scrollY + 6;
     let left = rect.left + window.scrollX;
-    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - 260);
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - largeur - marge);
     pop.style.top = `${top}px`;
-    pop.style.left = `${Math.max(8, left)}px`;
+    pop.style.left = `${Math.max(marge, left)}px`;
   }
 
   const currentValue = () => partsToIso(dateInput.value, hourSelect.value, minSelect.value);

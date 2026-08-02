@@ -1504,7 +1504,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .cal-popup {
   position: absolute;
   z-index: 1000;
-  width: 240px;
+  /* 285px et non 240 : à 240, le champ date (flex:1, min-width:0) était
+     comprimé sous la largeur du format jj/mm/aaaa et le navigateur tronquait
+     l'année à l'affichage (« 03/08/20 »). La largeur doit tenir la date
+     complète + heure + minutes sur une ligne. */
+  width: 285px;
   padding: .75rem;
   background: var(--md-surface-4);
   border-radius: var(--shape-sm);
@@ -1560,7 +1564,9 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .cal-popup-row { display: flex; align-items: center; gap: .375rem; }
 .cal-popup-date {
   flex: 1;
-  min-width: 0;
+  /* Pas de min-width:0 ici : c'est justement ce qui autorisait le champ à
+     descendre sous la largeur du format jj/mm/aaaa et à tronquer l'année. */
+  min-width: 118px;
   padding: .5rem .5rem;
   background: var(--md-surface-2);
   border: none;
@@ -1593,7 +1599,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .cal-popup-periode input { margin: 0; cursor: pointer; }
 .cal-popup-date-end {
   flex: 1;
-  min-width: 0;
+  min-width: 118px; /* cf. .cal-popup-date */
   padding: .5rem;
   background: var(--md-surface-2);
   border: none;
