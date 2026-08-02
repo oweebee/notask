@@ -512,15 +512,19 @@
          saisie manuelle prend le relais — voir chargerAgendasGoogle(). -->
     <div class="profil-google-cal" id="profil-google-cal" hidden>
       <label class="profil-google-cal-label" for="profil-google-cal-select">Agenda de destination</label>
-      <select id="profil-google-cal-select"></select>
-      <input id="profil-google-cal-manuel" type="text" placeholder="Identifiant de l'agenda (ex. xxxx@group.calendar.google.com)" hidden>
-      <p class="profil-google-cal-hint" id="profil-google-cal-hint" hidden></p>
-      <div class="dialog-actions">
-        <button class="btn ghost" id="profil-google-cal-save" type="button">Enregistrer l'agenda</button>
+      <!-- Champ + bouton sur UNE seule ligne : deux rangées d'actions
+           empilées (une pour l'agenda, une pour connecter/déconnecter)
+           mangeaient de la hauteur pour rien et donnaient des boutons
+           décalés les uns par rapport aux autres. -->
+      <div class="profil-google-cal-row">
+        <select id="profil-google-cal-select"></select>
+        <input id="profil-google-cal-manuel" type="text" placeholder="xxxx@group.calendar.google.com" hidden>
+        <button class="btn ghost" id="profil-google-cal-save" type="button">Enregistrer</button>
       </div>
+      <p class="profil-google-cal-hint" id="profil-google-cal-hint" hidden></p>
     </div>
 
-    <div class="dialog-actions">
+    <div class="dialog-actions profil-google-actions">
       <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
       <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
     </div>

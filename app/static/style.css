@@ -318,17 +318,25 @@ header.topbar .who {
 .profil-google .dialog-actions { margin: 0; }
 
 /* Choix de l'agenda de destination (liste déroulante, ou saisie manuelle de
-   l'identifiant quand Google refuse de lister les agendas). */
-.profil-google-cal { margin-top: .85rem; }
+   l'identifiant quand Google refuse de lister les agendas). Champ et bouton
+   sur une même ligne : évite une rangée d'actions supplémentaire, qui
+   ajoutait de la hauteur et désalignait les boutons entre eux. */
+.profil-google-cal { margin-top: .75rem; }
 .profil-google-cal-label {
   display: block;
   font-size: .75rem;
   color: var(--md-on-surface-variant);
   margin-bottom: .3rem;
 }
-.profil-google-cal select,
-.profil-google-cal input {
-  width: 100%;
+.profil-google-cal-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.profil-google-cal-row select,
+.profil-google-cal-row input {
+  flex: 1;
+  min-width: 0; /* sans ça, un long identifiant d'agenda pousse le bouton hors du cadre */
   padding: .5rem .65rem;
   border-radius: 8px;
   border: 1px solid var(--md-outline-variant);
@@ -336,6 +344,11 @@ header.topbar .who {
   color: var(--md-on-surface);
   font: inherit;
   font-size: .875rem;
+  height: 38px;
+}
+.profil-google-cal-row .btn {
+  flex: none;
+  height: 38px; /* même hauteur que le champ, pour un alignement net */
 }
 .profil-google-cal-hint {
   margin: .4rem 0 0;
@@ -343,6 +356,11 @@ header.topbar .who {
   line-height: 1.35;
   color: var(--md-on-surface-variant);
 }
+/* La rangée connecter/déconnecter ne sert plus qu'à un seul bouton la
+   plupart du temps : on la colle à droite sans marge superflue. Sélecteur
+   volontairement à deux classes : `.profil-google .dialog-actions` (plus
+   haut) met margin:0 et l'emporterait sinon sur une classe seule. */
+.profil-google .profil-google-actions { margin-top: .75rem; justify-content: flex-end; }
 
 .outil-bloc {
   padding: 1rem 0;

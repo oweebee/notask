@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-choix-agenda-google-78';
+const BUILD_VERSION = '2026-08-02-fix-agenda-double-serialisation-79';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1544,7 +1544,10 @@ $('#profil-google-cal-save').addEventListener('click', async () => {
   try {
     const r = await api('/google/calendar', {
       method: 'PUT',
-      body: JSON.stringify({ calendar_id: calendarId }),
+      // api() sérialise elle-même le corps (voir plus haut) : passer un
+      // objet, surtout pas une chaîne déjà sérialisée — sinon le serveur
+      // reçoit une chaîne JSON au lieu d'un objet et rejette la requête.
+      body: { calendar_id: calendarId },
     });
     let texte = `Agenda de destination enregistré. ${r.moved} événement(s) déplacé(s).`;
     if (r.orphans) texte += ` ${r.orphans} n'ont pas pu être supprimé(s) de l'ancien agenda, à retirer à la main.`;
