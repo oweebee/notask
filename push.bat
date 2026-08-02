@@ -70,7 +70,26 @@ if not errorlevel 1 (
 echo.
 echo [PUSH] origin/%BRANCH%
 git push -u origin %BRANCH%
-if errorlevel 1 goto :erreur
+if errorlevel 1 (
+  REM --- Rejet non-fast-forward : origin a des commits qu'on n'a pas encore
+  REM     (ex. un push reussi depuis un autre poste/session pendant qu'on
+  REM     etait sur un etat local plus vieux). On tente une fusion
+  REM     automatique puis on repousse une fois - pas de simple "goto
+  REM     :erreur" direct, pour ne pas bloquer sur un cas qui se resout tout
+  REM     seul la plupart du temps.
+  echo.
+  echo [INFO] Push refuse, tentative de fusion avec origin/%BRANCH%...
+  git fetch origin %BRANCH% || goto :erreur
+  git merge origin/%BRANCH% --no-edit
+  if errorlevel 1 (
+    echo.
+    echo [ECHEC] Fusion automatique impossible ^(conflit reel^). A resoudre a la main.
+    goto :fin
+  )
+  echo.
+  echo [PUSH] origin/%BRANCH% ^(nouvelle tentative apres fusion^)
+  git push -u origin %BRANCH% || goto :erreur
+)
 
 echo.
 echo [OK] Pousse sur %REPO% (%BRANCH%).
