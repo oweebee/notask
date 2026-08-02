@@ -145,6 +145,15 @@ class GoogleAppConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     client_id: Optional[str] = Field(default=None, max_length=500)
     client_secret: Optional[str] = Field(default=None, max_length=500)
+    # Adresse publique de l'installation (ex. https://notask.example.com),
+    # relevée automatiquement lors de la connexion Google (le callback OAuth
+    # est la seule requête où le serveur connaît à coup sûr son adresse
+    # publique vue du navigateur, voir _redirect_uri dans routers/google.py).
+    # Sert à construire le lien « Ouvrir dans notask » mis dans la
+    # description des événements — la synchro n'a sinon aucun moyen de
+    # deviner cette adresse, aucun contexte de requête ne lui parvenant.
+    # Repli sur la variable d'environnement APP_BASE_URL.
+    base_url: Optional[str] = Field(default=None, max_length=500)
     updated_at: datetime = Field(default_factory=utcnow)
 
 

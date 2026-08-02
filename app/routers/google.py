@@ -158,6 +158,17 @@ def callback(
     elif refresh_token:
         account.refresh_token = refresh_token
 
+    # Adresse publique de l'installation, relevée ici parce que c'est le seul
+    # endroit où le serveur la connaît à coup sûr telle que le navigateur la
+    # voit : la synchro (sync_note/sync_item) tourne sans aucun contexte de
+    # requête et ne pourrait pas la deviner. Sert au lien « Ouvrir dans
+    # notask » ajouté à la description des événements.
+    config = session.exec(select(GoogleAppConfig)).first()
+    if config is None:
+        config = GoogleAppConfig()
+    config.base_url = str(request.base_url).rstrip("/")
+    session.add(config)
+
     account.email = email
     account.access_token = access_token
     account.access_token_expires_at = utcnow() + timedelta(seconds=tokens.get("expires_in", 3600))

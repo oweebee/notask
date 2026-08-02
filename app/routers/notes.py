@@ -7,7 +7,7 @@ une tâche visible dans la vue Tâches. Voir app/routers/tasks.py.
 from datetime import timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlmodel import Session, select
 
 from app import google_calendar as gcal
@@ -154,6 +154,7 @@ def _purge_expired_trash(user: User, session: Session) -> None:
 
 @router.get("", response_model=List[NoteOut])
 def list_notes(
+    request: Request,
     archived: bool = Query(default=False, description="Afficher les notasks archivées"),
     trashed: bool = Query(default=False, description="Afficher la corbeille au lieu des notasks normales"),
     q: Optional[str] = Query(default=None, description="Recherche titre et contenu"),
@@ -162,6 +163,11 @@ def list_notes(
     session: Session = Depends(get_session),
 ):
     _purge_expired_trash(user, session)
+    # Adresse publique de l'installation, relevée ici parce que la synchro
+    # Google tourne sans contexte de requête et ne peut pas la deviner (elle
+    # sert au lien « Ouvrir dans notask » ajouté aux événements). N'écrit que
+    # si la valeur a changé, voir remember_base_url().
+    gcal.remember_base_url(session, str(request.base_url))
     # Tirage Google Calendar -> notask (voir google_calendar.pull_changes) :
     # ne répercute que les dates modifiées/événements supprimés côté Google,
     # ne fait rien si aucun compte Google n'est connecté. Même schéma

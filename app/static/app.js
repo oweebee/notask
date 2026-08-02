@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-rangee-actions-google-unique-80';
+const BUILD_VERSION = '2026-08-02-lien-notask-et-rappel-15mn-81';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1273,6 +1273,14 @@ function renderWho(nom) {
   });
 }
 
+/* Lien profond ?notask=<id> — utilisé par le lien « Ouvrir dans notask »
+   placé dans la description des événements Google Calendar (voir
+   _event_body dans app/google_calendar.py). L'ouverture elle-même a lieu à
+   la fin de loadNotes() (voir ouvrirNotaskDemandeeParUrl) et pas ici : la
+   notask doit d'abord être chargée ET déchiffrée. Déclaré au-dessus
+   d'enterApp(), qui l'affecte, pour éviter toute zone morte temporelle. */
+let notaskDemandeeParUrl = null;
+
 function enterApp() {
   show('screen-app');
   renderWho(state.user.username);
@@ -1295,6 +1303,13 @@ function enterApp() {
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">archives</span>';
   $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">corbeille</span>';
   $('#tab-admin').innerHTML = ICONS.users + '<span class="label">comptes</span>';
+
+  // Lien profond venant d'un événement Google Calendar (?notask=<id>). Lu
+  // AVANT switchView() — qui déclenche loadNotes(), lequel consomme ce
+  // drapeau une fois les notasks déchiffrées (voir
+  // ouvrirNotaskDemandeeParUrl).
+  const notaskParam = new URLSearchParams(location.search).get('notask');
+  if (notaskParam && /^\d+$/.test(notaskParam)) notaskDemandeeParUrl = Number(notaskParam);
 
   loadLabels();
   switchView('notes');
@@ -1659,6 +1674,32 @@ async function loadNotes() {
   renderNotes();
   if (!$('#agenda-col').hidden) loadAgenda();
   updateTaskBadges();
+  ouvrirNotaskDemandeeParUrl();
+}
+
+async function ouvrirNotaskDemandeeParUrl() {
+  if (notaskDemandeeParUrl === null) return;
+  const id = notaskDemandeeParUrl;
+  notaskDemandeeParUrl = null;
+  history.replaceState(null, '', location.pathname);
+
+  let note = state.notes.find((n) => n.id === id);
+  if (!note) {
+    // Absente de la vue courante : la notask peut être archivée (ou filtrée
+    // par un libellé/une recherche). On va la rechercher explicitement
+    // plutôt que de laisser le lien sans effet.
+    try {
+      const archivees = await api('/notes?' + new URLSearchParams({ archived: true }));
+      await Promise.all(archivees.map(decryptNote));
+      note = archivees.find((n) => n.id === id);
+    } catch { /* réseau : on abandonne silencieusement, cf. ci-dessous */ }
+  }
+  // Introuvable (notask supprimée depuis, ou lien d'un autre compte) : on
+  // laisse simplement l'application ouverte sur la liste. Pas de message
+  // bloquant — il n'existe pas de bandeau global dans cette appli, et
+  // fabriquer une alerte pour ce cas limite serait plus gênant qu'utile.
+  if (note) openNoteSimpleDialog(note);
+  else console.warn('[notask] lien ?notask=%s : notask introuvable', id);
 }
 
 /* -------------------------------- Corbeille --------------------------------

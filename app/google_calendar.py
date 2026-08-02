@@ -66,6 +66,9 @@ EXT_PROP_FILTER = "notask=1"
 # côté Google après coup si besoin.
 DEFAULT_DURATION = timedelta(minutes=30)
 
+# Notification Google Calendar avant l'échéance, en minutes.
+REMINDER_MINUTES = 15
+
 HTTP_TIMEOUT = 10.0
 
 
@@ -242,17 +245,73 @@ def _parse_dt(value: str) -> Optional[datetime]:
         return None
 
 
-def _event_body(title: str, due_at: datetime, kind: str, ref_id: int) -> Dict[str, Any]:
+def remember_base_url(session: Session, base_url: str) -> None:
+    """Mémorise l'adresse publique de l'installation si elle a changé.
+
+    Appelée depuis les routeurs qui disposent d'un objet Request. La synchro
+    (sync_note/sync_item) tourne sans contexte de requête et ne peut pas
+    deviner cette adresse : sans ce relevé, le lien « Ouvrir dans notask »
+    n'apparaîtrait qu'après une reconnexion Google. Écrit uniquement quand la
+    valeur diffère, pour ne pas transformer chaque chargement de liste en
+    écriture en base."""
+    valeur = (base_url or "").rstrip("/")
+    if not valeur:
+        return
+    try:
+        row = session.exec(select(GoogleAppConfig)).first()
+        if row is None:
+            row = GoogleAppConfig()
+        elif row.base_url == valeur:
+            return
+        row.base_url = valeur
+        session.add(row)
+        session.commit()
+    except Exception:
+        log.exception("Échec mémorisation de l'adresse publique")
+
+
+def _app_base_url(session: Session) -> Optional[str]:
+    """Adresse publique de l'installation, pour le lien de retour vers la
+    notask. Variable d'environnement prioritaire (permet de forcer une
+    valeur), sinon celle relevée automatiquement au moment de la connexion
+    Google. None => aucun lien n'est ajouté, l'événement reste valide."""
+    env = os.getenv("APP_BASE_URL")
+    if env:
+        return env.rstrip("/")
+    row = session.exec(select(GoogleAppConfig)).first()
+    if row and row.base_url:
+        return row.base_url.rstrip("/")
+    return None
+
+
+def _event_body(title: str, due_at: datetime, kind: str, ref_id: int, note_id: int, session: Session) -> Dict[str, Any]:
     start = due_at
     end = due_at + DEFAULT_DURATION
-    return {
+    body: Dict[str, Any] = {
         "summary": title[:1000] or "(sans titre)",
         "start": {"dateTime": _format_dt(start)},
         "end": {"dateTime": _format_dt(end)},
         "extendedProperties": {
             "private": {"notask": "1", "notask_kind": kind, "notask_ref_id": str(ref_id)},
         },
+        # Notification Google Calendar avant l'échéance. useDefault=False est
+        # indispensable : sans lui, Google applique les rappels par défaut de
+        # l'agenda et ignore purement et simplement `overrides`. Le rappel
+        # vise TOUJOURS la notask elle-même (note_id), y compris pour une
+        # ligne à cocher datée : c'est la notask qu'on veut ouvrir.
+        "reminders": {
+            "useDefault": False,
+            "overrides": [{"method": "popup", "minutes": REMINDER_MINUTES}],
+        },
     }
+
+    base = _app_base_url(session)
+    if base:
+        # `note_id` et PAS `ref_id` : pour une ligne à cocher datée, ref_id
+        # est l'identifiant de la ligne, qui n'a pas d'écran à elle — le lien
+        # doit ouvrir la notask qui la contient.
+        body["description"] = f"Ouvrir dans notask : {base}/?notask={note_id}"
+    return body
 
 
 def _events_url(account: GoogleAccount, suffix: str = "") -> str:
@@ -260,7 +319,7 @@ def _events_url(account: GoogleAccount, suffix: str = "") -> str:
     return f"{CALENDAR_API}/calendars/{quote(account.calendar_id, safe='')}/events{suffix}"
 
 
-def create_event(account: GoogleAccount, session: Session, title: str, due_at: datetime, kind: str, ref_id: int) -> Optional[str]:
+def create_event(account: GoogleAccount, session: Session, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int) -> Optional[str]:
     token = _valid_access_token(account, session)
     if not token:
         return None
@@ -269,7 +328,7 @@ def create_event(account: GoogleAccount, session: Session, title: str, due_at: d
             resp = client.post(
                 _events_url(account),
                 headers={"Authorization": f"Bearer {token}"},
-                json=_event_body(title, due_at, kind, ref_id),
+                json=_event_body(title, due_at, kind, ref_id, note_id, session),
             )
             resp.raise_for_status()
             return resp.json().get("id")
@@ -278,7 +337,7 @@ def create_event(account: GoogleAccount, session: Session, title: str, due_at: d
         return None
 
 
-def update_event(account: GoogleAccount, session: Session, event_id: str, title: str, due_at: datetime, kind: str, ref_id: int) -> str:
+def update_event(account: GoogleAccount, session: Session, event_id: str, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int) -> str:
     """Renvoie "ok", "gone" (404/410 confirmé — l'appelant peut recréer sans
     risque de doublon) ou "error" (échec réseau/temporaire — NE PAS recréer :
     l'événement existe peut-être toujours côté Google, en recréer un
@@ -292,7 +351,7 @@ def update_event(account: GoogleAccount, session: Session, event_id: str, title:
             resp = client.patch(
                 _events_url(account, f"/{event_id}"),
                 headers={"Authorization": f"Bearer {token}"},
-                json=_event_body(title, due_at, kind, ref_id),
+                json=_event_body(title, due_at, kind, ref_id, note_id, session),
             )
             if resp.status_code in (404, 410):
                 return "gone"
@@ -452,18 +511,18 @@ def sync_note(note: Note, session: Session) -> None:
         changed = False
         if should_have_event:
             if note.google_event_id:
-                result = update_event(account, session, note.google_event_id, note.calendar_title, note.due_at, "note", note.id)
+                result = update_event(account, session, note.google_event_id, note.calendar_title, note.due_at, "note", note.id, note.id)
                 if result == "gone":
                     # Confirmé supprimé côté Google (404/410) : sûr de
                     # recréer, aucun risque de doublon.
-                    note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id)
+                    note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id)
                     changed = True
                 # "error" (réseau/temporaire) : on ne touche à rien, l'ancien
                 # google_event_id reste en place, retenté au prochain appel —
                 # recréer ici pourrait produire un doublon si l'événement
                 # existe toujours côté Google malgré l'échec de la requête.
             else:
-                note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id)
+                note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id)
                 changed = True
         elif note.google_event_id:
             # google_event_id n'est effacé que si la suppression a
@@ -502,13 +561,13 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
         changed = False
         if should_have_event:
             if item.google_event_id:
-                result = update_event(account, session, item.google_event_id, item.calendar_title, item.due_at, "item", item.id)
+                result = update_event(account, session, item.google_event_id, item.calendar_title, item.due_at, "item", item.id, note.id)
                 if result == "gone":
-                    item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id)
+                    item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id)
                     changed = True
                 # cf. sync_note : "error" ne déclenche jamais de recréation.
             else:
-                item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id)
+                item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id)
                 changed = True
         elif item.google_event_id:
             # cf. sync_note : google_event_id conservé si la suppression échoue.
