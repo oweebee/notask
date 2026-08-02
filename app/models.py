@@ -257,6 +257,12 @@ class NoteBase(SQLModel):
     is_checklist: bool = False
     # Échéance de la note entière. Non nulle => c'est une tâche.
     due_at: Optional[datetime] = None
+    # Fin de plage, facultative. Non nulle => l'échéance couvre une PÉRIODE
+    # (due_at -> due_end_at) au lieu d'un instant, et l'événement Google
+    # correspondant dure jusque-là au lieu des 30 minutes par défaut (voir
+    # DEFAULT_DURATION dans google_calendar.py). Toujours None quand due_at
+    # l'est : une fin sans début n'aurait aucun sens.
+    due_end_at: Optional[datetime] = None
     # Icône facultative affichée à gauche de la note (clé parmi un jeu fixe,
     # voir ICON_KEYS dans app/routers/notes.py).
     icon: Optional[str] = Field(default=None, max_length=40)
@@ -270,7 +276,7 @@ class NoteBase(SQLModel):
     # Cf. _due_at_utc() en tête de fichier — rétablit l'étiquette UTC perdue
     # par SQLite/SQLAlchemy à la lecture, pour toute classe héritant de
     # NoteBase (NoteOut, NoteCreate).
-    @field_validator("due_at", mode="after")
+    @field_validator("due_at", "due_end_at", mode="after")
     @classmethod
     def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
         return _due_at_utc(v)
@@ -354,6 +360,8 @@ class NoteItem(SQLModel, table=True):
     position: int = 0
     # Échéance propre à la ligne. Non nulle => la ligne est une tâche.
     due_at: Optional[datetime] = None
+    # Cf. NoteBase.due_end_at — fin de plage facultative, à l'échelle de la ligne.
+    due_end_at: Optional[datetime] = None
     # Cf. Note.calendar_title/google_event_id — même principe, à l'échelle
     # de la ligne : une ligne à cocher datée devient elle-même un événement
     # Google Calendar séparé, indépendant de celui de la notask parente.
@@ -369,6 +377,7 @@ class NoteItemIn(SQLModel):
     checked: bool = False
     due_at: Optional[datetime] = None
     calendar_title: Optional[str] = None
+    due_end_at: Optional[datetime] = None
 
 
 class NoteItemUpdate(SQLModel):
@@ -376,6 +385,7 @@ class NoteItemUpdate(SQLModel):
     checked: Optional[bool] = None
     due_at: Optional[datetime] = None
     calendar_title: Optional[str] = None
+    due_end_at: Optional[datetime] = None
 
 
 class NoteItemOut(SQLModel):
@@ -384,9 +394,10 @@ class NoteItemOut(SQLModel):
     checked: bool
     position: int
     due_at: Optional[datetime] = None
+    due_end_at: Optional[datetime] = None
     google_event_id: Optional[str] = None
 
-    @field_validator("due_at", mode="after")
+    @field_validator("due_at", "due_end_at", mode="after")
     @classmethod
     def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
         return _due_at_utc(v)
@@ -409,6 +420,7 @@ class NoteUpdate(SQLModel):
     archived: Optional[bool] = None
     is_checklist: Optional[bool] = None
     due_at: Optional[datetime] = None
+    due_end_at: Optional[datetime] = None
     done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
@@ -639,6 +651,8 @@ class TaskOut(SQLModel):
     note_title: str      # pour situer une ligne dans sa note
     text: str            # libellé affiché
     due_at: datetime
+    # Cf. NoteBase.due_end_at — non nulle => la tâche couvre une période.
+    due_end_at: Optional[datetime] = None
     done: bool
     color: str
     # Icône de la note d'origine (même pour une tâche issue d'une ligne à
@@ -647,9 +661,9 @@ class TaskOut(SQLModel):
     icon: Optional[str] = None
     bucket: str          # "late" | "today" | "upcoming" | "done"
 
-    @field_validator("due_at", mode="after")
+    @field_validator("due_at", "due_end_at", mode="after")
     @classmethod
-    def _due_at_tz(cls, v: datetime) -> datetime:
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
         return _due_at_utc(v)
 
 

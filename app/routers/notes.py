@@ -108,6 +108,7 @@ def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> Lis
             text=item.text,
             checked=item.checked,
             due_at=item.due_at,
+            due_end_at=item.due_end_at if item.due_at else None,
             calendar_title=item.calendar_title,
             position=position,
         )
@@ -267,6 +268,9 @@ def update_note(
         note.done = False
         note.done_at = None
         data.pop("done", None)
+        # Une fin de plage sans début n'a pas de sens : elle disparaît avec
+        # l'échéance, que le client ait pensé à l'envoyer à None ou non.
+        data["due_end_at"] = None
 
     items = data.pop("items", None)
     for key, value in data.items():
@@ -281,6 +285,8 @@ def update_note(
     # évite qu'un titre en clair traîne en base au-delà du strict nécessaire.
     if note.due_at is None or note.archived:
         note.calendar_title = None
+    if note.due_at is None:
+        note.due_end_at = None
 
     note.updated_at = utcnow()
     session.add(note)
@@ -352,6 +358,7 @@ def update_item(
         setattr(item, key, value)
     if item.due_at is None:
         item.calendar_title = None  # cf. update_note : hygiène, pas de titre en clair sans échéance
+        item.due_end_at = None      # une fin de plage sans début n'a pas de sens
 
     session.add(item)
     session.commit()

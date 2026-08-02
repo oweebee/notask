@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-lien-notask-et-rappel-15mn-81';
+const BUILD_VERSION = '2026-08-02-plage-horaire-et-recherche-etendue-82';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -646,6 +646,22 @@ function formatDue(isoString) {
   return `${jour} ${heure}`;
 }
 
+/* Échéance ponctuelle ou plage (« période » cochée dans le sélecteur). Une
+   plage tenant sur la même journée n'affiche que l'heure de fin — répéter
+   la date n'apporte rien et allonge inutilement les étiquettes de carte. */
+function formatDueRange(isoStart, isoEnd) {
+  if (!isoStart) return '';
+  const debut = formatDue(isoStart);
+  if (!isoEnd) return debut;
+  const d1 = new Date(isoStart);
+  const d2 = new Date(isoEnd);
+  if (Number.isNaN(d2.getTime()) || d2 <= d1) return debut;
+  if (d1.toDateString() === d2.toDateString()) {
+    return `${debut} → ${d2.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  return `${debut} → ${formatDue(isoEnd)}`;
+}
+
 /* Conversions date/heure <-> ISO 8601 en UTC attendu par l'API.
    Le sélecteur n'utilise plus le widget natif <input type="datetime-local">
    (comportement trop variable d'un navigateur à l'autre pour le pas de 15mn,
@@ -697,22 +713,45 @@ function closeCalPopup() {
   if (_closeCalPopup) { _closeCalPopup(); _closeCalPopup = null; }
 }
 
-function openCalPopup(anchor, currentIso, onChange) {
+/* `onChange` reçoit (isoDebut, isoFin) — isoFin vaut null tant que la case
+   « période » n'est pas cochée. `currentEndIso` permet de rouvrir le popup
+   sur une plage déjà enregistrée. Une plage se traduit par un événement
+   Google couvrant réellement l'intervalle, au lieu des 30 minutes par
+   défaut (voir DEFAULT_DURATION dans app/google_calendar.py). */
+function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   closeCalPopup();
 
   const parts = isoToParts(currentIso) || nextQuarterHourParts();
   const hourOpts = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
   const minOpts = ['00', '15', '30', '45'];
+  // Fin par défaut : même jour, une heure après le début — proposition
+  // plausible pour qui coche « période » sans vouloir tout ressaisir.
+  const endParts = isoToParts(currentEndIso) || {
+    date: parts.date,
+    hour: String((Number(parts.hour) + 1) % 24).padStart(2, '0'),
+    minute: parts.minute,
+  };
 
   const pop = document.createElement('div');
   pop.className = 'cal-popup';
+  const champsHeure = (classe) => `
+      <select class="cal-popup-hour ${classe}-hour">${hourOpts.map((h) => `<option value="${h}">${h}</option>`).join('')}</select>
+      <span class="cal-popup-colon">:</span>
+      <select class="cal-popup-min ${classe}-min">${minOpts.map((m) => `<option value="${m}">${m}</option>`).join('')}</select>`;
   pop.innerHTML = `
     <div class="cal-popup-row">
       <input type="date" class="cal-popup-date">
-      <select class="cal-popup-hour">${hourOpts.map((h) => `<option value="${h}">${h}</option>`).join('')}</select>
-      <span class="cal-popup-colon">:</span>
-      <select class="cal-popup-min">${minOpts.map((m) => `<option value="${m}">${m}</option>`).join('')}</select>
+      ${champsHeure('cal-popup-start')}
     </div>
+    <label class="cal-popup-periode">
+      <input type="checkbox" class="cal-popup-toggle">
+      <span>Période (date de fin)</span>
+    </label>
+    <div class="cal-popup-row cal-popup-row-end" hidden>
+      <input type="date" class="cal-popup-date-end">
+      ${champsHeure('cal-popup-end')}
+    </div>
+    <p class="cal-popup-erreur" hidden>La fin doit être après le début.</p>
     <div class="cal-popup-actions">
       <button type="button" class="btn ghost sm" data-act="clear">Effacer</button>
       <button type="button" class="btn sm" data-act="ok">Valider</button>
@@ -728,11 +767,27 @@ function openCalPopup(anchor, currentIso, onChange) {
   host.appendChild(pop);
 
   const dateInput = pop.querySelector('.cal-popup-date');
-  const hourSelect = pop.querySelector('.cal-popup-hour');
-  const minSelect = pop.querySelector('.cal-popup-min');
+  const hourSelect = pop.querySelector('.cal-popup-start-hour');
+  const minSelect = pop.querySelector('.cal-popup-start-min');
   dateInput.value = parts.date;
   hourSelect.value = parts.hour;
   minSelect.value = parts.minute;
+
+  const toggle = pop.querySelector('.cal-popup-toggle');
+  const rowEnd = pop.querySelector('.cal-popup-row-end');
+  const dateEnd = pop.querySelector('.cal-popup-date-end');
+  const hourEnd = pop.querySelector('.cal-popup-end-hour');
+  const minEnd = pop.querySelector('.cal-popup-end-min');
+  const erreur = pop.querySelector('.cal-popup-erreur');
+  dateEnd.value = endParts.date;
+  hourEnd.value = endParts.hour;
+  minEnd.value = endParts.minute;
+  toggle.checked = !!currentEndIso;
+  rowEnd.hidden = !toggle.checked;
+  toggle.onchange = () => {
+    rowEnd.hidden = !toggle.checked;
+    if (!toggle.checked) erreur.hidden = true;
+  };
 
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
@@ -752,16 +807,36 @@ function openCalPopup(anchor, currentIso, onChange) {
   }
 
   const currentValue = () => partsToIso(dateInput.value, hourSelect.value, minSelect.value);
-  const finish = (iso) => { onChange(iso); closeCalPopup(); };
-  pop.querySelector('[data-act=ok]').onclick = () => finish(currentValue());
-  pop.querySelector('[data-act=clear]').onclick = () => finish(null);
+  const currentEndValue = () =>
+    (toggle.checked ? partsToIso(dateEnd.value, hourEnd.value, minEnd.value) : null);
+
+  // Une fin antérieure ou égale au début serait refusée par Google (400) et
+  // ferait échouer la synchro en silence : on la bloque ici, à la source.
+  const finEstValide = () => {
+    const debut = currentValue();
+    const fin = currentEndValue();
+    return !fin || !debut || new Date(fin) > new Date(debut);
+  };
+
+  const finish = (iso, endIso) => { onChange(iso, endIso); closeCalPopup(); };
+  const valider = () => {
+    if (!finEstValide()) { erreur.hidden = false; return false; }
+    finish(currentValue(), currentEndValue());
+    return true;
+  };
+  pop.querySelector('[data-act=ok]').onclick = valider;
+  pop.querySelector('[data-act=clear]').onclick = () => finish(null, null);
 
   // Comme les autres popovers de l'app : toute façon de le quitter applique
   // la valeur en cours (pas seulement le bouton Valider) — sans quoi choisir
   // une date puis cliquer ailleurs (geste naturel) perdait silencieusement
   // le choix.
-  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) finish(currentValue()); };
-  const onKey = (e) => { if (e.key === 'Escape') finish(currentValue()); };
+  // Une plage incohérente ne doit pas non plus être validée par une sortie
+  // « douce » (clic ailleurs / Échap) : dans ce cas on ferme en ignorant la
+  // fin plutôt qu'en enregistrant une plage que Google refuserait.
+  const sortieDouce = () => finish(currentValue(), finEstValide() ? currentEndValue() : null);
+  const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) sortieDouce(); };
+  const onKey = (e) => { if (e.key === 'Escape') sortieDouce(); };
   setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
   document.addEventListener('keydown', onKey);
 
@@ -1651,12 +1726,58 @@ $('#nav-tasks').addEventListener('click', () => {
 /* Le paramètre "q" n'est plus envoyé au serveur : titre/description/contenu
    sont chiffrés de bout en bout, une recherche SQL sur le texte chiffré ne
    peut rien trouver. La recherche se fait donc ici, après déchiffrement. */
+/* Formes textuelles d'une date sur lesquelles la recherche doit mordre.
+   Trois écritures, parce qu'on ne peut pas deviner comment l'utilisateur
+   tape sa date : l'affichage tel qu'il le voit (« 7 août 10:30 »,
+   « demain 09:00 »), la forme numérique française (07/08/2026), et la forme
+   ISO (2026-08-07) qui permet aussi de chercher un mois entier (« 2026-08 »).
+   Recherche accent-insensible, sinon « aout » ne trouverait pas « août ». */
+function dateSearchTerms(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (v) => String(v).padStart(2, '0');
+  const jour = pad(d.getDate());
+  const mois = pad(d.getMonth() + 1);
+  const an = d.getFullYear();
+  return [
+    formatDue(iso),
+    d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+    `${jour}/${mois}/${an}`,
+    `${an}-${mois}-${jour}`,
+  ].join(' ');
+}
+
+function sansAccents(s) {
+  // \u0300-\u036f = signes diacritiques combinants isolés par NFD.
+  // Écrits en échappements plutôt qu'en caractères bruts : illisibles
+  // et fragiles au moindre passage dans un outil qui recode le fichier.
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function noteMatchesSearch(n, q) {
-  const needle = q.toLowerCase();
-  return (n.title || '').toLowerCase().includes(needle)
-    || (n.description || '').toLowerCase().includes(needle)
-    || (n.content || '').toLowerCase().includes(needle)
-    || (n.items || []).some((it) => (it.text || '').toLowerCase().includes(needle));
+  const needle = sansAccents(q.toLowerCase());
+  // Libellés : la note ne porte que des identifiants, les noms vivent dans
+  // state.labels (déjà chargé — voir loadLabels()).
+  const libelles = (n.label_ids || [])
+    .map((id) => ((state.labels || []).find((l) => l.id === id) || {}).name || '')
+    .join(' ');
+  const dates = [
+    dateSearchTerms(n.due_at),
+    dateSearchTerms(n.due_end_at),
+    ...(n.items || []).map((it) => dateSearchTerms(it.due_at)),
+  ].join(' ');
+
+  const foin = sansAccents([
+    n.title || '',
+    n.description || '',
+    n.content || '',
+    (n.items || []).map((it) => it.text || '').join(' '),
+    libelles,
+    dates,
+  ].join(' ').toLowerCase());
+
+  return foin.includes(needle);
 }
 
 async function loadNotes() {
@@ -2526,7 +2647,7 @@ function renderNotes() {
       inner += '<ul class="check">';
       for (const it of n.items) {
         const due = it.due_at
-          ? `<em class="item-due-tag">${formatDue(it.due_at)}</em>` : '';
+          ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
           <input type="checkbox" ${it.checked ? 'checked' : ''}>
           <span>${escapeHtml(it.text)}${due}</span></li>`;
@@ -2573,7 +2694,7 @@ function renderNotes() {
       const late = !n.done && new Date(n.due_at) < now;
       inner += `<div class="note-due ${late ? 'late' : ''} ${n.done ? 'done' : ''}">
         <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
-        ${ICONS.clock}<span>${formatDue(n.due_at)}</span>
+        ${ICONS.clock}<span>${formatDueRange(n.due_at, n.due_end_at)}</span>
       </div>`;
     }
 
@@ -2980,6 +3101,7 @@ function resetComposer() {
   composerPendingFiles = [];
   renderComposerAttachments();
   $('#nc-due').value = '';
+  $('#nc-due-end').value = '';
   renderNcDueBtn();
   $('#nc-colors').hidden = true;
   renderComposerLabelChips();
@@ -3137,14 +3259,15 @@ function renderComposerLabelChips() {
 // Échéance : même bouton + popover calendrier que sur une notask existante
 // (voir renderDueBtn()/openCalPopup(), partagés avec dn-due-btn/dns-due-btn).
 function renderNcDueBtn() {
-  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null);
+  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null, $('#nc-due-end').value || null);
 }
 $('#nc-due-btn').addEventListener('click', () => {
   composerExpand();
-  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso) => {
+  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso, finIso) => {
     $('#nc-due').value = iso || '';
+    $('#nc-due-end').value = (iso && finIso) || '';
     renderNcDueBtn();
-  });
+  }, $('#nc-due-end').value || null);
 });
 renderNcDueBtn();
 
@@ -3252,6 +3375,9 @@ $('#nc-add').addEventListener('click', async () => {
       icon: state.composerIcon,
       color: composerColor,
       due_at: $('#nc-due').value || null,
+      // Fin de plage : n'a de sens qu'avec un début (voir due_end_at dans
+      // app/models.py, remis à None côté serveur si due_at est absent).
+      due_end_at: ($('#nc-due').value && $('#nc-due-end').value) || null,
       // Miroir en clair du titre, vu par le serveur UNIQUEMENT quand une
       // échéance est posée — sert à nommer l'événement Google Calendar lié
       // (voir app/google_calendar.py). Reste vide sans échéance : compromis
@@ -3375,22 +3501,23 @@ brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', ()
    toute sa gestion en double ont été retirées sur demande explicite. */
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
-function renderDueBtn(btnSel, labelSel, iso) {
+function renderDueBtn(btnSel, labelSel, iso, isoEnd = null) {
   const btn = $(btnSel);
   if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
   btn.classList.toggle('has-due', !!iso);
-  $(labelSel).textContent = iso ? formatDue(iso) : 'Aucune échéance';
+  $(labelSel).textContent = iso ? formatDueRange(iso, isoEnd) : 'Aucune échéance';
 }
 
 function renderNoteDueBtnSimple() {
-  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null);
+  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null, $('#dns-due-end').value || null);
 }
 
 $('#dns-due-btn').addEventListener('click', () => {
-  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso) => {
+  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso, finIso) => {
     $('#dns-due').value = iso || '';
+    $('#dns-due-end').value = (iso && finIso) || '';
     renderNoteDueBtnSimple();
-  });
+  }, $('#dns-due-end').value || null);
 });
 
 /* Chips de libellés dans la boîte d'édition simple (seule restante — voir
@@ -3683,7 +3810,7 @@ function openNoteSimpleDialog(note) {
   state.editingNoteOriginal = noteSnapshotFromNote(note);
   state.editingIsChecklist = note.is_checklist;
   state.editingNoteItems = note.items.map((i) => ({
-    text: i.text, checked: i.checked, due_at: i.due_at,
+    text: i.text, checked: i.checked, due_at: i.due_at, due_end_at: i.due_end_at || null,
   }));
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
   pendingAttachmentUploads = [];
@@ -3702,6 +3829,7 @@ function openNoteSimpleDialog(note) {
   ajouterBoutonsCopieCode($('#dns-content'));
   renderDnsMode();
   $('#dns-due').value = note.due_at || '';
+  $('#dns-due-end').value = note.due_end_at || '';
   renderNoteDueBtnSimple();
   renderNoteItemsSimple();
   renderAttachmentsSimple();
@@ -4331,16 +4459,17 @@ function renderNoteItemsSimple() {
     row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
       <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
       <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
-              title="${item.due_at ? formatDue(item.due_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
+              title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
       <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
     const [cb, txt, cal, del] = row.children;
     cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
     txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
     cal.onclick = () => {
-      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso) => {
+      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso, finIso) => {
         state.editingNoteItems[idx].due_at = iso;
+        state.editingNoteItems[idx].due_end_at = (iso && finIso) || null;
         renderNoteItemsSimple();
-      });
+      }, state.editingNoteItems[idx].due_end_at || null);
     };
     del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
     box.appendChild(row);
@@ -4407,6 +4536,7 @@ async function saveNoteSimpleDialog() {
       title: await encryptField($('#dns-title').value),
       description: await encryptField($('#dns-description').value),
       due_at: $('#dns-due').value || null,
+      due_end_at: ($('#dns-due').value && $('#dns-due-end').value) || null,
       // Cf. #nc-add : miroir en clair du titre pour Google Calendar, vidé
       // dès que la notask n'a plus d'échéance.
       calendar_title: $('#dns-due').value ? $('#dns-title').value : null,
@@ -5645,7 +5775,7 @@ function renderAgenda(items) {
         <span class="agenda-item-icon">${icon}</span>
         <span class="agenda-item-body">
           <span class="agenda-item-text">${escapeHtml(label)}</span>
-          <span class="agenda-item-due">${formatDue(t.due_at)}</span>
+          <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at)}</span>
         </span>`;
       btn.querySelector('input').onchange = async (e) => {
         e.stopPropagation();

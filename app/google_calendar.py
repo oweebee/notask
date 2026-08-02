@@ -284,9 +284,22 @@ def _app_base_url(session: Session) -> Optional[str]:
     return None
 
 
-def _event_body(title: str, due_at: datetime, kind: str, ref_id: int, note_id: int, session: Session) -> Dict[str, Any]:
+def _event_body(title: str, due_at: datetime, kind: str, ref_id: int, note_id: int, session: Session,
+                due_end_at: Optional[datetime] = None) -> Dict[str, Any]:
     start = due_at
-    end = due_at + DEFAULT_DURATION
+    # Plage horaire explicite si une fin est posée ET postérieure au début.
+    # Google refuse un événement dont la fin précède le début (400) : une
+    # valeur incohérente (fin avancée avant le début côté client, ou
+    # remontée telle quelle depuis un vieil enregistrement) doit retomber
+    # sur la durée par défaut plutôt que faire échouer toute la synchro.
+    # Comparaison via _as_utc : les deux dates ressortent naïves de SQLite,
+    # les mélanger avec une valeur consciente lèverait un TypeError.
+    debut_utc = _as_utc(due_at)
+    fin_utc = _as_utc(due_end_at)
+    if fin_utc is not None and debut_utc is not None and fin_utc > debut_utc:
+        end = due_end_at
+    else:
+        end = due_at + DEFAULT_DURATION
     body: Dict[str, Any] = {
         "summary": title[:1000] or "(sans titre)",
         "start": {"dateTime": _format_dt(start)},
@@ -319,7 +332,7 @@ def _events_url(account: GoogleAccount, suffix: str = "") -> str:
     return f"{CALENDAR_API}/calendars/{quote(account.calendar_id, safe='')}/events{suffix}"
 
 
-def create_event(account: GoogleAccount, session: Session, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int) -> Optional[str]:
+def create_event(account: GoogleAccount, session: Session, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int, due_end_at: Optional[datetime] = None) -> Optional[str]:
     token = _valid_access_token(account, session)
     if not token:
         return None
@@ -328,7 +341,7 @@ def create_event(account: GoogleAccount, session: Session, title: str, due_at: d
             resp = client.post(
                 _events_url(account),
                 headers={"Authorization": f"Bearer {token}"},
-                json=_event_body(title, due_at, kind, ref_id, note_id, session),
+                json=_event_body(title, due_at, kind, ref_id, note_id, session, due_end_at),
             )
             resp.raise_for_status()
             return resp.json().get("id")
@@ -337,7 +350,7 @@ def create_event(account: GoogleAccount, session: Session, title: str, due_at: d
         return None
 
 
-def update_event(account: GoogleAccount, session: Session, event_id: str, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int) -> str:
+def update_event(account: GoogleAccount, session: Session, event_id: str, title: str, due_at: datetime, kind: str, ref_id: int, note_id: int, due_end_at: Optional[datetime] = None) -> str:
     """Renvoie "ok", "gone" (404/410 confirmé — l'appelant peut recréer sans
     risque de doublon) ou "error" (échec réseau/temporaire — NE PAS recréer :
     l'événement existe peut-être toujours côté Google, en recréer un
@@ -351,7 +364,7 @@ def update_event(account: GoogleAccount, session: Session, event_id: str, title:
             resp = client.patch(
                 _events_url(account, f"/{event_id}"),
                 headers={"Authorization": f"Bearer {token}"},
-                json=_event_body(title, due_at, kind, ref_id, note_id, session),
+                json=_event_body(title, due_at, kind, ref_id, note_id, session, due_end_at),
             )
             if resp.status_code in (404, 410):
                 return "gone"
@@ -511,18 +524,18 @@ def sync_note(note: Note, session: Session) -> None:
         changed = False
         if should_have_event:
             if note.google_event_id:
-                result = update_event(account, session, note.google_event_id, note.calendar_title, note.due_at, "note", note.id, note.id)
+                result = update_event(account, session, note.google_event_id, note.calendar_title, note.due_at, "note", note.id, note.id, note.due_end_at)
                 if result == "gone":
                     # Confirmé supprimé côté Google (404/410) : sûr de
                     # recréer, aucun risque de doublon.
-                    note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id)
+                    note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id, note.due_end_at)
                     changed = True
                 # "error" (réseau/temporaire) : on ne touche à rien, l'ancien
                 # google_event_id reste en place, retenté au prochain appel —
                 # recréer ici pourrait produire un doublon si l'événement
                 # existe toujours côté Google malgré l'échec de la requête.
             else:
-                note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id)
+                note.google_event_id = create_event(account, session, note.calendar_title, note.due_at, "note", note.id, note.id, note.due_end_at)
                 changed = True
         elif note.google_event_id:
             # google_event_id n'est effacé que si la suppression a
@@ -561,13 +574,13 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
         changed = False
         if should_have_event:
             if item.google_event_id:
-                result = update_event(account, session, item.google_event_id, item.calendar_title, item.due_at, "item", item.id, note.id)
+                result = update_event(account, session, item.google_event_id, item.calendar_title, item.due_at, "item", item.id, note.id, item.due_end_at)
                 if result == "gone":
-                    item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id)
+                    item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id, item.due_end_at)
                     changed = True
                 # cf. sync_note : "error" ne déclenche jamais de recréation.
             else:
-                item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id)
+                item.google_event_id = create_event(account, session, item.calendar_title, item.due_at, "item", item.id, note.id, item.due_end_at)
                 changed = True
         elif item.google_event_id:
             # cf. sync_note : google_event_id conservé si la suppression échoue.
@@ -646,6 +659,28 @@ def change_calendar(account: GoogleAccount, new_calendar_id: str, session: Sessi
     return resultat
 
 
+def _periode_depuis_evenement(event: Dict[str, Any], debut: Optional[datetime]) -> Optional[datetime]:
+    """Fin de plage à retenir pour un événement tiré depuis Google.
+
+    Tout événement Google a une fin, y compris ceux que notask a créés sans
+    plage (fin = début + DEFAULT_DURATION). La recopier telle quelle
+    transformerait chaque simple échéance en période dès le premier tirage.
+    On ne retient donc une fin que si la durée diffère de la durée par
+    défaut — ce qui signifie que l'utilisateur l'a réellement modifiée dans
+    Google Calendar (ou qu'elle vient d'une plage posée depuis notask).
+    """
+    if debut is None:
+        return None
+    fin_brute = (event.get("end") or {}).get("dateTime")
+    fin = _parse_dt(fin_brute) if fin_brute else None
+    if fin is None:
+        return None
+    debut_utc, fin_utc = _as_utc(debut), _as_utc(fin)
+    if debut_utc is None or fin_utc is None or fin_utc <= debut_utc:
+        return None
+    return None if (fin_utc - debut_utc) == DEFAULT_DURATION else fin
+
+
 # ========================= Synchro Google -> notask =========================
 
 def pull_changes(user: User, session: Session) -> None:
@@ -674,6 +709,7 @@ def pull_changes(user: User, session: Session) -> None:
             if note is not None:
                 if cancelled:
                     note.due_at = None
+                    note.due_end_at = None
                     note.calendar_title = None
                     note.google_event_id = None
                     note.done = False
@@ -683,6 +719,7 @@ def pull_changes(user: User, session: Session) -> None:
                     parsed = _parse_dt(start) if start else None
                     if parsed:
                         note.due_at = parsed
+                        note.due_end_at = _periode_depuis_evenement(event, parsed)
                     summary = event.get("summary")
                     if summary:
                         note.calendar_title = summary
@@ -697,6 +734,7 @@ def pull_changes(user: User, session: Session) -> None:
             if item is not None:
                 if cancelled:
                     item.due_at = None
+                    item.due_end_at = None
                     item.calendar_title = None
                     item.google_event_id = None
                 else:
@@ -704,6 +742,7 @@ def pull_changes(user: User, session: Session) -> None:
                     parsed = _parse_dt(start) if start else None
                     if parsed:
                         item.due_at = parsed
+                        item.due_end_at = _periode_depuis_evenement(event, parsed)
                     summary = event.get("summary")
                     if summary:
                         item.calendar_title = summary

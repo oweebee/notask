@@ -78,6 +78,7 @@ def list_tasks(
             note_title=n.title,
             text=n.title,
             due_at=n.due_at,
+            due_end_at=n.due_end_at,
             done=n.done,
             color=n.color,
             icon=n.icon,
@@ -99,6 +100,7 @@ def list_tasks(
                 note_title=parent.title,
                 text=it.text,
                 due_at=it.due_at,
+                due_end_at=it.due_end_at,
                 done=it.checked,
                 color=parent.color,
                 icon=parent.icon,
@@ -140,7 +142,7 @@ def set_done(
 
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
-            text=note.title, due_at=note.due_at, done=note.done,
+            text=note.title, due_at=note.due_at, due_end_at=note.due_end_at, done=note.done,
             color=note.color, icon=note.icon, bucket=_bucket(note.due_at, note.done, now),
         )
 
@@ -161,7 +163,7 @@ def set_done(
 
         return TaskOut(
             kind="item", id=item.id, note_id=parent.id, note_title=parent.title,
-            text=item.text, due_at=item.due_at, done=item.checked,
+            text=item.text, due_at=item.due_at, due_end_at=item.due_end_at, done=item.checked,
             color=parent.color, icon=parent.icon, bucket=_bucket(item.due_at, item.checked, now),
         )
 
