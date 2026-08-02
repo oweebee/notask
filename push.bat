@@ -40,11 +40,10 @@ if errorlevel 1 (
   git remote add origin %REPO% || goto :erreur
 )
 
-REM --- Message de commit : argument, sinon saisie, sinon horodatage ---
+REM --- Message de commit : argument, sinon horodatage automatique (aucune
+REM     saisie requise : le script doit pouvoir tourner sans intervention,
+REM     du double-clic jusqu'a la fin) ---
 set "MSG=%*"
-if "%MSG%"=="" (
-  set /p "MSG=Message de commit (Entree = auto): "
-)
 if "!MSG!"=="" (
   for /f "tokens=*" %%d in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm\""') do set "MSG=maj %%d"
 )
@@ -81,3 +80,4 @@ echo [ECHEC] Une commande git a echoue. Voir les messages ci-dessus.
 :fin
 echo.
 endlocal
+pause
