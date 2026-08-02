@@ -488,11 +488,21 @@
     <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
     <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
     <div id="ga-msg"></div>
-    <div class="dialog-actions">
-      <button class="btn danger" id="ga-clear" type="button">Effacer</button>
-      <span class="spacer" style="flex:1"></span>
-      <button class="btn" id="ga-save" type="button">Enregistrer</button>
-    </div>
+  </div>
+
+  <!-- Rangée d'actions unique : Effacer / Déconnecter / Enregistrer sur la
+       même ligne, pour ne pas empiler trois rangées de boutons. Elle est
+       VOLONTAIREMENT hors du bloc #admin-google (masqué en entier pour un
+       compte non admin) : sinon un utilisateur non admin perdrait le bouton
+       Déconnecter, seul moyen de délier son propre compte Google. Les deux
+       boutons réservés aux admins sont donc masqués individuellement, voir
+       l'ouverture de Profil dans app.js. -->
+  <div class="dialog-actions profil-google-actions">
+    <button class="btn danger" id="ga-clear" type="button" hidden>Effacer</button>
+    <span class="spacer" style="flex:1"></span>
+    <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
+    <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
+    <button class="btn" id="ga-save" type="button" hidden>Enregistrer</button>
   </div>
 
   <!-- Connexion Google Calendar personnelle (voir /api/google/* et
@@ -522,11 +532,6 @@
         <button class="btn ghost" id="profil-google-cal-save" type="button">Enregistrer</button>
       </div>
       <p class="profil-google-cal-hint" id="profil-google-cal-hint" hidden></p>
-    </div>
-
-    <div class="dialog-actions profil-google-actions">
-      <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
-      <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
     </div>
   </div>
 

@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-fix-agenda-double-serialisation-79';
+const BUILD_VERSION = '2026-08-02-rangee-actions-google-unique-80';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -1442,7 +1442,13 @@ $('#btn-profil').addEventListener('click', () => {
   // Identifiants OAuth de l'installation : réservés aux administrateurs
   // (le serveur les refuserait de toute façon à un compte non admin, mais
   // autant ne pas afficher des champs qui échoueraient systématiquement).
+  // Les boutons Effacer/Enregistrer des identifiants d'installation vivent
+  // désormais dans la rangée d'actions COMMUNE (hors de #admin-google, pour
+  // qu'un non-admin garde le bouton Déconnecter) : ils doivent donc être
+  // masqués séparément du bloc de champs.
   $('#admin-google').hidden = !state.user.is_admin;
+  $('#ga-clear').hidden = !state.user.is_admin;
+  $('#ga-save').hidden = !state.user.is_admin;
   if (state.user.is_admin) loadGoogleAdminConfig();
   refreshGoogleStatus();
 });

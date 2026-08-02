@@ -356,11 +356,14 @@ header.topbar .who {
   line-height: 1.35;
   color: var(--md-on-surface-variant);
 }
-/* La rangée connecter/déconnecter ne sert plus qu'à un seul bouton la
-   plupart du temps : on la colle à droite sans marge superflue. Sélecteur
-   volontairement à deux classes : `.profil-google .dialog-actions` (plus
-   haut) met margin:0 et l'emporterait sinon sur une classe seule. */
-.profil-google .profil-google-actions { margin-top: .75rem; justify-content: flex-end; }
+/* Rangée unique Effacer / Déconnecter / Enregistrer. Sélecteur
+   volontairement à deux classes : `.dialog-actions` (plus bas dans le
+   fichier) impose margin-top: 1.5rem et l'emporterait, à spécificité égale,
+   sur une classe seule. */
+.dialog-actions.profil-google-actions {
+  margin-top: .75rem;
+  flex-wrap: wrap; /* en étroit, les boutons passent à la ligne au lieu de déborder */
+}
 
 .outil-bloc {
   padding: 1rem 0;
