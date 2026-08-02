@@ -161,12 +161,34 @@ def revoke(token: str) -> None:
         log.exception("Échec révocation jeton Google (ignoré, déconnexion locale quand même)")
 
 
+def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Rétablit l'étiquette UTC sur un datetime relu depuis SQLite.
+
+    SQLite n'a pas de type datetime "avec fuseau" : SQLAlchemy réécrit bien
+    la bonne valeur numérique, mais la relit NAÏVE (tzinfo perdu). Comparer
+    un tel datetime naïf à un datetime conscient (utcnow(), qui renvoie
+    datetime.now(timezone.utc)) lève `TypeError: can't compare offset-naive
+    and offset-aware datetimes`. Ne déplace jamais l'heure, ne fait que
+    remettre l'étiquette perdue. Même correctif que _due_at_utc() dans
+    app/models.py, côté colonnes non exposées par l'API."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _valid_access_token(account: GoogleAccount, session: Session) -> Optional[str]:
     """Renvoie un jeton d'accès valide, en le rafraîchissant si besoin.
     Persiste le nouveau jeton (ou needs_reauth=True en cas d'échec) avant de
     renvoyer. None => le compte a besoin d'être reconnecté."""
     now = utcnow()
-    if account.access_token and account.access_token_expires_at and account.access_token_expires_at > now + timedelta(seconds=30):
+    # _as_utc indispensable ici : access_token_expires_at ressort naïf de
+    # SQLite, et la comparaison brute avec `now` (conscient) levait un
+    # TypeError. Ce TypeError était ensuite avalé par le `except Exception`
+    # de sync_note()/sync_item() — d'où une synchro Google Calendar qui
+    # échouait SILENCIEUSEMENT à chaque sauvegarde, sans jamais créer le
+    # moindre événement ni remonter la moindre erreur à l'utilisateur.
+    expires_at = _as_utc(account.access_token_expires_at)
+    if account.access_token and expires_at and expires_at > now + timedelta(seconds=30):
         return account.access_token
 
     try:
