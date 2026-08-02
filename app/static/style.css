@@ -1477,6 +1477,29 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .cal-btn.has-due { color: #ffd54f; }
 .cal-btn.has-due:hover { background: rgba(255,213,79,.18); }
 
+/* Enregistrement (note vocale) ou dictée en cours. Rouge + pulsation : un
+   micro ouvert doit se voir sans ambiguïté, y compris du coin de l'œil —
+   c'est le seul état de l'appli qui capte quelque chose en continu. */
+.cal-btn.is-recording {
+  color: #ff5252;
+  background: rgba(255,82,82,.16);
+  animation: pouls-enregistrement 1.4s ease-in-out infinite;
+}
+.cal-btn.is-recording:hover { background: rgba(255,82,82,.28); }
+@keyframes pouls-enregistrement {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,82,82,.5); }
+  70%      { box-shadow: 0 0 0 7px rgba(255,82,82,0); }
+}
+/* Ici la pulsation EST l'information (micro ouvert) : on la remplace par un
+   contour fixe plutôt que de la retirer, sans quoi l'état deviendrait
+   invisible pour qui a demandé moins d'animations. */
+@media (prefers-reduced-motion: reduce) {
+  .cal-btn.is-recording {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(255,82,82,.6);
+  }
+}
+
 .due-row { display: flex; align-items: center; gap: .625rem; }
 
 /* "+ Élément" et l'échéance sur la même ligne plutôt que l'un sous l'autre :

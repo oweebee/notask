@@ -209,6 +209,11 @@
             <div class="field-actions-row composer-tools-row" id="nc-tools-row">
               <!-- Tableau blanc en premier, avant le trombone. -->
               <button type="button" class="cal-btn" id="nc-board-btn" title="Tableau blanc (dessin)" aria-label="Tableau blanc"></button>
+              <!-- Note vocale : enregistre un fichier audio joint à la notask.
+                   Dictée : écrit dans le contenu, n'attache rien. Deux gestes
+                   distincts, d'où deux boutons. -->
+              <button type="button" class="cal-btn" id="nc-mic-btn" title="Note vocale (5 Mo max)" aria-label="Note vocale"></button>
+              <button type="button" class="cal-btn" id="nc-dictee-btn" title="Dictée vocale (parler pour écrire)" aria-label="Dictée vocale"></button>
               <button type="button" class="cal-btn" id="nc-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
               <input type="file" id="nc-attach-input" multiple hidden>
               <button type="button" class="cal-btn" id="nc-color-btn" title="Couleur" aria-label="Couleur"></button>
@@ -353,6 +358,8 @@
          que sur une notask déjà existante. -->
     <div class="field-actions-row composer-tools-row">
       <button type="button" class="cal-btn" id="dns-board-btn" title="Tableau blanc (dessin)" aria-label="Tableau blanc"></button>
+      <button type="button" class="cal-btn" id="dns-mic-btn" title="Note vocale (5 Mo max)" aria-label="Note vocale"></button>
+      <button type="button" class="cal-btn" id="dns-dictee-btn" title="Dictée vocale (parler pour écrire)" aria-label="Dictée vocale"></button>
       <button type="button" class="cal-btn" id="dns-attach-btn" title="Joindre un fichier (8 Mo max)" aria-label="Joindre un fichier"></button>
       <input type="file" id="dns-attach-input" multiple hidden>
       <button type="button" class="cal-btn" id="dns-color-btn" title="Couleur" aria-label="Couleur"></button>

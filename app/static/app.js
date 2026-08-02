@@ -5,7 +5,7 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-fix-largeur-popup-date-83';
+const BUILD_VERSION = '2026-08-02-notes-vocales-et-dictee-84';
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).
@@ -523,6 +523,12 @@ const ICONS = {
   imgMarker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-3.5.8.8-3.5 8.2-8.2a2 2 0 0 1 2.8 0l.9.9a2 2 0 0 1 0 2.8z"/><path d="M4 20h16"/></svg>',
   imgEraser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 19 4 14.5a1.5 1.5 0 0 1 0-2.1l7.9-7.9a1.5 1.5 0 0 1 2.1 0l5.5 5.5a1.5 1.5 0 0 1 0 2.1L13.5 19z"/><path d="M8.5 19H20"/><path d="M9 9.5 15.5 16"/></svg>',
   board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M12 16.5V20"/><path d="M9 20h6"/><path d="M7 12.5l3-3 2.5 2.5 2-2"/></svg>',
+  // Micro plein = note vocale (enregistre un fichier joint).
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/><path d="M9 21h6"/></svg>',
+  // Micro + lignes de texte = dictée (écrit dans la notask, n'attache rien) :
+  // volontairement distinct du micro seul, les deux boutons étant voisins.
+  dictee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="5" height="9.5" rx="2.5"/><path d="M1.8 10.5a4.7 4.7 0 0 0 9.4 0"/><path d="M6.5 15v2.5"/><path d="M14 8h7"/><path d="M14 12h7"/><path d="M14 16h5"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4.5h4.5"/><path d="M20 9V4.5h-4.5"/><path d="M4 15v4.5h4.5"/><path d="M20 15v4.5h-4.5"/></svg>',
   fullscreenExit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4.5V9H4"/><path d="M15.5 4.5V9H20"/><path d="M8.5 19.5V15H4"/><path d="M15.5 19.5V15H20"/></svg>',
 
@@ -3320,6 +3326,255 @@ function queueComposerFiles(fileList) {
   renderComposerAttachments();
 }
 
+/* ==================== Notes vocales et dictée ====================
+   Deux fonctions distinctes, volontairement sur deux boutons :
+   - Note vocale : enregistre l'audio et le joint à la notask comme
+     n'importe quel fichier (il passe donc par le même chiffrement de bout
+     en bout que les autres pièces jointes).
+   - Dictée : ne produit aucun fichier, écrit du texte dans la notask.
+     S'appuie sur l'API Web Speech, qui sur Chrome Android délègue à la
+     reconnaissance vocale du système — c'est bien l'outil Android qui
+     travaille, sans rien à installer. Firefox ne l'implémente pas : on le
+     dit clairement plutôt que de laisser un bouton inerte. */
+
+const AUDIO_BITS_PER_SECOND = 96000;
+const MAX_AUDIO_MB = 5;
+const MAX_AUDIO_BYTES = MAX_AUDIO_MB * 1024 * 1024;
+
+/* Le conteneur audio dépend du navigateur : Chrome/Android produisent du
+   WebM/Opus, Safari/iOS uniquement du MP4. On prend le premier format
+   réellement supporté au lieu d'en imposer un qui ferait échouer
+   l'enregistrement sur la moitié des appareils. */
+function choisirFormatAudio() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const candidats = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  return candidats.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+function extensionAudio(mime) {
+  if (!mime) return 'webm';
+  if (mime.includes('mp4')) return 'm4a';
+  if (mime.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+
+let enregistrementEnCours = null;
+
+async function basculerNoteVocale(btnSel, onFichier) {
+  const btn = $(btnSel);
+
+  // Deuxième clic sur le bouton actif : on arrête et on laisse onstop faire
+  // le reste. Un clic sur l'AUTRE bouton pendant un enregistrement arrête
+  // aussi celui en cours, pour ne jamais avoir deux flux micro ouverts.
+  if (enregistrementEnCours) {
+    const memeBouton = enregistrementEnCours.btnSel === btnSel;
+    enregistrementEnCours.recorder.stop();
+    if (memeBouton) return;
+    return;
+  }
+
+  const mime = choisirFormatAudio();
+  if (mime === null) {
+    alert("Ce navigateur ne sait pas enregistrer d'audio (MediaRecorder absent).");
+    return;
+  }
+
+  let flux;
+  try {
+    flux = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    // Refus de permission, micro absent, ou page non sécurisée : un seul
+    // message, l'utilisateur n'a pas à distinguer ces cas.
+    alert("Micro indisponible : autorisez l'accès au microphone pour enregistrer une note vocale.");
+    return;
+  }
+
+  const recorder = new MediaRecorder(flux, {
+    mimeType: mime || undefined,
+    audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+  });
+  const morceaux = [];
+  let taille = 0;
+  let coupeParLimite = false;
+
+  const arreterFlux = () => flux.getTracks().forEach((t) => t.stop());
+
+  recorder.ondataavailable = (e) => {
+    if (!e.data || !e.data.size) return;
+    morceaux.push(e.data);
+    taille += e.data.size;
+    // Coupure nette à la limite plutôt qu'un rejet après coup : l'utilisateur
+    // garde ce qu'il a déjà dit au lieu de tout perdre.
+    if (taille >= MAX_AUDIO_BYTES && recorder.state === 'recording') {
+      coupeParLimite = true;
+      recorder.stop();
+    }
+  };
+
+  recorder.onstop = () => {
+    arreterFlux();
+    clearInterval(enregistrementEnCours && enregistrementEnCours.minuteur);
+    enregistrementEnCours = null;
+    btn.classList.remove('is-recording');
+    btn.innerHTML = ICONS.mic;
+    btn.title = `Note vocale (${MAX_AUDIO_MB} Mo max)`;
+
+    if (!morceaux.length) return;
+    const type = recorder.mimeType || mime || 'audio/webm';
+    const blob = new Blob(morceaux, { type });
+    const horodatage = new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+    const fichier = new File([blob], `note-vocale-${horodatage}.${extensionAudio(type)}`, { type });
+    onFichier(fichier);
+    if (coupeParLimite) {
+      alert(`Enregistrement arrêté : limite de ${MAX_AUDIO_MB} Mo atteinte. La partie enregistrée est conservée.`);
+    }
+  };
+
+  // timeslice de 1s : sans lui, ondataavailable n'est appelé qu'à l'arrêt et
+  // la limite de taille ne pourrait jamais être surveillée en cours de route.
+  recorder.start(1000);
+
+  const debut = Date.now();
+  const minuteur = setInterval(() => {
+    const s = Math.floor((Date.now() - debut) / 1000);
+    btn.title = `Enregistrement… ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')} — cliquer pour arrêter`;
+  }, 1000);
+
+  enregistrementEnCours = { recorder, btnSel, minuteur };
+  btn.classList.add('is-recording');
+  btn.innerHTML = ICONS.stop;
+  btn.title = 'Enregistrement… cliquer pour arrêter';
+}
+
+/* ---------------------------- Dictée ---------------------------- */
+
+const ReconnaissanceVocale = window.SpeechRecognition || window.webkitSpeechRecognition;
+let dicteeEnCours = null;
+
+/* Insère le texte reconnu dans la zone visée. Deux cas : un champ de
+   formulaire classique (value) ou une zone riche contenteditable
+   (#nc-content / #dns-content). Pour la zone riche on passe par
+   execCommand('insertText') quand c'est possible : c'est le seul moyen
+   simple d'insérer au curseur en gardant l'annulation (Ctrl+Z) fonctionnelle. */
+function insererTexteDicte(cible, texte) {
+  if (!cible || !texte) return;
+  const morceau = texte.trim();
+  if (!morceau) return;
+
+  if (cible.isContentEditable) {
+    cible.focus();
+    const separateur = cible.textContent && !/\s$/.test(cible.textContent) ? ' ' : '';
+    let insere = false;
+    try {
+      insere = document.execCommand('insertText', false, separateur + morceau);
+    } catch { insere = false; }
+    if (!insere) cible.textContent += separateur + morceau;
+  } else {
+    const separateur = cible.value && !/\s$/.test(cible.value) ? ' ' : '';
+    cible.value += separateur + morceau;
+  }
+  cible.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function basculerDictee(btnSel, cibleFn, avantDemarrage) {
+  const btn = $(btnSel);
+
+  if (dicteeEnCours) {
+    const memeBouton = dicteeEnCours.btnSel === btnSel;
+    dicteeEnCours.arretDemande = true;
+    dicteeEnCours.reco.stop();
+    if (memeBouton) return;
+  }
+
+  if (!ReconnaissanceVocale) {
+    alert("La dictée vocale n'est pas disponible dans ce navigateur. Elle fonctionne sur Chrome (y compris Android, qui utilise la reconnaissance vocale du téléphone).");
+    return;
+  }
+
+  if (avantDemarrage) avantDemarrage();
+  const cible = cibleFn();
+  if (!cible) return;
+
+  const reco = new ReconnaissanceVocale();
+  reco.lang = 'fr-FR';
+  reco.continuous = true;
+  // Les résultats intermédiaires ne sont pas insérés (ils changent à chaque
+  // mot) : seuls les segments marqués définitifs le sont, sinon le texte
+  // se réécrirait en boucle pendant qu'on parle.
+  reco.interimResults = false;
+
+  reco.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) insererTexteDicte(cible, e.results[i][0].transcript);
+    }
+  };
+
+  const terminer = () => {
+    dicteeEnCours = null;
+    btn.classList.remove('is-recording');
+    btn.innerHTML = ICONS.dictee;
+    btn.title = 'Dictée vocale (parler pour écrire)';
+  };
+
+  reco.onerror = (e) => {
+    terminer();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      alert("Micro refusé : autorisez l'accès au microphone pour la dictée.");
+    }
+    // 'no-speech'/'aborted' : silence ou arrêt volontaire, rien à signaler.
+  };
+
+  reco.onend = () => {
+    // La reconnaissance s'arrête d'elle-même après un silence prolongé. Tant
+    // que l'utilisateur n'a pas cliqué pour arrêter, on relance : sinon une
+    // dictée un peu hésitante se couperait toute seule sans prévenir.
+    if (dicteeEnCours && !dicteeEnCours.arretDemande) {
+      try { reco.start(); return; } catch { /* relance impossible : on termine */ }
+    }
+    terminer();
+  };
+
+  try {
+    reco.start();
+  } catch {
+    terminer();
+    return;
+  }
+  dicteeEnCours = { reco, btnSel, arretDemande: false };
+  btn.classList.add('is-recording');
+  btn.innerHTML = ICONS.stop;
+  btn.title = 'Dictée en cours… cliquer pour arrêter';
+}
+
+// --- Composeur ---
+$('#nc-mic-btn').innerHTML = ICONS.mic;
+$('#nc-dictee-btn').innerHTML = ICONS.dictee;
+$('#nc-mic-btn').addEventListener('click', () => {
+  composerExpand();
+  basculerNoteVocale('#nc-mic-btn', (fichier) => queueComposerFiles([fichier]));
+});
+$('#nc-dictee-btn').addEventListener('click', () => {
+  basculerDictee('#nc-dictee-btn', () => $('#nc-content'), composerExpand);
+});
+
+// --- Édition rapide ---
+$('#dns-mic-btn').innerHTML = ICONS.mic;
+$('#dns-dictee-btn').innerHTML = ICONS.dictee;
+$('#dns-mic-btn').addEventListener('click', () => {
+  basculerNoteVocale('#dns-mic-btn', (fichier) => handleIncomingAttachments([fichier]));
+});
+$('#dns-dictee-btn').addEventListener('click', () => {
+  // En mode liste à cocher, #dns-content est masqué : on dicte alors dans la
+  // description, seul champ texte libre restant.
+  basculerDictee('#dns-dictee-btn', () =>
+    (state.editingIsChecklist ? $('#dns-description') : $('#dns-content')));
+});
+
 $('#nc-attach-btn').addEventListener('click', () => $('#nc-attach-input').click());
 $('#nc-attach-input').addEventListener('change', (e) => {
   queueComposerFiles(e.target.files);
@@ -4584,6 +4839,16 @@ async function saveNoteSimpleDialog() {
 
 // Pas de bouton Enregistrer/Annuler ici : toute fermeture (clic à côté,
 // Échap) déclenche l'événement natif "close", seul point d'enregistrement.
+/* Un micro ouvert ne doit jamais survivre à la fermeture de la boîte : sans
+   ça, l'enregistrement continuerait en arrière-plan et son fichier
+   arriverait sur une notask qu'on a déjà quittée. Placé AVANT la
+   sauvegarde : arrêter l'enregistrement déclenche l'ajout de la pièce
+   jointe, qui doit encore trouver state.editingNote renseigné. */
+function arreterCaptureAudio() {
+  if (enregistrementEnCours) enregistrementEnCours.recorder.stop();
+  if (dicteeEnCours) { dicteeEnCours.arretDemande = true; dicteeEnCours.reco.stop(); }
+}
+$('#dlg-note-simple').addEventListener('close', arreterCaptureAudio);
 $('#dlg-note-simple').addEventListener('close', saveNoteSimpleDialog);
 $('#dlg-note-simple').addEventListener('click', (e) => {
   if (e.target === $('#dlg-note-simple')) fermerAvecAnimation($('#dlg-note-simple'));
