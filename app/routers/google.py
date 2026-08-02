@@ -266,35 +266,45 @@ def debug_sync(
     admin: User = Depends(get_current_admin),
     session: Session = Depends(get_session),
 ):
-    note = session.get(Note, note_id)
-    if note is None or note.user_id != admin.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    # Tout est dans un seul bloc try/except large (pas seulement autour de
+    # l'appel Google) : la 1re version de cet endpoint renvoyait un 500 brut
+    # ("Internal Server Error", middleware Starlette par défaut) sans le
+    # moindre detail exploitable — vu que TOUT ce qui est en dehors d'un
+    # try/except explicite peut lever. On préfère ici tout attraper et
+    # renvoyer le traceback complet dans la réponse JSON plutôt que de
+    # deviner à l'aveugle sans accès aux logs serveur.
+    import traceback
 
-    account = gcal._account_for(note.user_id, session)
-    if account is None:
-        return {"step": "account", "error": "Aucun compte Google lié pour cet utilisateur."}
-
-    info: dict = {
-        "note_id": note.id,
-        "due_at": note.due_at.isoformat() if note.due_at else None,
-        "calendar_title": note.calendar_title,
-        "google_event_id": note.google_event_id,
-        "account_email": account.email,
-        "account_needs_reauth": account.needs_reauth,
-        "account_calendar_id": account.calendar_id,
-        "has_refresh_token": bool(account.refresh_token),
-    }
-
-    import httpx as _httpx
-
-    token = gcal._valid_access_token(account, session)
-    info["access_token_obtained"] = bool(token)
-    if not token:
-        info["step"] = "token"
-        info["needs_reauth_after_attempt"] = account.needs_reauth
-        return info
-
+    info: dict = {"note_id": note_id}
     try:
+        note = session.get(Note, note_id)
+        if note is None or note.user_id != admin.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+        info["due_at"] = note.due_at.isoformat() if note.due_at else None
+        info["calendar_title"] = note.calendar_title
+        info["google_event_id"] = note.google_event_id
+
+        account = gcal._account_for(note.user_id, session)
+        if account is None:
+            info["step"] = "account"
+            info["error"] = "Aucun compte Google lié pour cet utilisateur."
+            return info
+
+        info["account_email"] = account.email
+        info["account_needs_reauth"] = account.needs_reauth
+        info["account_calendar_id"] = account.calendar_id
+        info["has_refresh_token"] = bool(account.refresh_token)
+
+        import httpx as _httpx
+
+        token = gcal._valid_access_token(account, session)
+        info["access_token_obtained"] = bool(token)
+        if not token:
+            info["step"] = "token"
+            info["needs_reauth_after_attempt"] = account.needs_reauth
+            return info
+
         with _httpx.Client(timeout=gcal.HTTP_TIMEOUT) as client:
             resp = client.post(
                 gcal._events_url(account),
@@ -304,8 +314,10 @@ def debug_sync(
         info["step"] = "create_event"
         info["status_code"] = resp.status_code
         info["response_body"] = resp.text[:2000]
-    except Exception as exc:
-        info["step"] = "create_event"
-        info["exception"] = f"{type(exc).__name__}: {exc}"
-
-    return info
+        return info
+    except HTTPException:
+        raise
+    except Exception:
+        info["step"] = "exception"
+        info["traceback"] = traceback.format_exc()
+        return info
