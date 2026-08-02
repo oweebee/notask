@@ -5,7 +5,15 @@
 // "le navigateur affiche encore une version en cache" et "il y a un vrai
 // bug dans le code déployé". Coller ce numéro (visible dans la console,
 // F12) résout en un coup d'œil ce genre de doute.
-const BUILD_VERSION = '2026-08-02-pieces-jointes-non-visuelles-en-bas-87';
+/* Version de l'application. Palier 0.9 jusqu'à l'annonce de la V1 :
+   on incrémente la 4e décimale à chaque livraison (0.9001, 0.9002, …),
+   ce qui laisse de la place jusqu'à 1.0 sans jamais l'atteindre par
+   accident. Doit rester synchronisé avec le fichier VERSION à la racine
+   (source de vérité côté dépôt) et avec la version de l'API dans
+   app/main.py. */
+const APP_VERSION = '0.9001';
+
+const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
 
 // PWA : enregistrement du service worker (app-shell uniquement, voir sw.js).

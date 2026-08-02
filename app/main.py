@@ -21,7 +21,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="notask",
     description="Notasks et tâches — API REST protégée par JWT.",
-    version="1.0.0",
+    # Palier 0.9 jusqu'à l'annonce de la V1 (cf. fichier VERSION à la
+    # racine et APP_VERSION dans app/static/app.js) : la 1.0.0 affichée ici
+    # était une valeur d'amorçage jamais mise à jour, trompeuse.
+    version="0.9001",
     lifespan=lifespan,
 )
 

@@ -91,6 +91,13 @@ if errorlevel 1 (
   git push -u origin %BRANCH% || goto :erreur
 )
 
+REM --- Etiquettes de version (v0.9001, v0.9002...) : "git push" ne les
+REM     envoie PAS, il ne pousse que la branche. Sans cette ligne, les
+REM     versions n'apparaitraient jamais sur GitHub.
+echo.
+echo [PUSH] etiquettes de version
+git push origin --tags
+
 echo.
 echo [OK] Pousse sur %REPO% (%BRANCH%).
 echo      Coolify peut maintenant redeployer.
