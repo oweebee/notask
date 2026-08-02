@@ -2,12 +2,32 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from pydantic import field_validator
 from sqlalchemy import JSON, Column, String
 from sqlmodel import Field, Relationship, SQLModel
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _due_at_utc(v: Optional[datetime]) -> Optional[datetime]:
+    """Un `due_at` relu depuis SQLite ressort NAÏF (SQLite n'a aucun support
+    natif des fuseaux horaires ; SQLAlchemy perd l'indicateur de fuseau au
+    passage, même si la valeur numérique stockée est bien celle envoyée par
+    le client — un ISO en UTC, voir partsToIso()/toISOString() dans app.js).
+    Sans ce correctif, Pydantic sérialise ce datetime naïf SANS indicateur
+    de fuseau ("2026-08-07T08:30:00", pas de Z/+00:00) ; or `new Date(...)`
+    côté client interprète alors ce texte comme une heure LOCALE (pas UTC,
+    règle du spec ECMAScript pour un ISO sans fuseau) — une échéance posée à
+    10h30 (convertie en 08h30 UTC avant l'envoi) réapparaissait donc
+    affichée à 08h30 après un rechargement, la conversion UTC->local étant
+    appliquée une seconde fois par erreur. Ce correctif ne fait que
+    RÉTABLIR l'étiquette UTC sur une valeur déjà numériquement correcte, il
+    ne déplace jamais l'heure elle-même."""
+    if v is not None and v.tzinfo is None:
+        return v.replace(tzinfo=timezone.utc)
+    return v
 
 
 # ============================== Utilisateurs ==============================
@@ -229,6 +249,14 @@ class NoteBase(SQLModel):
     # et reste lisible dès qu'on ouvre la notask.
     masked: bool = False
 
+    # Cf. _due_at_utc() en tête de fichier — rétablit l'étiquette UTC perdue
+    # par SQLite/SQLAlchemy à la lecture, pour toute classe héritant de
+    # NoteBase (NoteOut, NoteCreate).
+    @field_validator("due_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _due_at_utc(v)
+
 
 class Note(NoteBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -339,6 +367,11 @@ class NoteItemOut(SQLModel):
     position: int
     due_at: Optional[datetime] = None
     google_event_id: Optional[str] = None
+
+    @field_validator("due_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _due_at_utc(v)
 
 
 class NoteCreate(NoteBase):
@@ -516,6 +549,11 @@ class NoteVersionItemOut(SQLModel):
     checked: bool
     due_at: Optional[datetime] = None
 
+    @field_validator("due_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _due_at_utc(v)
+
 
 class NoteVersionDetail(NoteVersionListItem):
     description: str
@@ -524,6 +562,11 @@ class NoteVersionDetail(NoteVersionListItem):
     due_at: Optional[datetime] = None
     label_ids: List[int] = []
     items: List[NoteVersionItemOut] = []
+
+    @field_validator("due_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _due_at_utc(v)
     attachments: List[NoteVersionAttachmentOut] = []
 
 
@@ -585,6 +628,11 @@ class TaskOut(SQLModel):
     # dans app.js), None si la note n'en a pas.
     icon: Optional[str] = None
     bucket: str          # "late" | "today" | "upcoming" | "done"
+
+    @field_validator("due_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: datetime) -> datetime:
+        return _due_at_utc(v)
 
 
 class TaskDone(SQLModel):
