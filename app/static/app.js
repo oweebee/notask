@@ -1584,10 +1584,6 @@ function switchView(view) {
     $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
   }
-  // Marqueur posé sur <body> pour la police propre à la vue Archives (voir
-  // style.css) : #view-notes est partagé avec Notes/Favoris, rien dans le
-  // DOM ne distingue autrement la vue Archives.
-  document.body.classList.toggle('view-archives', view === 'archives');
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
 }

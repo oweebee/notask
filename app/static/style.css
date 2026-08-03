@@ -60,13 +60,6 @@
    visibles et se superposent. */
 [hidden] { display: none !important; }
 
-/* Vue Archives : police à part (voir switchView() dans app.js, qui pose
-   cette classe sur <body> — #view-notes est partagé avec Notes/Favoris,
-   rien d'autre dans le DOM ne distingue la vue Archives). */
-body.view-archives #view-notes {
-  font-family: "Satisfy", cursive;
-}
-
 body {
   margin: 0;
   font-family: Verdana, Geneva, sans-serif;
@@ -582,6 +575,11 @@ header.topbar .who {
   border-top: 1px solid var(--md-outline-variant);
   margin: .75rem 0 .25rem 1rem;
 }
+
+/* Espace entre la barre de séparation et le premier libellé — sans toucher
+   à .drawer-sep, partagée avec d'autres séparateurs du menu qui n'ont pas
+   besoin de cet écart. */
+#labels-list { margin-top: 1rem; }
 
 /* Élément de navigation MD3 : pilule pleine à droite */
 .drawer-item {
@@ -2304,7 +2302,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
   font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: .8125rem;
+  /* +2px sur la taille d'origine (.8125rem/13px) : VT323 a un œil plus
+     petit que les monospaces classiques, elle a besoin de ce supplément
+     pour rester aussi lisible. */
+  font-size: .9375rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
   border-radius: 4px;
@@ -2338,8 +2339,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    Pile de polices manuscrites courantes, avec `cursive` en dernier
    recours — aucune n'est garantie sur toutes les machines. */
 .note-archive-zone {
-  font-family: "Segoe Script", "Bradley Hand", "Brush Script MT",
-               "Comic Sans MS", cursive;
+  font-family: "Satisfy", cursive;
   font-size: .95em;
   background: rgba(0, 0, 0, .34);
   border-radius: var(--shape-xs);
@@ -2391,7 +2391,8 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 
 .note-code-block {
   font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: .8125rem;
+  /* Cf. .note-code-inline : +2px pour compenser l'œil réduit de VT323. */
+  font-size: .9375rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;
