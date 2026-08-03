@@ -2127,6 +2127,10 @@ function renderLabelsDrawer() {
 enablePointerReorder($('#labels-list'), '.label-row', {
   excludeSelector: '.label-edit-btn',
   onDrop: commitLabelOrder,
+  // Liste empilée verticalement : c'est la position VERTICALE dans la ligne
+  // survolée qui dit si l'on passe avant ou après (contrairement à la
+  // mosaïque, où les cartes se suivent de gauche à droite).
+  axis: 'y',
 });
 
 /* Comme commitNoteOrder() : l'ordre visuel du DOM fait foi une fois le
@@ -3032,7 +3036,7 @@ function geleParGlisser(el) {
   return _dragJustHappened.has(el);
 }
 
-function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap, onDrop, enabled } = {}) {
+function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap, onDrop, enabled, axis = 'x' } = {}) {
   let pending = null; // avant le démarrage effectif : { pointerId, item, startX, startY, timer }
   let active = null;  // glisser réellement en cours
 
@@ -3090,15 +3094,24 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
       e.preventDefault();
       active.moved = true;
 
-      const target = getDropTarget(container, e.clientX, e.clientY, itemSelector);
-      if (target && target.el !== active.el) {
-        active.el.style.transform = '';
-        if (target.before) target.el.before(active.el);
-        else target.el.after(active.el);
-        if (onSwap) onSwap();
-        const box = active.el.getBoundingClientRect();
-        active.baseLeft = box.left;
-        active.baseTop = box.top;
+      // Délai minimal entre deux permutations : la mosaïque est recalculée
+      // à chaque fois (onSwap), et tout se déplace sous le pointeur. Sans ce
+      // répit, une permutation pouvait en déclencher une autre au frame
+      // suivant, en boucle — second facteur de la vibration, en plus du
+      // choix de cible corrigé dans getDropTarget().
+      const maintenant = performance.now();
+      if (maintenant - (active.lastSwapAt || 0) >= 120) {
+        const target = getDropTarget(container, e.clientX, e.clientY, itemSelector, axis);
+        if (target && target.el !== active.el) {
+          active.el.style.transform = '';
+          if (target.before) target.el.before(active.el);
+          else target.el.after(active.el);
+          if (onSwap) onSwap();
+          const box = active.el.getBoundingClientRect();
+          active.baseLeft = box.left;
+          active.baseTop = box.top;
+          active.lastSwapAt = maintenant;
+        }
       }
 
       const x = e.clientX - active.grabX - active.baseLeft;
@@ -3160,23 +3173,36 @@ enablePointerReorder($('#notes-grid'), '.note', {
 // AVANT enablePointerReorder() dans l'ordre de lecture du fichier — pas
 // une contrainte technique (les déclarations `function` sont hissées),
 // juste pour suivre l'ordre logique : la cible d'abord, le geste ensuite.
-function getDropTarget(container, x, y, itemSelector = '.note') {
+function getDropTarget(container, x, y, itemSelector = '.note', axis = 'x') {
   const els = [...container.querySelectorAll(itemSelector + ':not(.dragging)')];
-  let best = null;
-  let bestDist = Infinity;
-  let before = true;
+
+  // Cible = l'élément réellement SOUS le pointeur, et non le centre le plus
+  // proche comme auparavant. Avec la proximité, deux voisins se disputaient
+  // la cible dès que le pointeur approchait de leur frontière commune : la
+  // carte permutait, la mosaïque se recalculait, ce qui redéplaçait tout et
+  // relançait aussitôt une permutation en sens inverse — d'où la vibration
+  // signalée. Un test d'appartenance ne peut désigner qu'un seul élément à
+  // la fois, il n'y a donc plus d'oscillation possible.
+  let hit = null;
   for (const el of els) {
     const box = el.getBoundingClientRect();
-    const cx = box.left + box.width / 2;
-    const cy = box.top + box.height / 2;
-    const dist = (x - cx) ** 2 + (y - cy) ** 2;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = el;
-      before = y < cy || (Math.abs(y - cy) < box.height / 2 && x < cx);
+    if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) {
+      hit = { el, box };
+      break;
     }
   }
-  return best ? { el: best, before } : null;
+  if (!hit) return null;  // entre deux cartes : on ne touche à rien
+
+  // Zone morte autour du milieu : tant que le pointeur n'a pas franchement
+  // dépassé la moitié de la cible, aucune permutation. Sans elle, un
+  // tremblement de quelques pixels pile sur la frontière suffirait à
+  // relancer l'aller-retour.
+  const { el, box } = hit;
+  const ratio = axis === 'y'
+    ? (y - box.top) / box.height
+    : (x - box.left) / box.width;
+  if (ratio > .4 && ratio < .6) return null;
+  return { el, before: ratio <= .5 };
 }
 
 /* Une fois le geste terminé, l'ordre visuel du DOM fait foi : on réattribue

@@ -2028,8 +2028,10 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   min-height: 48px;
   /* Aucune marge à gauche : la pilule part du bord de l'écran comme les
      libellés au-dessus. Le retrait du texte (2.5rem) reprend celui de
-     .drawer-item.label-item, pour que les intitulés s'alignent. */
-  margin: .5rem 0 0;
+     .drawer-item.label-item, pour que les intitulés s'alignent.
+     4px au-dessus : le même écart que celui qui sépare deux libellés
+     entre eux (voir .label-row). */
+  margin: 4px 0 0;
   padding: 0 .5rem 0 2.5rem;
   background: transparent;
   border: 1px solid var(--md-outline-variant);
