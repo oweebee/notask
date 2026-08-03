@@ -2475,21 +2475,32 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   color: var(--md-on-surface-variant);
   box-shadow: var(--elev-2);
   cursor: pointer;
-  /* Sort de son point d'ancrage en s'étirant : départ écrasé contre le
-     bouton parent, arrivée à taille pleine avec un léger dépassement — la
-     courbe elastique donne le côté organique demandé.
-     visibility (et pas seulement opacity) : sans elle, le bouton resterait
+  /* visibility (et pas seulement opacity) : sans elle, le bouton resterait
      cliquable alors qu'il est invisible, juste au-dessus de la barre. */
   transform: translate(-50%, 8px) scale(.4);
   transform-origin: 50% 100%;
   opacity: 0;
   visibility: hidden;
-  transition: transform .28s cubic-bezier(.34, 1.56, .5, 1), opacity .18s ease, visibility .28s;
+  transition: transform .2s ease-in, opacity .16s ease, visibility .2s;
+}
+/* Apparition « gélatine » : le bouton jaillit de son ancrage en s'écrasant
+   puis en rebondissant, l'étirement alternant entre les deux axes avant de
+   se stabiliser. Une suite d'images clés plutôt qu'une simple courbe : un
+   cubic-bezier, même élastique, ne fait varier qu'une échelle uniforme et
+   ne peut pas produire cette compensation largeur/hauteur. */
+@keyframes fmt-archive-gelatine {
+  0%   { transform: translate(-50%, 10px) scale(.35, .55); opacity: 0; }
+  35%  { transform: translate(-50%, -4px) scale(1.28, .78); opacity: 1; }
+  55%  { transform: translate(-50%, 2px) scale(.82, 1.18); }
+  72%  { transform: translate(-50%, -2px) scale(1.11, .92); }
+  86%  { transform: translate(-50%, 1px) scale(.96, 1.05); }
+  100% { transform: translate(-50%, 0) scale(1, 1); opacity: 1; }
 }
 .fmt-archive-wrap.sous-menu-ouvert .fmt-archive-all {
   transform: translate(-50%, 0) scale(1);
   opacity: 1;
   visibility: visible;
+  animation: fmt-archive-gelatine .52s cubic-bezier(.3, .9, .4, 1);
 }
 .fmt-archive-all:hover { background: var(--md-surface-5, rgba(255,255,255,.16)); color: var(--md-on-surface); }
 .fmt-archive-all svg { width: 17px; height: 17px; display: block; }
@@ -2573,6 +2584,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   font-size: 0;
   white-space: nowrap;
 }
+/* Le texte fond progressivement au lieu de disparaître d'un coup : la
+   taille de police s'anime en même temps que la hauteur (voir
+   animerPliArchive dans app.js), ce qui donne au pli son côté organique. */
+.note-archive-zone { transition: font-size .34s cubic-bezier(.34, 1.4, .5, 1); }
 .note-archive-zone.is-closed > *:not(.archive-icon-mark) { display: none; }
 .note-archive-zone.is-closed::before {
   content: "archive";
@@ -2580,17 +2595,11 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   font-size: 1rem;
   opacity: .75;
 }
-/* Repliée, la zone tient sur une ligne : l'icône revient dans le flux, à sa
-   suite, au lieu d'être ancrée en haut à droite d'un bloc de plusieurs
-   lignes. */
-.note-archive-block.is-closed {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .5rem;
-  padding-right: .625rem;
-}
-.note-archive-block.is-closed .archive-icon-mark { position: static; }
+/* Repliée, la zone tient sur une ligne : l'icône reste en haut à droite,
+   ce qui la place naturellement au bon endroit sur une seule ligne — pas
+   de bascule vers un autre mode d'affichage, qui ferait sauter la mise en
+   page en plein milieu de l'animation. */
+.note-archive-block.is-closed { padding-right: 2.375rem; }
 
 /* Icône archive : bouton de pli/dépli de SA zone, sans toucher aux autres
    de la même notask (voir basculerPliArchive dans app.js). Elle était

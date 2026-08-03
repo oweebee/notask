@@ -4554,10 +4554,13 @@ function initSousMenuArchive(wrapSelecteur, zoneSelecteur) {
     e.preventDefault();
     e.stopPropagation();
     const deplier = majLibelle();
-    for (const zone of $$(zoneSelecteur + ' .note-archive-zone')) {
-      zone.classList.toggle('is-closed', !deplier);
-    }
-    majLibelle();
+    // Léger décalage d'une zone à l'autre : elles se replient en cascade
+    // plutôt que toutes d'un bloc, ce qui rend le geste plus lisible quand
+    // la notask en compte plusieurs.
+    $$(zoneSelecteur + ' .note-archive-zone').forEach((zone, i) => {
+      setTimeout(() => animerPliArchive(zone, !deplier), i * 60);
+    });
+    setTimeout(majLibelle, DUREE_PLI);
   });
 }
 
@@ -4720,11 +4723,54 @@ document.addEventListener('click', (e) => {
   // Sans ça, le clic remonterait à la carte et ouvrirait la notask.
   e.stopPropagation();
   e.preventDefault();
-  zone.classList.toggle('is-closed');
+  animerPliArchive(zone, !zone.classList.contains('is-closed'));
 
   const carte = icone.closest('.note[data-id]');
   if (carte) enregistrerPliArchive(carte, zone);
 });
+
+/* Pli/dépli animé d'une zone d'archive.
+
+   La hauteur d'un élément ne peut pas s'animer vers `auto` en CSS : on
+   mesure donc les deux états de part et d'autre du changement de classe,
+   puis on anime entre ces deux valeurs avant de rendre la main au flux
+   normal. Le pli lui-même reste porté par la classe `is-closed` — c'est
+   elle que lit richToText() à l'enregistrement, l'animation n'est qu'un
+   habillage par-dessus.
+
+   Une archive EN LIGNE (un mot, une phrase) n'a pas de hauteur à réduire,
+   c'est sa largeur qui change : on anime donc la dimension pertinente selon
+   la variante. */
+const DUREE_PLI = 340;
+
+function animerPliArchive(zone, versFerme) {
+  const enLigne = zone.classList.contains('note-archive-inline');
+  const dimension = enLigne ? 'width' : 'height';
+  const mesurer = () => zone.getBoundingClientRect()[dimension];
+
+  const avant = mesurer();
+  zone.classList.toggle('is-closed', versFerme);
+  // Dimension libre le temps de la mesure : une valeur figée d'une
+  // animation précédente fausserait le calcul de l'état d'arrivée.
+  zone.style[dimension] = '';
+  const apres = mesurer();
+
+  zone.style.overflow = 'hidden';
+  zone.style[dimension] = avant + 'px';
+  void zone.offsetHeight;  // fige le point de départ avant d'animer
+  // Courbe à léger dépassement, comme le reste des mouvements de l'app.
+  zone.style.transition = `${dimension} ${DUREE_PLI}ms cubic-bezier(.34, 1.4, .5, 1)`;
+  zone.style[dimension] = apres + 'px';
+
+  clearTimeout(zone._minuteurPli);
+  zone._minuteurPli = setTimeout(() => {
+    // Rendu au flux : sans ça, la zone garderait une dimension figée et ne
+    // suivrait plus une modification ultérieure de son contenu.
+    zone.style.transition = '';
+    zone.style[dimension] = '';
+    zone.style.overflow = '';
+  }, DUREE_PLI + 20);
+}
 
 /* Reporte dans le texte enregistré le pli d'une zone repliée depuis une
    carte. La zone est repérée par son RANG parmi les zones d'archive de la
