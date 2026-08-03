@@ -1319,7 +1319,8 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
      voisines s'écartent en cédant le passage, avec un petit rebond en fin
      de course — l'effet "on se pousse pour laisser passer" recherché
      pendant un glisser. */
-  transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1);
+  transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1),
+              transform .12s ease-out, border-radius .12s ease-out;
 }
 .notes-grid .note.dragging { transition: none; }
 /* Coupe la transition pendant un rendu COMPLET de la grille (voir

@@ -3025,7 +3025,7 @@ function geleParGlisser(el) {
   return _dragJustHappened.has(el);
 }
 
-function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap, onDrop, enabled, axis = 'x' } = {}) {
+function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap, onDrop, enabled, axis = 'x', blob = false } = {}) {
   let pending = null; // avant le démarrage effectif : { pointerId, item, startX, startY, timer }
   let active = null;  // glisser réellement en cours
 
@@ -3075,37 +3075,89 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
 
      L'étirement est orienté par `rotate(a) scale(sx, sy) rotate(-a)` : on
      bascule dans l'axe du mouvement, on déforme, puis on revient — sans
-     quoi l'étirement serait toujours horizontal, quel que soit le geste. */
-  const mouvementReduit = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+     quoi l'étirement serait toujours horizontal, quel que soit le geste.
 
+     Pas de repli sous prefers-reduced-motion, volontairement : l'effet est
+     demandé dans tous les cas sur cette application personnelle. */
   function peindreGlisser() {
     if (!active) return;
     const base = `translate(${Math.round(active.x)}px, ${Math.round(active.y)}px)`;
-    if (mouvementReduit) {
-      active.el.style.transform = base;
-      return;
-    }
     const vitesse = Math.hypot(active.vx, active.vy);
-    // Bornée : au-delà, un geste rapide déformerait la carte au point de la
-    // rendre illisible.
-    const etirement = Math.min(.14, vitesse * .006);
+    // Bornée, mais assez haut pour que la déformation soit franche.
+    const etirement = Math.min(.3, vitesse * .014);
     const angle = Math.atan2(active.vy, active.vx) * 180 / Math.PI;
+    // Léger balancement dans le sens du geste, en plus de l'étirement : la
+    // carte a l'air de se jeter en avant plutôt que de glisser à plat.
+    const balancement = Math.max(-7, Math.min(7, active.vx * .25));
     active.el.style.transform =
-      `${base} rotate(${angle.toFixed(2)}deg)`
-      + ` scale(${(1 + etirement).toFixed(3)}, ${(1 - etirement).toFixed(3)})`
+      `${base} rotate(${(angle + balancement).toFixed(2)}deg)`
+      + ` scale(${(1 + etirement).toFixed(3)}, ${(1 - etirement * .8).toFixed(3)})`
       + ` rotate(${(-angle).toFixed(2)}deg)`;
     // Coins d'autant plus ronds que la carte file vite — le côté "goutte".
-    active.el.style.borderRadius = `${(8 + etirement * 120).toFixed(1)}px`;
+    active.el.style.borderRadius = `${(8 + etirement * 150).toFixed(1)}px`;
   }
 
   function animerGlisser() {
     if (!active) return;
     // La vitesse retombe toute seule : la carte reprend sa forme dès qu'on
     // ralentit ou qu'on s'arrête, même sans nouvel événement de pointeur.
-    active.vx *= .82;
-    active.vy *= .82;
+    active.vx *= .85;
+    active.vy *= .85;
     peindreGlisser();
+    deformerVoisines();
     active.raf = requestAnimationFrame(animerGlisser);
+  }
+
+  /* Les cartes que la "goutte" frôle se creusent légèrement sur son passage,
+     d'autant plus qu'elle est proche — comme une surface molle qui cède.
+     Calculé à chaque image plutôt qu'en CSS : l'intensité dépend de la
+     distance au pointeur, une valeur continue qu'aucune règle statique ne
+     peut exprimer. Le transform est reposé à vide dès que la carte sort du
+     rayon, pour ne rien laisser traîner à la fin du geste. */
+  const RAYON_INFLUENCE = 220;
+
+  function deformerVoisines() {
+    if (!active || !blob) return;
+    // Coordonnées de mise en page (offsetLeft/offsetTop), PAS
+    // getBoundingClientRect : ce dernier renvoie la boîte déjà déformée par
+    // le transform qu'on vient de poser, et la mesure servirait alors à
+    // calculer la déformation suivante — la carte se mettrait à trembler
+    // toute seule. offsetLeft/offsetTop ignorent les transforms.
+    const rectConteneur = container.getBoundingClientRect();
+    const centreX = active.baseLeft + active.x - rectConteneur.left + active.el.offsetWidth / 2;
+    const centreY = active.baseTop + active.y - rectConteneur.top + active.el.offsetHeight / 2;
+
+    for (const el of container.querySelectorAll(itemSelector)) {
+      if (el === active.el) continue;
+      const dx = (el.offsetLeft + el.offsetWidth / 2) - centreX;
+      const dy = (el.offsetTop + el.offsetHeight / 2) - centreY;
+      const distance = Math.hypot(dx, dy);
+
+      if (distance > RAYON_INFLUENCE) {
+        if (el.style.transform) { el.style.transform = ''; el.style.borderRadius = ''; }
+        continue;
+      }
+      // 1 au contact, 0 en limite de rayon.
+      const force = 1 - distance / RAYON_INFLUENCE;
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      const creux = force * .12;
+      // Écrasement dans l'axe qui pointe vers la carte déplacée, et léger
+      // recul pour dégager le passage.
+      el.style.transform =
+        `translate(${(dx / distance * force * 7 || 0).toFixed(1)}px, ${(dy / distance * force * 7 || 0).toFixed(1)}px)`
+        + ` rotate(${angle.toFixed(2)}deg)`
+        + ` scale(${(1 - creux).toFixed(3)}, ${(1 + creux * .6).toFixed(3)})`
+        + ` rotate(${(-angle).toFixed(2)}deg)`;
+      el.style.borderRadius = `${(8 + force * 26).toFixed(1)}px`;
+    }
+  }
+
+  /* Efface les déformations laissées aux voisines à la fin du geste. */
+  function reinitialiserVoisines() {
+    for (const el of container.querySelectorAll(itemSelector)) {
+      el.style.transform = '';
+      el.style.borderRadius = '';
+    }
   }
 
   container.addEventListener('pointerdown', (e) => {
@@ -3209,6 +3261,7 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
     el.classList.remove('dragging');
     el.style.transform = '';
     el.style.borderRadius = '';  // rend la carte à son arrondi normal (cf. peindreGlisser)
+    reinitialiserVoisines();
     document.body.classList.remove('is-dragging');
     active = null;
     if (moved) {
@@ -3243,6 +3296,10 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // mesure reste juste.
   onSwap: () => layoutMosaic(),
   onDrop: commitNoteOrder,
+  // Déformation des cartes voisines au passage (voir deformerVoisines) :
+  // réservé à la mosaïque. Sur la liste de libellés, des pilules qui
+  // s'écrasent en chaîne serait illisible plus qu'expressif.
+  blob: true,
 });
 
 // `itemSelector` par défaut à '.note' : seul le réordonnancement des
