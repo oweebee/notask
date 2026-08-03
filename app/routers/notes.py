@@ -63,6 +63,14 @@ ICON_KEYS = {
     "fish", "bird", "tree", "flower", "pizza", "cake", "bike", "plane",
     "train", "paintbrush", "football", "bed", "key", "umbrella", "alarm",
     "target", "cloud", "scissors", "magnifier", "gem",
+    # Lot crypto / serveurs / informatique (55 -> 75).
+    "server", "database", "cloudserver", "network", "terminal", "code",
+    "bug", "shield", "vpn", "wifi", "bitcoin", "ethereum", "wallet",
+    "chart", "cpu", "backup", "docker", "api", "password", "monitoring",
+    # Lot développement + gaming (75 -> 95).
+    "git", "branch", "bracket", "rocket", "package", "gamepad", "joystick",
+    "dice", "trophy", "console", "ghost", "headset", "keyboard", "mouse",
+    "sword", "potion", "achievement", "vr", "medal", "stream",
 }
 
 
