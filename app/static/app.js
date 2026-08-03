@@ -6498,7 +6498,10 @@ function renderTasks(items) {
   const groupes = {};
   for (const t of items) (groupes[t.bucket] ||= []).push(t);
 
-  for (const b of ['late', 'today', 'upcoming', 'done']) {
+  // Ordre demandé, de gauche à droite : à venir, aujourd'hui, en retard,
+  // terminées — différent de la colonne d'échéances de l'accueil, qui
+  // empile en retard/aujourd'hui/à venir.
+  for (const b of ['upcoming', 'today', 'late', 'done']) {
     const liste = groupes[b] || [];
     // Colonne affichée même vide : des colonnes qui apparaissent et
     // disparaissent au fil des échéances feraient sauter la mise en page
