@@ -55,6 +55,20 @@
 
 * { box-sizing: border-box; }
 
+/* Police du code, hébergée par l'app elle-même (app/static/fonts/) plutôt
+   que servie par un CDN externe : aucune requête vers un tiers, donc rien
+   qui puisse être bloqué côté réseau ou navigateur.
+   Px437 IBM VGA 8x16 reproduit le texte VGA d'un vrai terminal. Issue d'un
+   bitmap 8x16 : nette aux multiples de 16px, plus floue entre deux — d'où
+   les 16px posés sur .note-code-inline/.note-code-block. */
+@font-face {
+  font-family: "Px437 IBM VGA";
+  src: url("/static/fonts/Px437_IBM_VGA_8x16.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Un sélecteur de classe (.gate, .tabs…) l'emporte sur le display:none que le
    navigateur applique à [hidden]. Sans cette règle, les écrans masqués restent
    visibles et se superposent. */
@@ -479,12 +493,12 @@ header.topbar .who {
 }
 .logs-ligne:last-child { border-bottom: none; }
 .logs-heure {
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   color: var(--md-on-surface-variant);
 }
 .logs-niveau {
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .68rem;
   letter-spacing: .04em;
 }
@@ -522,7 +536,7 @@ header.topbar .who {
   overflow: auto;
   background: rgba(0,0,0,.35);
   border-radius: var(--shape-xs);
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -1504,7 +1518,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   justify-content: flex-end;   /* la frappe se fait en bas, ça remonte */
   height: 100%;
   padding: .45rem .6rem;
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.35;
 }
@@ -2301,10 +2315,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* 18px : VT323 a un œil bien plus petit que les monospaces classiques,
-     elle a besoin de cette taille pour rester lisible. */
-  font-size: 1.125rem;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 16px : taille native de la grille 8x16, seule à rendre la police nette
+     (voir @font-face en tête de fichier). */
+  font-size: 1rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
   border-radius: 4px;
@@ -2335,10 +2349,11 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    Bloc (note-archive-block) ou en ligne (note-archive-inline) selon que la
    sélection contenait un saut de ligne ou non — même distinction que le
    code (voir wrapSelectionRich() et note-code-block/note-code-inline).
-   Pile de polices manuscrites courantes, avec `cursive` en dernier
-   recours — aucune n'est garantie sur toutes les machines. */
+   Kalam (Google Fonts, voir index.html) plutôt qu'une pile de polices
+   manuscrites système : celles-ci ne sont garanties sur aucune machine et
+   retombaient en pratique sur le `cursive` par défaut du navigateur. */
 .note-archive-zone {
-  font-family: "Satisfy", cursive;
+  font-family: "Kalam", cursive;
   /* Taille fixe (16px) plutôt que relative au texte environnant : Satisfy
      est une cursive à l'œil réduit, elle a besoin d'une taille propre. */
   font-size: 1rem;
@@ -2391,9 +2406,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-archive-inline .archive-icon-mark svg { width: 12px; height: 12px; display: block; }
 
 .note-code-block {
-  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* Cf. .note-code-inline : 18px pour compenser l'œil réduit de VT323. */
-  font-size: 1.125rem;
+  font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Cf. .note-code-inline : 16px, taille native de la grille 8x16. */
+  font-size: 1rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;
