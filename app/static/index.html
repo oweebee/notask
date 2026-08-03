@@ -210,7 +210,13 @@
                 <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
                 <span class="fmt-sep"></span>
                 <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
-                <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
+                <!-- Le survol prolongé fait surgir un second bouton au-dessus (plier
+             / déplier toutes les archives de la notask) — voir
+             initSousMenuArchive() dans app.js. L'enveloppe sert d'ancrage
+             au positionnement. -->
+        <span class="fmt-archive-wrap">
+          <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
+        </span>
                 <span class="fmt-sep"></span>
               </span>
               <button type="button" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
@@ -375,7 +381,13 @@
         <button type="button" data-fmt="color" title="Couleur du texte" aria-label="Couleur du texte"></button>
         <span class="fmt-sep"></span>
         <button type="button" data-fmt="code" title="Code" aria-label="Code"></button>
-        <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
+        <!-- Le survol prolongé fait surgir un second bouton au-dessus (plier
+             / déplier toutes les archives de la notask) — voir
+             initSousMenuArchive() dans app.js. L'enveloppe sert d'ancrage
+             au positionnement. -->
+        <span class="fmt-archive-wrap">
+          <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
+        </span>
         <span class="fmt-sep"></span>
       </span>
       <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>

@@ -4497,6 +4497,73 @@ $('#dns-toggle-mask').addEventListener('click', () => {
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
 });
 
+/* Sous-menu du bouton « zone d'archive » : laisser le curseur dessus, sans
+   cliquer, fait surgir au-dessus un second bouton de même facture, qui
+   replie ou déplie d'un coup TOUTES les archives de la notask en cours.
+
+   Au survol et non au clic : le clic garde son rôle habituel (mettre la
+   sélection en archive), il ne devait pas être détourné. Un délai avant
+   l'apparition évite que le bouton surgisse à chaque fois que le pointeur
+   traverse la barre d'outils pour atteindre un voisin ; un délai plus court
+   à la sortie laisse le temps de monter jusqu'à lui sans qu'il s'échappe. */
+function initSousMenuArchive(wrapSelecteur, zoneSelecteur) {
+  const wrap = $(wrapSelecteur);
+  if (!wrap) return;
+
+  const bouton = document.createElement('button');
+  bouton.type = 'button';
+  bouton.className = 'fmt-archive-all';
+  bouton.innerHTML = ICONS.archive;
+  wrap.appendChild(bouton);
+
+  let minuteurOuverture = null;
+  let minuteurFermeture = null;
+
+  const majLibelle = () => {
+    // L'action proposée dépend de l'état courant : s'il reste au moins une
+    // archive dépliée, le bouton les replie toutes ; sinon il les rouvre.
+    const zones = [...$$(zoneSelecteur + ' .note-archive-zone')];
+    const aDeplier = zones.length > 0 && zones.every((z) => z.classList.contains('is-closed'));
+    const texte = aDeplier ? 'Déplier toutes les archives' : 'Replier toutes les archives';
+    bouton.title = texte;
+    bouton.setAttribute('aria-label', texte);
+    bouton.classList.toggle('is-expand', aDeplier);
+    return aDeplier;
+  };
+
+  const ouvrir = () => {
+    clearTimeout(minuteurFermeture);
+    minuteurOuverture = setTimeout(() => {
+      majLibelle();
+      wrap.classList.add('sous-menu-ouvert');
+    }, 350);
+  };
+  const fermer = () => {
+    clearTimeout(minuteurOuverture);
+    minuteurFermeture = setTimeout(() => wrap.classList.remove('sous-menu-ouvert'), 220);
+  };
+
+  wrap.addEventListener('mouseenter', ouvrir);
+  wrap.addEventListener('mouseleave', fermer);
+
+  // Sans ce preventDefault, le clic déplacerait le focus hors de la zone
+  // éditable et effacerait la sélection en cours (même garde que sur les
+  // autres boutons de mise en forme).
+  bouton.addEventListener('mousedown', (e) => e.preventDefault());
+  bouton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const deplier = majLibelle();
+    for (const zone of $$(zoneSelecteur + ' .note-archive-zone')) {
+      zone.classList.toggle('is-closed', !deplier);
+    }
+    majLibelle();
+  });
+}
+
+initSousMenuArchive('#dns-fmt-toolbar .fmt-archive-wrap', '#dns-content');
+initSousMenuArchive('#nc-fmt-toolbar .fmt-archive-wrap', '#nc-content');
+
 function renderDnsMode() {
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-fmt-group').hidden = state.editingIsChecklist;
@@ -4629,6 +4696,65 @@ const FMT_ENVELOPPES = {
    `color` ni la classe note-archive-zone retombe déjà, dans ce même
    switch, sur inner() — vide ici puisqu'un SVG n'a aucun nœud de texte. */
 const ARCHIVE_ICON_HTML = `<span class="archive-icon-mark" contenteditable="false">${ICONS.archive}</span>`;
+
+/* Clic sur l'icône d'une zone d'archive : replie ou déplie CETTE zone,
+   sans toucher aux autres de la même notask.
+
+   Un seul écouteur posé sur le document plutôt qu'un par icône : ces zones
+   sont réécrites à chaque rendu de carte comme à chaque ouverture de boîte
+   d'édition, il faudrait sinon les rebrancher à chaque fois (et penser à le
+   faire dans chacun des points de rendu).
+
+   Deux contextes, deux façons d'enregistrer :
+   - dans la boîte d'édition, il n'y a rien à faire de plus, richToText()
+     lira la classe au moment de la sauvegarde ;
+   - sur une carte, aucune sauvegarde n'est prévue : on écrit donc nous-mêmes
+     le marqueur correspondant dans le texte de la notask, sinon le pli
+     serait perdu au prochain chargement. */
+document.addEventListener('click', (e) => {
+  const icone = e.target.closest('.archive-icon-mark');
+  if (!icone) return;
+  const zone = icone.closest('.note-archive-zone');
+  if (!zone) return;
+
+  // Sans ça, le clic remonterait à la carte et ouvrirait la notask.
+  e.stopPropagation();
+  e.preventDefault();
+  zone.classList.toggle('is-closed');
+
+  const carte = icone.closest('.note[data-id]');
+  if (carte) enregistrerPliArchive(carte, zone);
+});
+
+/* Reporte dans le texte enregistré le pli d'une zone repliée depuis une
+   carte. La zone est repérée par son RANG parmi les zones d'archive de la
+   carte, et le même rang est appliqué aux marqueurs `[arch]`/`[arch-]` du
+   texte : les deux listes sont dans le même ordre, celui du document. */
+async function enregistrerPliArchive(carte, zone) {
+  const id = Number(carte.dataset.id);
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+
+  const zones = [...carte.querySelectorAll('.note-archive-zone')];
+  const rang = zones.indexOf(zone);
+  if (rang < 0) return;
+  const plie = zone.classList.contains('is-closed');
+
+  let vu = -1;
+  const contenu = note.content.replace(NOTE_ARCHIVE_MARK, (m, tiret, texte) => {
+    vu += 1;
+    if (vu !== rang) return m;
+    return `[arch${plie ? '-' : ''}]${texte}[/arch]`;
+  });
+  if (contenu === note.content) return;
+
+  note.content = contenu;
+  try {
+    await api('/notes/' + id, { method: 'PATCH', body: { content: await encryptField(contenu) } });
+  } catch (err) {
+    alert(err.message);
+  }
+}
 
 function trouverEnveloppe(el, range, kind) {
   const depart = range.commonAncestorContainer;
@@ -4926,7 +5052,12 @@ function richToText(root) {
       // <span> ici : elle n'a ni cette classe ni un style.color, donc elle
       // retombe sans risque sur inner() — vide, un SVG n'a pas de texte.
       case 'span': {
-        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
+        if (node.classList.contains('note-archive-zone')) {
+          // Le tiret note le pli (voir NOTE_ARCHIVE_MARK) : replier une
+          // archive est une modification de la notask, pas un simple
+          // réglage d'affichage, elle doit donc survivre au rechargement.
+          return `[arch${node.classList.contains('is-closed') ? '-' : ''}]${inner()}[/arch]`;
+        }
         const hex = cssColorToHex(node.style.color);
         return hex ? `[c:${hex}]${inner()}[/c]` : inner();
       }
@@ -4938,7 +5069,12 @@ function richToText(root) {
       // ligne, sans le '\n' préfixé qu'un <div> normal reçoit ci-dessous —
       // le contenu porte déjà ses propres retours à la ligne.
       case 'div': {
-        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
+        if (node.classList.contains('note-archive-zone')) {
+          // Le tiret note le pli (voir NOTE_ARCHIVE_MARK) : replier une
+          // archive est une modification de la notask, pas un simple
+          // réglage d'affichage, elle doit donc survivre au rechargement.
+          return `[arch${node.classList.contains('is-closed') ? '-' : ''}]${inner()}[/arch]`;
+        }
         // Lecteur de note vocale : on ne conserve que le marqueur, jamais
         // le squelette HTML ni les octets audio (cf. le cas 'img'). Le
         // retour avant/après évite que le bloc se colle au texte voisin
@@ -4993,7 +5129,11 @@ const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
    manuscrite sur fond assombri, pour distinguer d'un coup d'œil un passage
    mis de côté. Aucun rapport avec les notasks archivées (Note.archived),
    qui sont une vue à part ; le nom est celui choisi par l'utilisateur. */
-const NOTE_ARCHIVE_MARK = /\[arch\]([\s\S]*?)\[\/arch\]/g;
+/* `[arch-]` (avec le tiret) = archive REPLIÉE : le contenu reste stocké tel
+   quel, seul son affichage se réduit à une ligne (voir .is-closed dans
+   style.css). Le pli est donc une propriété persistante de la zone, au même
+   titre que son texte — et non un état d'interface perdu au rechargement. */
+const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
 
 /* Collage depuis l'extérieur (page web, Word, Google Docs...) : le
    navigateur insère par défaut le HTML tel quel dans la zone éditable (la
@@ -5354,10 +5494,15 @@ function renderFormatted(text) {
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
-  html = html.replace(NOTE_ARCHIVE_MARK, (m, contenu) => {
+  html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);
     const tag = bloc ? 'div' : 'span';
-    return `<${tag} class="note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
+    // Le contenu est rendu même replié : c'est le CSS qui le masque
+    // (.is-closed). Le garder dans le DOM permet de déplier d'un simple
+    // changement de classe, sans reconstruire quoi que ce soit ni risquer
+    // de perdre du texte au passage.
+    const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${plie ? ' is-closed' : ''}`;
+    return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   // Garde (?<!\\) sur le code EN LIGNE et l'italique : ce sont les deux

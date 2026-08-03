@@ -2457,6 +2457,45 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    suffisent. */
 .fmt-toolbar .fmt-sep { width: 1px; height: 20px; background: var(--md-outline); margin: 0 .125rem; }
 
+/* Sous-menu du bouton « zone d'archive » (voir initSousMenuArchive dans
+   app.js) : un second bouton surgit AU-DESSUS après un survol prolongé. */
+.fmt-archive-wrap { position: relative; display: inline-flex; }
+.fmt-archive-all {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: .375rem;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--md-surface-4);
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  box-shadow: var(--elev-2);
+  cursor: pointer;
+  /* Sort de son point d'ancrage en s'étirant : départ écrasé contre le
+     bouton parent, arrivée à taille pleine avec un léger dépassement — la
+     courbe elastique donne le côté organique demandé.
+     visibility (et pas seulement opacity) : sans elle, le bouton resterait
+     cliquable alors qu'il est invisible, juste au-dessus de la barre. */
+  transform: translate(-50%, 8px) scale(.4);
+  transform-origin: 50% 100%;
+  opacity: 0;
+  visibility: hidden;
+  transition: transform .28s cubic-bezier(.34, 1.56, .5, 1), opacity .18s ease, visibility .28s;
+}
+.fmt-archive-wrap.sous-menu-ouvert .fmt-archive-all {
+  transform: translate(-50%, 0) scale(1);
+  opacity: 1;
+  visibility: visible;
+}
+.fmt-archive-all:hover { background: var(--md-surface-5, rgba(255,255,255,.16)); color: var(--md-on-surface); }
+.fmt-archive-all svg { width: 17px; height: 17px; display: block; }
+/* Sens inverse quand l'action proposée est de tout rouvrir. */
+.fmt-archive-all.is-expand svg { transform: rotate(180deg); }
+
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2523,12 +2562,45 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   gap: .3rem;
   padding: .1rem .4rem;
 }
-/* Icône archive : purement informative, jamais un bouton (voir
-   ARCHIVE_ICON_HTML dans app.js). pointer-events:none pour qu'un clic
-   dessus retombe sur le texte en dessous — dans la carte (lecture), ça
-   revient à cliquer la carte ; dans l'édition, ça place le curseur, sans
-   jamais copier ni rien déclencher de spécifique à l'icône elle-même. */
-.archive-icon-mark { pointer-events: none; opacity: .8; }
+/* Archive repliée : ramenée à une seule ligne portant le mot « archive »,
+   l'icône restant visible à droite pour pouvoir la rouvrir.
+   font-size:0 sur le conteneur escamote les nœuds de texte (impossible à
+   viser autrement en CSS : un sélecteur ne désigne que des éléments), la
+   taille étant rétablie sur le libellé et l'icône. Le contenu reste dans le
+   DOM, seulement masqué : déplier ne coûte qu'un changement de classe, sans
+   rien reconstruire ni risquer de perdre du texte. */
+.note-archive-zone.is-closed {
+  font-size: 0;
+  white-space: nowrap;
+}
+.note-archive-zone.is-closed > *:not(.archive-icon-mark) { display: none; }
+.note-archive-zone.is-closed::before {
+  content: "archive";
+  font-family: "Kalam", cursive;
+  font-size: 1rem;
+  opacity: .75;
+}
+/* Repliée, la zone tient sur une ligne : l'icône revient dans le flux, à sa
+   suite, au lieu d'être ancrée en haut à droite d'un bloc de plusieurs
+   lignes. */
+.note-archive-block.is-closed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding-right: .625rem;
+}
+.note-archive-block.is-closed .archive-icon-mark { position: static; }
+
+/* Icône archive : bouton de pli/dépli de SA zone, sans toucher aux autres
+   de la même notask (voir basculerPliArchive dans app.js). Elle était
+   auparavant purement décorative (pointer-events:none). */
+.archive-icon-mark {
+  opacity: .8;
+  cursor: pointer;
+  transition: opacity .15s ease, background .15s ease;
+}
+.archive-icon-mark:hover { opacity: 1; background: rgba(255,255,255,.14); }
 /* Ancrée en haut à droite du bloc. Auparavant en sticky+float, elle suivait
    le défilement et se retrouvait au milieu du texte sur un bloc long. */
 .note-archive-block .archive-icon-mark {
