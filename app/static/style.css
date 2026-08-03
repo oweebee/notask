@@ -1315,7 +1315,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    pendant qu'une carte est activement tenue (voir .dragging plus bas) —
    sinon elle traînerait derrière le pointeur au lieu de le suivre. */
 .notes-grid .note, .notes-grid .composer-stack {
-  transition: left .18s ease, top .18s ease;
+  /* Courbe à léger dépassement plutôt qu'un simple ease : les cartes
+     voisines s'écartent en cédant le passage, avec un petit rebond en fin
+     de course — l'effet "on se pousse pour laisser passer" recherché
+     pendant un glisser. */
+  transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1);
 }
 .notes-grid .note.dragging { transition: none; }
 /* Coupe la transition pendant un rendu COMPLET de la grille (voir

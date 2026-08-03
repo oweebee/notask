@@ -3041,6 +3041,12 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
       grabX: clientX - box.left, grabY: clientY - box.top,
       baseLeft: box.left, baseTop: box.top,
       moved: false,
+      // Suivi "blob" : x/y sont la position voulue ; vx/vy la vitesse du
+      // geste, lissée, dont dépend la déformation. La boucle ci-dessous les
+      // ramène progressivement à zéro, ce qui fait reprendre sa forme à la
+      // carte quand on ralentit — le côté élastique/organique.
+      x: 0, y: 0, vx: 0, vy: 0,
+      dernierX: clientX, dernierY: clientY, raf: null,
     };
     // Le glisser souris ne démarre qu'après quelques pixels de mouvement :
     // pendant ce court trajet, le navigateur a déjà commencé une sélection
@@ -3053,6 +3059,53 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
 
     item.classList.add('dragging');
     try { item.setPointerCapture(pointerId); } catch { /* déjà relâché entretemps, sans conséquence */ }
+    active.raf = requestAnimationFrame(animerGlisser);
+  }
+
+  /* Effet "blob" : la carte s'étire dans le sens de son déplacement et
+     s'amincit perpendiculairement (étirement/écrasement), avec des coins
+     qui s'arrondissent — elle a l'air de se faufiler entre les autres,
+     puis reprend sa forme dès qu'elle ralentit.
+
+     Volontairement calculé en JS et intégré au MÊME transform que le
+     déplacement : une animation CSS l'emporterait sur le style inline
+     pendant toute sa durée et figerait la carte au lieu de la laisser
+     suivre le pointeur (défaut exact de l'ancienne animation de
+     décrochage, retirée pour cette raison).
+
+     L'étirement est orienté par `rotate(a) scale(sx, sy) rotate(-a)` : on
+     bascule dans l'axe du mouvement, on déforme, puis on revient — sans
+     quoi l'étirement serait toujours horizontal, quel que soit le geste. */
+  const mouvementReduit = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function peindreGlisser() {
+    if (!active) return;
+    const base = `translate(${Math.round(active.x)}px, ${Math.round(active.y)}px)`;
+    if (mouvementReduit) {
+      active.el.style.transform = base;
+      return;
+    }
+    const vitesse = Math.hypot(active.vx, active.vy);
+    // Bornée : au-delà, un geste rapide déformerait la carte au point de la
+    // rendre illisible.
+    const etirement = Math.min(.14, vitesse * .006);
+    const angle = Math.atan2(active.vy, active.vx) * 180 / Math.PI;
+    active.el.style.transform =
+      `${base} rotate(${angle.toFixed(2)}deg)`
+      + ` scale(${(1 + etirement).toFixed(3)}, ${(1 - etirement).toFixed(3)})`
+      + ` rotate(${(-angle).toFixed(2)}deg)`;
+    // Coins d'autant plus ronds que la carte file vite — le côté "goutte".
+    active.el.style.borderRadius = `${(8 + etirement * 120).toFixed(1)}px`;
+  }
+
+  function animerGlisser() {
+    if (!active) return;
+    // La vitesse retombe toute seule : la carte reprend sa forme dès qu'on
+    // ralentit ou qu'on s'arrête, même sans nouvel événement de pointeur.
+    active.vx *= .82;
+    active.vy *= .82;
+    peindreGlisser();
+    active.raf = requestAnimationFrame(animerGlisser);
   }
 
   container.addEventListener('pointerdown', (e) => {
@@ -3112,9 +3165,22 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
         }
       }
 
-      const x = e.clientX - active.grabX - active.baseLeft;
-      const y = e.clientY - active.grabY - active.baseTop;
-      active.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      // Vitesse lissée : une moyenne glissante plutôt que le déplacement
+      // brut de la dernière image, sinon la déformation sauterait d'une
+      // image à l'autre au lieu de suivre le geste de façon continue.
+      const dx = e.clientX - active.dernierX;
+      const dy = e.clientY - active.dernierY;
+      active.dernierX = e.clientX;
+      active.dernierY = e.clientY;
+      active.vx = active.vx * .6 + dx * .4;
+      active.vy = active.vy * .6 + dy * .4;
+
+      active.x = e.clientX - active.grabX - active.baseLeft;
+      active.y = e.clientY - active.grabY - active.baseTop;
+      // Peint tout de suite plutôt que d'attendre la prochaine image : le
+      // déplacement doit coller au pointeur, seule l'inclinaison a le droit
+      // d'être en retard.
+      peindreGlisser();
       return;
     }
     if (pending && e.pointerId === pending.pointerId) {
@@ -3139,8 +3205,10 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
     if (!active || e.pointerId !== active.pointerId) return;
     const el = active.el;
     const moved = active.moved;
+    if (active.raf) cancelAnimationFrame(active.raf);
     el.classList.remove('dragging');
     el.style.transform = '';
+    el.style.borderRadius = '';  // rend la carte à son arrondi normal (cf. peindreGlisser)
     document.body.classList.remove('is-dragging');
     active = null;
     if (moved) {
@@ -3163,14 +3231,17 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // ce recalcul après chaque permutation, réordonner le DOM ne bouge plus
   // rien à l'écran — un CSS Grid classique se serait reflowé tout seul,
   // plus maintenant.
-  // Appel DIRECT et non layoutMosaicNow() : celui-ci diffère le calcul au
-  // frame suivant, si bien que la mesure faite juste après la permutation
-  // (pour ré-ancrer le suivi du pointeur) portait encore sur l'ANCIENNE
-  // position — la carte se retrouvait alors décalée loin du curseur. En
-  // synchrone, la position lue est la bonne. `true` = pose immédiate, sans
-  // animation : pendant un glisser, une transition ferait traîner la carte
-  // derrière le pointeur.
-  onSwap: () => layoutMosaic(true),
+  // Appel DIRECT et non différé au frame suivant : la mesure faite juste
+  // après la permutation (pour ré-ancrer le suivi du pointeur) porterait
+  // sinon encore sur l'ANCIENNE position, et la carte se retrouverait
+  // décalée loin du curseur.
+  // Sans `instant`, volontairement : les cartes voisines gardent leur
+  // transition et s'écartent en douceur pour laisser passer celle qu'on
+  // déplace, au lieu de claquer d'un coup dans leur nouvelle case. La carte
+  // tenue, elle, a déjà `transition: none` (voir .notes-grid .note.dragging
+  // dans style.css), donc sa position est acquise immédiatement et la
+  // mesure reste juste.
+  onSwap: () => layoutMosaic(),
   onDrop: commitNoteOrder,
 });
 
