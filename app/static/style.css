@@ -2585,9 +2585,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   white-space: nowrap;
 }
 /* Le texte fond progressivement au lieu de disparaître d'un coup : la
-   taille de police s'anime en même temps que la hauteur (voir
-   animerPliArchive dans app.js), ce qui donne au pli son côté organique. */
-.note-archive-zone { transition: font-size .34s cubic-bezier(.34, 1.4, .5, 1); }
+   taille de police s'anime en même temps que la dimension. Piloté en JS
+   (voir animerPliArchive), PAS déclaré ici : une transition permanente sur
+   font-size fausserait les mesures faites au moment du basculement, la
+   valeur relevée étant alors un état intermédiaire de l'animation. */
 .note-archive-zone.is-closed > *:not(.archive-icon-mark) { display: none; }
 .note-archive-zone.is-closed::before {
   content: "archive";

@@ -4723,10 +4723,9 @@ document.addEventListener('click', (e) => {
   // Sans ça, le clic remonterait à la carte et ouvrirait la notask.
   e.stopPropagation();
   e.preventDefault();
+  // Rien à enregistrer : le pli ne vit que le temps de l'affichage, tout
+  // repart replié au rendu suivant (voir renderFormatted).
   animerPliArchive(zone, !zone.classList.contains('is-closed'));
-
-  const carte = icone.closest('.note[data-id]');
-  if (carte) enregistrerPliArchive(carte, zone);
 });
 
 /* Pli/dépli animé d'une zone d'archive.
@@ -4746,60 +4745,51 @@ const DUREE_PLI = 340;
 function animerPliArchive(zone, versFerme) {
   const enLigne = zone.classList.contains('note-archive-inline');
   const dimension = enLigne ? 'width' : 'height';
-  const mesurer = () => zone.getBoundingClientRect()[dimension];
-
-  const avant = mesurer();
-  zone.classList.toggle('is-closed', versFerme);
-  // Dimension libre le temps de la mesure : une valeur figée d'une
-  // animation précédente fausserait le calcul de l'état d'arrivée.
-  zone.style[dimension] = '';
-  const apres = mesurer();
-
-  zone.style.overflow = 'hidden';
-  zone.style[dimension] = avant + 'px';
-  void zone.offsetHeight;  // fige le point de départ avant d'animer
-  // Courbe à léger dépassement, comme le reste des mouvements de l'app.
-  zone.style.transition = `${dimension} ${DUREE_PLI}ms cubic-bezier(.34, 1.4, .5, 1)`;
-  zone.style[dimension] = apres + 'px';
 
   clearTimeout(zone._minuteurPli);
+
+  // Toutes transitions coupées le temps des mesures. Sans cette coupure, la
+  // taille de police était encore en train de s'animer au moment où l'on
+  // relevait la dimension d'arrivée : la valeur lue correspondait alors à
+  // un état intermédiaire, et l'animation partait vers une mauvaise cible
+  // avant de se corriger — d'où l'impression que l'ouverture « bloquait »
+  // au démarrage.
+  zone.style.transition = 'none';
+  zone.style[dimension] = '';
+  zone.style.fontSize = '';
+  zone.style.overflow = '';
+  const avant = zone.getBoundingClientRect()[dimension];
+  const policeAvant = getComputedStyle(zone).fontSize;
+
+  zone.classList.toggle('is-closed', versFerme);
+  const apres = zone.getBoundingClientRect()[dimension];
+  const policeApres = getComputedStyle(zone).fontSize;
+
+  // Retour au point de départ, figé par un reflux, avant de lancer
+  // l'animation vers les valeurs d'arrivée relevées ci-dessus.
+  zone.style.overflow = 'hidden';
+  zone.style[dimension] = avant + 'px';
+  zone.style.fontSize = policeAvant;
+  void zone.offsetHeight;
+
+  // Courbe à léger dépassement pour la dimension (le rebond), mais montée
+  // franche pour la police : un dépassement sur la taille du texte le
+  // ferait grossir au-delà du normal avant de revenir, ce qui saute aux
+  // yeux bien plus qu'un rebond de hauteur.
+  zone.style.transition =
+    `${dimension} ${DUREE_PLI}ms cubic-bezier(.34, 1.4, .5, 1),`
+    + ` font-size ${DUREE_PLI}ms cubic-bezier(.4, 0, .2, 1)`;
+  zone.style[dimension] = apres + 'px';
+  zone.style.fontSize = policeApres;
+
   zone._minuteurPli = setTimeout(() => {
     // Rendu au flux : sans ça, la zone garderait une dimension figée et ne
     // suivrait plus une modification ultérieure de son contenu.
     zone.style.transition = '';
     zone.style[dimension] = '';
+    zone.style.fontSize = '';
     zone.style.overflow = '';
   }, DUREE_PLI + 20);
-}
-
-/* Reporte dans le texte enregistré le pli d'une zone repliée depuis une
-   carte. La zone est repérée par son RANG parmi les zones d'archive de la
-   carte, et le même rang est appliqué aux marqueurs `[arch]`/`[arch-]` du
-   texte : les deux listes sont dans le même ordre, celui du document. */
-async function enregistrerPliArchive(carte, zone) {
-  const id = Number(carte.dataset.id);
-  const note = state.notes.find((n) => n.id === id);
-  if (!note) return;
-
-  const zones = [...carte.querySelectorAll('.note-archive-zone')];
-  const rang = zones.indexOf(zone);
-  if (rang < 0) return;
-  const plie = zone.classList.contains('is-closed');
-
-  let vu = -1;
-  const contenu = note.content.replace(NOTE_ARCHIVE_MARK, (m, tiret, texte) => {
-    vu += 1;
-    if (vu !== rang) return m;
-    return `[arch${plie ? '-' : ''}]${texte}[/arch]`;
-  });
-  if (contenu === note.content) return;
-
-  note.content = contenu;
-  try {
-    await api('/notes/' + id, { method: 'PATCH', body: { content: await encryptField(contenu) } });
-  } catch (err) {
-    alert(err.message);
-  }
 }
 
 function trouverEnveloppe(el, range, kind) {
@@ -5098,12 +5088,12 @@ function richToText(root) {
       // <span> ici : elle n'a ni cette classe ni un style.color, donc elle
       // retombe sans risque sur inner() — vide, un SVG n'a pas de texte.
       case 'span': {
-        if (node.classList.contains('note-archive-zone')) {
-          // Le tiret note le pli (voir NOTE_ARCHIVE_MARK) : replier une
-          // archive est une modification de la notask, pas un simple
-          // réglage d'affichage, elle doit donc survivre au rechargement.
-          return `[arch${node.classList.contains('is-closed') ? '-' : ''}]${inner()}[/arch]`;
-        }
+        // Toujours `[arch]`, jamais le pli : celui-ci est un état
+        // d'affichage le temps de la consultation (tout est replié à
+        // l'ouverture, voir renderFormatted), pas une propriété du texte.
+        // L'écrire ici ferait varier le contenu enregistré au gré des
+        // dépliages, sans que rien du texte n'ait changé.
+        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
         const hex = cssColorToHex(node.style.color);
         return hex ? `[c:${hex}]${inner()}[/c]` : inner();
       }
@@ -5115,12 +5105,12 @@ function richToText(root) {
       // ligne, sans le '\n' préfixé qu'un <div> normal reçoit ci-dessous —
       // le contenu porte déjà ses propres retours à la ligne.
       case 'div': {
-        if (node.classList.contains('note-archive-zone')) {
-          // Le tiret note le pli (voir NOTE_ARCHIVE_MARK) : replier une
-          // archive est une modification de la notask, pas un simple
-          // réglage d'affichage, elle doit donc survivre au rechargement.
-          return `[arch${node.classList.contains('is-closed') ? '-' : ''}]${inner()}[/arch]`;
-        }
+        // Toujours `[arch]`, jamais le pli : celui-ci est un état
+        // d'affichage le temps de la consultation (tout est replié à
+        // l'ouverture, voir renderFormatted), pas une propriété du texte.
+        // L'écrire ici ferait varier le contenu enregistré au gré des
+        // dépliages, sans que rien du texte n'ait changé.
+        if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
         // Lecteur de note vocale : on ne conserve que le marqueur, jamais
         // le squelette HTML ni les octets audio (cf. le cas 'img'). Le
         // retour avant/après évite que le bloc se colle au texte voisin
@@ -5543,11 +5533,21 @@ function renderFormatted(text) {
   html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);
     const tag = bloc ? 'div' : 'span';
-    // Le contenu est rendu même replié : c'est le CSS qui le masque
-    // (.is-closed). Le garder dans le DOM permet de déplier d'un simple
-    // changement de classe, sans reconstruire quoi que ce soit ni risquer
-    // de perdre du texte au passage.
-    const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${plie ? ' is-closed' : ''}`;
+    // Replié par défaut : une archive est un passage mis de côté, il n'a
+    // pas à encombrer la lecture tant qu'on ne le redemande pas. Le dépli
+    // est un geste de consultation, valable le temps de l'affichage — pas
+    // un état conservé (le marqueur enregistré est donc ignoré ici).
+    //
+    // SAUF pendant une recherche : la recherche mord sur le texte brut,
+    // marqueurs compris, donc une notask peut très bien ressortir à cause
+    // d'un mot situé dans une archive. La laisser repliée reviendrait à
+    // afficher un résultat sans montrer ce qui l'a fait sortir.
+    //
+    // Le contenu reste de toute façon présent dans le DOM (c'est le CSS
+    // .is-closed qui le masque) : déplier ne coûte qu'un changement de
+    // classe, rien n'est reconstruit.
+    const recherche = state.search || state.deepSearch;
+    const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${recherche ? '' : ' is-closed'}`;
     return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
