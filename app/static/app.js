@@ -2840,6 +2840,9 @@ function renderNotes() {
     inner += `<div class="palette" hidden></div>
       <div class="actions">
         <button data-act="color" title="Couleur" aria-label="Couleur">${ICONS.palette}</button>
+        <button data-act="mask" class="${n.masked ? 'active-toggle' : ''}"
+          title="${n.masked ? "Contenu masqué sur l'accueil — cliquer pour l'afficher" : "Masquer le contenu sur l'accueil"}"
+          aria-label="${n.masked ? "Afficher le contenu" : "Masquer le contenu"}">${ICONS.maskEye}</button>
         <span class="sep"></span>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
@@ -2882,6 +2885,12 @@ function renderNotes() {
     };
     el.querySelector('[data-act=archive]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
+      loadNotes();
+    };
+    // Masquer/afficher le contenu sur l'accueil, sans passer par la boîte
+    // d'édition — même bascule que #dns-toggle-mask (voir renderBoutonMasque).
+    el.querySelector('[data-act=mask]').onclick = async () => {
+      await api('/notes/' + n.id, { method: 'PATCH', body: { masked: !n.masked } });
       loadNotes();
     };
     el.querySelector('[data-act=delete]').onclick = async () => {
