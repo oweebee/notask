@@ -2026,8 +2026,11 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   align-items: center;
   gap: .4rem;
   min-height: 48px;
-  margin: .5rem 0 0 1rem;
-  padding: 0 .5rem 0 1.5rem;
+  /* Aucune marge à gauche : la pilule part du bord de l'écran comme les
+     libellés au-dessus. Le retrait du texte (2.5rem) reprend celui de
+     .drawer-item.label-item, pour que les intitulés s'alignent. */
+  margin: .5rem 0 0;
+  padding: 0 .5rem 0 2.5rem;
   background: transparent;
   border: 1px solid var(--md-outline-variant);
   /* Bord gauche droit, bord droit arrondi : le menu vient s'appuyer sur le
