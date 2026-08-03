@@ -60,9 +60,16 @@
    visibles et se superposent. */
 [hidden] { display: none !important; }
 
+/* Vue Archives : police à part (voir switchView() dans app.js, qui pose
+   cette classe sur <body> — #view-notes est partagé avec Notes/Favoris,
+   rien d'autre dans le DOM ne distingue la vue Archives). */
+body.view-archives #view-notes {
+  font-family: "Harlow Solid Italic", cursive, serif;
+}
+
 body {
   margin: 0;
-  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: Verdana, Geneva, sans-serif;
   background: var(--md-surface);
   color: var(--md-on-surface);
   line-height: 1.5;
@@ -479,12 +486,12 @@ header.topbar .who {
 }
 .logs-ligne:last-child { border-bottom: none; }
 .logs-heure {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   color: var(--md-on-surface-variant);
 }
 .logs-niveau {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .68rem;
   letter-spacing: .04em;
 }
@@ -522,7 +529,7 @@ header.topbar .who {
   overflow: auto;
   background: rgba(0,0,0,.35);
   border-radius: var(--shape-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -1305,11 +1312,17 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .note:hover .pin-btn, .note:focus-within .pin-btn { opacity: 1; }
 .note.pinned .pin-btn { opacity: 1; color: var(--md-primary); }
 
-/* Barre d'icônes : apparaît en fondu au survol, comme dans Keep. */
+/* Barre d'icônes : apparaît en fondu au survol, comme dans Keep.
+   padding-top plutôt que margin-top : une marge appartient à la carte, pas
+   à la barre elle-même — un clic dans cet espace passait donc à travers le
+   garde-fou qui exclut .actions du clic "ouvrir la note" (constaté à la
+   vérification : cliquer juste au-dessus des boutons ouvrait la note quand
+   même). Avec du padding, cette zone fait partie de .actions et est donc
+   bien exclue. Voir LOG.md, entrée notask du 2026-08-02 (Cowork). */
 .note .actions {
   display: flex;
   gap: .125rem;
-  margin-top: 1rem;
+  padding-top: 1rem;
   opacity: 0;
   transition: opacity .18s ease;
 }
@@ -1493,7 +1506,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   justify-content: flex-end;   /* la frappe se fait en bas, ça remonte */
   height: 100%;
   padding: .45rem .6rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.35;
 }
@@ -2286,7 +2299,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
@@ -2373,7 +2386,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-archive-inline .archive-icon-mark svg { width: 12px; height: 12px; display: block; }
 
 .note-code-block {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);

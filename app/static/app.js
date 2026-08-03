@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9002';
+const APP_VERSION = '0.9003';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -1584,6 +1584,10 @@ function switchView(view) {
     $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
   }
+  // Marqueur posé sur <body> pour la police propre à la vue Archives (voir
+  // style.css) : #view-notes est partagé avec Notes/Favoris, rien dans le
+  // DOM ne distingue autrement la vue Archives.
+  document.body.classList.toggle('view-archives', view === 'archives');
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
 }
