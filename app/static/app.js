@@ -2413,7 +2413,7 @@ function layoutMosaic(instant) {
 
 /* Recalcule la mosaïque, avec un court débounce — partagé par toutes les
    causes de changement de hauteur qui ne sont pas un glisser-déposer actif
-   (celui-ci veut un retour IMMÉDIAT, voir layoutMosaicNow ci-dessous) :
+   (celui-ci appelle layoutMosaic(true) en synchrone, voir onSwap) :
    redimensionnement de la fenêtre, mais aussi une image (dessin inséré,
    miniature de pièce jointe) qui finit de se charger après coup et change
    la hauteur de sa carte. */
@@ -2421,16 +2421,6 @@ let _layoutTimer;
 function scheduleLayoutMosaic(delay = 80) {
   clearTimeout(_layoutTimer);
   _layoutTimer = setTimeout(layoutMosaic, delay);
-}
-
-/* Recalcule au prochain frame, sans attendre le débounce ci-dessus — pour
-   le retour visuel pendant un glisser-déposer (voir le dragover sur
-   #notes-grid plus bas), où un délai de 80ms se voit et fait paraître la
-   mosaïque en retard sur le geste. */
-let _layoutRaf = null;
-function layoutMosaicNow() {
-  if (_layoutRaf) return;
-  _layoutRaf = requestAnimationFrame(() => { _layoutRaf = null; layoutMosaic(); });
 }
 
 window.addEventListener('resize', () => scheduleLayoutMosaic(150));
@@ -3012,12 +3002,11 @@ function renderCardLabels(el, n) {
      et laisse le défilement natif du navigateur reprendre la main.
    - Une fois démarré, l'élément suit le pointeur en direct (translate())
      pendant que la carte/le libellé le plus proche est repéré et permuté
-     dans le DOM — même mécanique de proximité que l'ancien code
-     (getDropTarget(), juste au-dessous), désormais pilotée par
+     dans le DOM — voir getDropTarget(), juste au-dessous, piloté par
      pointermove plutôt que par dragover. Après chaque permutation, la
      position de référence du suivi est ré-ancrée sur l'emplacement réel
-     tout juste atteint (mosaïque en positionnement absolu recalculée via
-     layoutMosaicNow(), ou simple reflow pour les libellés) — sans ce
+     tout juste atteint (mosaïque en positionnement absolu recalculée en
+     SYNCHRONE par onSwap, ou simple reflow pour les libellés) — sans ce
      réancrage, l'élément décollerait visiblement du doigt dès la
      permutation suivante. */
 const LONG_PRESS_MS = 280;
@@ -3164,7 +3153,14 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // ce recalcul après chaque permutation, réordonner le DOM ne bouge plus
   // rien à l'écran — un CSS Grid classique se serait reflowé tout seul,
   // plus maintenant.
-  onSwap: layoutMosaicNow,
+  // Appel DIRECT et non layoutMosaicNow() : celui-ci diffère le calcul au
+  // frame suivant, si bien que la mesure faite juste après la permutation
+  // (pour ré-ancrer le suivi du pointeur) portait encore sur l'ANCIENNE
+  // position — la carte se retrouvait alors décalée loin du curseur. En
+  // synchrone, la position lue est la bonne. `true` = pose immédiate, sans
+  // animation : pendant un glisser, une transition ferait traîner la carte
+  // derrière le pointeur.
+  onSwap: () => layoutMosaic(true),
   onDrop: commitNoteOrder,
 });
 
