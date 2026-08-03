@@ -71,6 +71,10 @@ ICON_KEYS = {
     "git", "branch", "bracket", "rocket", "package", "gamepad", "joystick",
     "dice", "trophy", "console", "ghost", "headset", "keyboard", "mouse",
     "sword", "potion", "achievement", "vr", "medal", "stream",
+    # Trois de plus par thème (95 -> 104).
+    "firewall", "certificate", "router",      # crypto / serveurs / IT
+    "merge", "test", "build",                 # développement
+    "arcade", "chess", "quest",               # gaming
 }
 
 

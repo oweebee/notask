@@ -2638,7 +2638,10 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .icon-popup-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: .375rem;
+  /* Écart resserré (.375rem -> .125rem) : c'est lui qui finance
+     l'agrandissement des icônes, la fenêtre gardant exactement la même
+     largeur. */
+  gap: .125rem;
   max-height: 13.5rem;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -2652,7 +2655,8 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   border-radius: 50%;
   color: var(--md-on-surface-variant);
 }
-.icon-opt svg { width: 18px; height: 18px; }
+/* +20 % (18px -> 21.6px), pris sur l'écart entre icônes ci-dessus. */
+.icon-opt svg { width: 21.6px; height: 21.6px; }
 .icon-opt:hover { background: rgba(230,224,233,.12); }
 .icon-opt.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 
