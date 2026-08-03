@@ -90,7 +90,14 @@ def list_tasks(
     visible_ids = [n.id for n in visible]
     if visible_ids:
         items = session.exec(
-            select(NoteItem).where(NoteItem.note_id.in_(visible_ids), NoteItem.due_at.is_not(None))
+            select(NoteItem).where(
+                NoteItem.note_id.in_(visible_ids),
+                NoteItem.due_at.is_not(None),
+                # Ligne archivée ou jetée seule (voir NoteItem.archived) :
+                # elle quitte les tâches sans emporter sa notask parente.
+                NoteItem.archived == False,  # noqa: E712 — SQLAlchemy, pas un `is`
+                NoteItem.trashed_at.is_(None),
+            )
         ).all()
         for it in items:
             parent = by_id[it.note_id]

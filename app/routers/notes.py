@@ -14,6 +14,7 @@ from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
+    ArchivedItemOut,
     Label,
     Note,
     NoteAttachment,
@@ -203,6 +204,40 @@ def list_notes(
     return notes
 
 
+@router.get("/archived-items", response_model=List[ArchivedItemOut])
+def list_archived_items(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Lignes à cocher archivées seules (voir NoteItem.archived), affichées
+    dans les Archives comme des lignes et non comme des cartes — la notask
+    parente, elle, reste active.
+
+    Déclaré AVANT la route "/{note_id}" : FastAPI teste les routes dans
+    l'ordre de déclaration, et "/{note_id}" absorberait sinon
+    "archived-items" en tentant de le lire comme un identifiant.
+    """
+    rows = session.exec(
+        select(NoteItem, Note)
+        .join(Note, NoteItem.note_id == Note.id)
+        .where(
+            Note.user_id == user.id,
+            NoteItem.archived == True,  # noqa: E712 — SQLAlchemy, pas un `is`
+            NoteItem.trashed_at.is_(None),
+            # Une notask entière en corbeille emporte ses lignes hors de vue.
+            Note.trashed_at.is_(None),
+        )
+    ).all()
+    return [
+        ArchivedItemOut(
+            id=item.id, note_id=note.id, text=item.text, checked=item.checked,
+            due_at=item.due_at, due_end_at=item.due_end_at,
+            color=note.color, icon=note.icon,
+        )
+        for item, note in rows
+    ]
+
+
 @router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
 def create_note(
     payload: NoteCreate,
@@ -354,7 +389,13 @@ def update_item(
     if item is None or item.note_id != note_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # `trashed` est un booléen côté API, converti ici en horodatage (voir
+    # NoteItemUpdate) : il ne correspond à aucun attribut du modèle et
+    # ferait échouer le setattr générique s'il y restait.
+    if "trashed" in data:
+        item.trashed_at = utcnow() if data.pop("trashed") else None
+    for key, value in data.items():
         setattr(item, key, value)
     if item.due_at is None:
         item.calendar_title = None  # cf. update_note : hygiène, pas de titre en clair sans échéance

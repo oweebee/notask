@@ -1920,9 +1920,43 @@ async function loadNotes() {
   if (state.search) filtered = filtered.filter((n) => noteMatchesSearch(n, state.search));
   state.notes = filtered;
   renderNotes();
+  loadArchivedItems();
   if (!$('#agenda-col').hidden) loadAgenda();
   updateTaskBadges();
   ouvrirNotaskDemandeeParUrl();
+}
+
+/* Lignes à cocher archivées seules — affichées sous la mosaïque, dans les
+   Archives uniquement (voir NoteItem.archived côté serveur). Présentées
+   comme des lignes et non comme des cartes : la notask parente n'est pas
+   archivée, seule cette ligne l'est. Cliquer dessus ouvre la notask
+   complète qui la contient, comme partout ailleurs. */
+async function loadArchivedItems() {
+  const bloc = $('#archived-items');
+  if (!state.showArchived) { bloc.hidden = true; return; }
+
+  let items;
+  try {
+    items = await api('/notes/archived-items');
+  } catch {
+    bloc.hidden = true;
+    return;
+  }
+  await Promise.all(items.map(async (it) => { it.text = await decryptField(it.text); }));
+
+  bloc.hidden = items.length === 0;
+  const liste = $('#archived-items-list');
+  liste.innerHTML = '';
+  for (const it of items) {
+    // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
+    // une ligne archivée peut ne plus avoir d'échéance du tout.
+    const ligne = creerLigneAgenda({
+      kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
+      due_at: it.due_at, due_end_at: it.due_end_at, done: it.checked,
+      color: it.color, icon: it.icon,
+    }, () => loadNotes(), true, 'unarchive');
+    liste.appendChild(ligne);
+  }
 }
 
 async function ouvrirNotaskDemandeeParUrl() {
@@ -2773,7 +2807,10 @@ function renderNotes() {
     } else {
     if (n.is_checklist) {
       inner += '<ul class="check">';
-      for (const it of n.items) {
+      // Une ligne archivée seule (voir NoteItem.archived) est mise de côté :
+      // elle ne s'affiche plus dans sa notask, mais figure dans les Archives
+      // comme une ligne à part (voir loadArchivedItems()).
+      for (const it of n.items.filter((i) => !i.archived)) {
         const due = it.due_at
           ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
@@ -6448,7 +6485,9 @@ async function loadTasks() {
     t.text = await decryptField(t.text);
     t.note_title = await decryptField(t.note_title);
   }));
-  renderTasks(tasks.filter((t) => t.bucket !== 'done'));
+  // "done" inclus ici, contrairement à la colonne d'échéances : cette vue a
+  // sa propre colonne "terminées".
+  renderTasks(tasks);
 }
 
 function renderTasks(items) {
@@ -6459,9 +6498,9 @@ function renderTasks(items) {
   const groupes = {};
   for (const t of items) (groupes[t.bucket] ||= []).push(t);
 
-  for (const b of ['late', 'today', 'upcoming']) {
+  for (const b of ['late', 'today', 'upcoming', 'done']) {
     const liste = groupes[b] || [];
-    // Colonne affichée même vide : trois colonnes qui apparaissent et
+    // Colonne affichée même vide : des colonnes qui apparaissent et
     // disparaissent au fil des échéances feraient sauter la mise en page
     // d'une visite à l'autre.
     const col = document.createElement('section');
@@ -6469,7 +6508,9 @@ function renderTasks(items) {
     const h2 = document.createElement('h2');
     h2.textContent = `${BUCKET_LABELS[b]} (${liste.length})`;
     col.appendChild(h2);
-    for (const t of liste) col.appendChild(creerLigneAgenda(t, loadTasks));
+    // avecActions : archiver/corbeille au survol, réservés à cette vue —
+    // pas dans la colonne d'échéances de l'accueil, à la demande.
+    for (const t of liste) col.appendChild(creerLigneAgenda(t, loadTasks, true));
     box.appendChild(col);
   }
 }
@@ -6505,7 +6546,7 @@ function renderAgenda(items) {
    (loadAgenda ou loadTasks) : sans ce paramètre, cocher depuis la vue en
    trois colonnes rechargerait la colonne de droite, restée invisible, et la
    ligne cochée ne bougerait pas sous les yeux de l'utilisateur. */
-function creerLigneAgenda(t, rafraichir) {
+function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'archive') {
   // <div>, pas <button> : il faut pouvoir héberger une vraie case à
   // cocher, et le HTML interdit un <input> à l'intérieur d'un <button>
   // (contenu interactif imbriqué). Le clic est donc géré à la main
@@ -6516,18 +6557,57 @@ function creerLigneAgenda(t, rafraichir) {
   // Fond = couleur propre de la note d'origine (même classe .c-* que
   // sur sa carte), pas un simple repère en bordure : on veut
   // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
-  btn.className = 'agenda-item c-' + t.color;
+  btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '');
   const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
   // Icône toujours affichée dans un rond : celle de la notask si elle en
   // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
   // texte est ainsi toujours décalé de la même largeur.
   const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
-  btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer">
+  btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer"${t.done ? ' checked' : ''}>
     <span class="agenda-item-icon">${icon}</span>
     <span class="agenda-item-body">
       <span class="agenda-item-text">${escapeHtml(label)}</span>
       <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at)}</span>
-    </span>`;
+    </span>` + (avecActions ? `<span class="agenda-item-actions">
+      <button type="button" data-act="archive"
+              title="${modeArchive === 'unarchive' ? 'Désarchiver' : 'Archiver'}"
+              aria-label="${modeArchive === 'unarchive' ? 'Désarchiver' : 'Archiver'}"
+        >${modeArchive === 'unarchive' ? ICONS.unarchive : ICONS.archive}</button>
+      <button type="button" data-act="trash" title="Mettre à la corbeille" aria-label="Mettre à la corbeille">${ICONS.trash}</button>
+    </span>` : '');
+
+  if (avecActions) {
+    // Une ligne à cocher s'archive ou se jette SEULE (voir NoteItem.archived
+    // côté serveur) : elle disparaît des tâches et de Google Calendar, mais
+    // sa notask parente et les autres lignes restent intactes. Seule une
+    // tâche "notask entière" agit sur la notask elle-même.
+    btn.querySelectorAll('.agenda-item-actions button').forEach((b) => {
+      b.addEventListener('click', async (e) => {
+        e.stopPropagation();  // sans ça, le clic ouvrirait aussi la notask
+        const archiver = b.dataset.act === 'archive';
+        // Dans les Archives, le même bouton fait l'inverse : il désarchive.
+        const valeurArchive = modeArchive !== 'unarchive';
+        try {
+          if (t.kind === 'item') {
+            await api(`/notes/${t.note_id}/items/${t.id}`, {
+              method: 'PATCH',
+              body: archiver ? { archived: valeurArchive } : { trashed: true },
+            });
+          } else if (archiver) {
+            await api('/notes/' + t.note_id, { method: 'PATCH', body: { archived: true } });
+          } else {
+            await api('/notes/' + t.note_id, { method: 'DELETE' });
+          }
+        } catch (err) {
+          alert(err.message);
+          return;
+        }
+        rafraichir();
+        updateTaskBadges();
+      });
+    });
+  }
+
   btn.querySelector('input').onchange = async (e) => {
     e.stopPropagation();
     await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });

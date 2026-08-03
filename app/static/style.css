@@ -793,14 +793,81 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    .agenda-item (voir creerLigneAgenda dans app.js). */
 .tasks-columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.25rem;
   align-items: start;
 }
 /* Dans cette vue les lignes ne sont plus collées au bord droit de l'écran
-   (contrairement à la colonne d'échéances) : coins arrondis des deux côtés. */
-.tasks-column .agenda-item { border-radius: var(--shape-sm); }
+   (contrairement à la colonne d'échéances) : coins arrondis des deux côtés.
+   position:relative pour ancrer les boutons d'action au survol. */
+.tasks-column .agenda-item { border-radius: var(--shape-sm); position: relative; }
 .tasks-column h2 { margin-top: 0; }
+.agenda-group.done h2 { color: var(--md-on-surface-variant); }
+
+/* Tâche terminée : barrée et estompée, dans la colonne "terminées". */
+.agenda-item.done .agenda-item-text { text-decoration: line-through; }
+.agenda-item.done { opacity: .65; }
+
+/* Archiver / corbeille, révélés au survol de la ligne — uniquement dans la
+   vue "notasks prévues" (voir avecActions dans creerLigneAgenda), jamais
+   dans la colonne d'échéances de l'accueil.
+   Superposés (position:absolute) et non insérés dans le flux : ajouter deux
+   boutons à l'apparition décalerait sinon le texte de la ligne au passage
+   de la souris. Dégradé vers la gauche pour que le texte ne se lise pas au
+   travers des icônes sur une ligne longue. */
+.agenda-item-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: .125rem;
+  padding: 0 .375rem 0 1.5rem;
+  opacity: 0;
+  transition: opacity .15s ease;
+  background: linear-gradient(to right, transparent, rgba(0,0,0,.45) 40%);
+  border-radius: 0 var(--shape-sm) var(--shape-sm) 0;
+}
+.tasks-column .agenda-item:hover .agenda-item-actions,
+.tasks-column .agenda-item:focus-within .agenda-item-actions { opacity: 1; }
+/* Pas de survol sur écran tactile : les actions y restent visibles. */
+@media (hover: none) {
+  .tasks-column .agenda-item-actions { opacity: 1; }
+}
+.agenda-item-actions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.agenda-item-actions button:hover { background: rgba(230,224,233,.16); color: var(--md-on-surface); }
+.agenda-item-actions svg { width: 16px; height: 16px; display: block; }
+
+/* Lignes à cocher archivées seules, sous la mosaïque des Archives. Mêmes
+   lignes que "notasks prévues" (voir creerLigneAgenda), donc mêmes réglages
+   de coins arrondis et d'actions au survol que .tasks-column. */
+#archived-items { margin-top: 2rem; }
+.archived-items-title {
+  font-size: .9375rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--md-on-surface-variant);
+  margin: 0 0 .75rem;
+}
+#archived-items-list { display: grid; gap: .375rem; }
+#archived-items-list .agenda-item { border-radius: var(--shape-sm); position: relative; }
+#archived-items-list .agenda-item:hover .agenda-item-actions,
+#archived-items-list .agenda-item:focus-within .agenda-item-actions { opacity: 1; }
+@media (hover: none) {
+  #archived-items-list .agenda-item-actions { opacity: 1; }
+}
 
 .agenda-group + .agenda-group { margin-top: 1.25rem; }
 /* …sauf en colonnes : chacune démarre en haut de sa propre colonne, la

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, String
+from sqlalchemy import JSON, Boolean, Column, String
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -367,6 +367,14 @@ class NoteItem(SQLModel, table=True):
     # Google Calendar séparé, indépendant de celui de la notask parente.
     calendar_title: Optional[str] = Field(default=None, max_length=3000)
     google_event_id: Optional[str] = Field(default=None, max_length=200)
+    # Archivage/corbeille à l'échelle de la LIGNE, indépendamment de la
+    # notask parente : depuis la vue "notasks prévues", une ligne datée
+    # s'archive ou se jette seule, sans emporter les autres lignes de sa
+    # notask. Une ligne ainsi mise de côté disparaît des tâches et de Google
+    # Calendar, mais reste dans sa notask d'origine (voir renderNotes, qui
+    # la masque, et le commentaire de sync_item).
+    archived: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="0"))
+    trashed_at: Optional[datetime] = None
 
     note: Optional[Note] = Relationship(back_populates="items")
 
@@ -386,6 +394,11 @@ class NoteItemUpdate(SQLModel):
     due_at: Optional[datetime] = None
     calendar_title: Optional[str] = None
     due_end_at: Optional[datetime] = None
+    archived: Optional[bool] = None
+    # True = mettre à la corbeille, False = en sortir. Un booléen côté API
+    # plutôt que la date brute : le client n'a pas à fabriquer d'horodatage,
+    # et la valeur nulle garde son sens habituel ("champ non fourni").
+    trashed: Optional[bool] = None
 
 
 class NoteItemOut(SQLModel):
@@ -396,6 +409,27 @@ class NoteItemOut(SQLModel):
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
     google_event_id: Optional[str] = None
+    archived: bool = False
+
+    @field_validator("due_at", "due_end_at", mode="after")
+    @classmethod
+    def _due_at_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _due_at_utc(v)
+
+
+class ArchivedItemOut(SQLModel):
+    """Ligne à cocher archivée seule, affichée dans les Archives comme une
+    ligne (pas comme une carte de notask) — même présentation que dans
+    "notasks prévues". due_at facultatif ici, contrairement à TaskOut : une
+    ligne peut avoir été archivée puis avoir perdu son échéance."""
+    id: int
+    note_id: int
+    text: str
+    checked: bool
+    due_at: Optional[datetime] = None
+    due_end_at: Optional[datetime] = None
+    color: str
+    icon: Optional[str] = None
 
     @field_validator("due_at", "due_end_at", mode="after")
     @classmethod

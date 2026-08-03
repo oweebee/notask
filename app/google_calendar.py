@@ -574,6 +574,11 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
             and note.trashed_at is None
             # cf. sync_note : une ligne cochée disparaît de l'agenda.
             and not item.checked
+            # Archivage/corbeille propres à la ligne (voir NoteItem.archived) :
+            # une ligne mise de côté seule doit quitter l'agenda, même si sa
+            # notask parente, elle, reste bien active.
+            and not item.archived
+            and item.trashed_at is None
             # cf. sync_note : `is not None`, pas bool(...).
             and item.calendar_title is not None
         )
