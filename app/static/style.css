@@ -2495,8 +2495,12 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-archive-block {
   display: block;
   padding: .5rem .625rem;
+  /* Place réservée à droite pour l'icône, ancrée en haut du bloc : sans ce
+     retrait, une ligne de texte passerait dessous. */
+  padding-right: 2.375rem;
   margin: .375rem 0;
   white-space: pre-wrap;
+  position: relative;
 }
 .note-archive-inline {
   display: inline-flex;
@@ -2510,11 +2514,12 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    revient à cliquer la carte ; dans l'édition, ça place le curseur, sans
    jamais copier ni rien déclencher de spécifique à l'icône elle-même. */
 .archive-icon-mark { pointer-events: none; opacity: .8; }
+/* Ancrée en haut à droite du bloc. Auparavant en sticky+float, elle suivait
+   le défilement et se retrouvait au milieu du texte sur un bloc long. */
 .note-archive-block .archive-icon-mark {
-  position: sticky;
+  position: absolute;
   top: .35rem;
-  float: right;
-  margin-left: .5rem;
+  right: .35rem;
   width: 26px;
   height: 26px;
   display: grid;
