@@ -510,6 +510,10 @@ def sync_note(note: Note, session: Session) -> None:
             note.due_at is not None
             and not note.archived
             and note.trashed_at is None
+            # Une tâche terminée disparaît de l'agenda : l'événement Google
+            # est supprimé au passage en "terminé", et recréé si on la
+            # décoche (set_done rappelle sync_note dans les deux sens).
+            and not note.done
             # `is not None`, PAS une simple vérité (bool(...)) : une notask
             # sans titre envoie calendar_title="" (chaîne vide, jamais None
             # tant que due_at est posée — voir #nc-add dans app.js), et
@@ -568,6 +572,8 @@ def sync_item(item: NoteItem, note: Note, session: Session) -> None:
             item.due_at is not None
             and not note.archived
             and note.trashed_at is None
+            # cf. sync_note : une ligne cochée disparaît de l'agenda.
+            and not item.checked
             # cf. sync_note : `is not None`, pas bool(...).
             and item.calendar_title is not None
         )

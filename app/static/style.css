@@ -74,6 +74,13 @@
    visibles et se superposent. */
 [hidden] { display: none !important; }
 
+/* Réserve en permanence la place de la barre de défilement verticale.
+   Sans ça, toute vue qui passe de "assez courte" à "trop longue" (filtrer
+   par libellé, chercher, cocher une tâche…) fait apparaître/disparaître la
+   barre, ce qui décale d'un coup toute la mise en page horizontalement —
+   une des "sautes visuelles" signalées. */
+html { scrollbar-gutter: stable; }
+
 body {
   margin: 0;
   font-family: Verdana, Geneva, sans-serif;
@@ -779,7 +786,26 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
      ça en laissant un liseré vide entre les cartes et le bord. */
   padding: 1.5rem 0 3rem;
 }
+/* Vue "notasks prévues" (desktop) : trois colonnes côte à côte, une par
+   regroupement. minmax(0, 1fr) et non 1fr : un titre long dans une ligne
+   pousserait sinon sa colonne au-delà de sa part, les trois colonnes
+   perdraient leur largeur égale. Les lignes elles-mêmes réutilisent
+   .agenda-item (voir creerLigneAgenda dans app.js). */
+.tasks-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+/* Dans cette vue les lignes ne sont plus collées au bord droit de l'écran
+   (contrairement à la colonne d'échéances) : coins arrondis des deux côtés. */
+.tasks-column .agenda-item { border-radius: var(--shape-sm); }
+.tasks-column h2 { margin-top: 0; }
+
 .agenda-group + .agenda-group { margin-top: 1.25rem; }
+/* …sauf en colonnes : chacune démarre en haut de sa propre colonne, la
+   marge d'empilement vertical n'a plus lieu d'être. */
+.tasks-column + .tasks-column { margin-top: 0; }
 /* Titres de section : pas de majuscules forcées, un peu plus gros à la
    place. On garde partout la casse telle qu'elle est écrite — comme le
    titre "notask" de l'en-tête et les entrées du menu de gauche. */
@@ -1841,7 +1867,21 @@ input[type=checkbox] {
   display: inline-grid;
   place-content: center;
   cursor: pointer;
+  position: relative;
   transition: background .15s ease, border-color .15s ease, outline-color .15s ease;
+}
+/* Zone cliquable élargie, invisible, sans changer la taille affichée.
+   À 16.5px de côté, un clic un peu à côté tombait sur le conteneur (ligne
+   de liste, ligne d'échéance) et ouvrait la notask au lieu de cocher —
+   d'où l'impression que la case "ne marche pas des fois". Le pseudo-
+   élément appartient à la case : la cible de l'événement reste bien
+   l'<input>, donc les gardes `closest('input')` des gestionnaires de clic
+   continuent de fonctionner sans modification. */
+input[type=checkbox]::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
 }
 /* Coche en V, bords arrondis. */
 input[type=checkbox]::after {

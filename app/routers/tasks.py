@@ -11,6 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import Note, NoteItem, TaskDone, TaskOut, User, utcnow
@@ -139,6 +140,9 @@ def set_done(
         session.add(note)
         session.commit()
         session.refresh(note)
+        # Terminer une tâche la retire de l'agenda Google (et la décocher
+        # recrée l'événement) — voir should_have_event dans sync_note().
+        gcal.sync_note(note, session)
 
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
@@ -160,6 +164,7 @@ def set_done(
         session.add(item)
         session.commit()
         session.refresh(item)
+        gcal.sync_item(item, parent, session)  # cf. sync_note ci-dessus
 
         return TaskOut(
             kind="item", id=item.id, note_id=parent.id, note_title=parent.title,

@@ -11,6 +11,11 @@
      l'appareil). preconnect accélère la récupération du fichier de police. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Chargée en priorité : sans ce preload, le navigateur ne découvre la
+     police du code qu'en analysant style.css, affiche d'abord le texte en
+     monospace système, puis le rebascule en Px437 — un décalage visible du
+     texte au chargement. -->
+<link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 
@@ -280,6 +285,19 @@
       </div>
       <div class="trash-grid" id="trash-grid"></div>
       <div class="empty" id="trash-empty" hidden>La corbeille est vide.</div>
+    </section>
+
+    <!-- ---- Notasks prévues (desktop uniquement) ----
+         Trois colonnes de regroupements. En mobile, ce bouton ne mène pas
+         ici mais fait défiler jusqu'à la colonne d'échéances de droite (la
+         largeur n'y permet pas trois colonnes) — voir le gestionnaire de
+         clic de #nav-tasks dans app.js. -->
+    <section id="view-tasks" hidden>
+      <div class="toolbar">
+        <strong style="flex:1">notasks prévues</strong>
+      </div>
+      <div class="tasks-columns" id="tasks-columns"></div>
+      <div class="empty" id="tasks-empty" hidden>Aucune échéance à venir.</div>
     </section>
 
     <!-- ---- Comptes ---- -->

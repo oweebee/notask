@@ -1552,6 +1552,7 @@ function switchView(view) {
   const isNotes = view === 'notes' || view === 'archives' || view === 'favorites';
 
   $('#view-notes').hidden = !isNotes;
+  $('#view-tasks').hidden = view !== 'tasks';
   $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
@@ -1584,6 +1585,7 @@ function switchView(view) {
     $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
   }
+  if (view === 'tasks') loadTasks();
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
 }
@@ -1834,8 +1836,16 @@ $('#nav-tasks').addEventListener('click', () => {
     state.labelFilter = null;
     renderLabelsDrawer();
   }
-  switchView('notes');
-  $('.shell').scrollTo({ left: $('.shell').scrollWidth, behavior: 'smooth' });
+  // Deux comportements selon la largeur, à la demande : en mobile, pas la
+  // place pour trois colonnes, on renvoie donc vers la colonne d'échéances
+  // (deuxième volet du carrousel) ; sur desktop, on garde la vue à part en
+  // trois colonnes. Même seuil que le carrousel dans style.css.
+  if (window.matchMedia('(max-width: 860px)').matches) {
+    switchView('notes');
+    $('.shell').scrollTo({ left: $('.shell').scrollWidth, behavior: 'smooth' });
+  } else {
+    switchView('tasks');
+  }
 });
 
 /* -------------------------------- Notes -------------------------------- */
@@ -6420,6 +6430,50 @@ async function loadAgenda() {
   renderAgenda(items);
 }
 
+/* Vue "notasks prévues" en trois colonnes, desktop uniquement (voir le
+   gestionnaire de #nav-tasks : en mobile le même bouton renvoie vers la
+   colonne d'échéances, faute de largeur). Mêmes données et mêmes lignes que
+   la colonne de droite — c'est la disposition qui change, d'où la
+   réutilisation de creerLigneAgenda() plutôt qu'un second rendu parallèle
+   qui finirait par diverger. Contrairement à la colonne, aucune limite
+   d'un mois : cette vue-ci sert justement à tout voir. */
+async function loadTasks() {
+  let tasks;
+  try {
+    tasks = await api('/tasks');
+  } catch {
+    return;
+  }
+  await Promise.all(tasks.map(async (t) => {
+    t.text = await decryptField(t.text);
+    t.note_title = await decryptField(t.note_title);
+  }));
+  renderTasks(tasks.filter((t) => t.bucket !== 'done'));
+}
+
+function renderTasks(items) {
+  const box = $('#tasks-columns');
+  box.innerHTML = '';
+  $('#tasks-empty').hidden = items.length > 0;
+
+  const groupes = {};
+  for (const t of items) (groupes[t.bucket] ||= []).push(t);
+
+  for (const b of ['late', 'today', 'upcoming']) {
+    const liste = groupes[b] || [];
+    // Colonne affichée même vide : trois colonnes qui apparaissent et
+    // disparaissent au fil des échéances feraient sauter la mise en page
+    // d'une visite à l'autre.
+    const col = document.createElement('section');
+    col.className = 'tasks-column agenda-group ' + b;
+    const h2 = document.createElement('h2');
+    h2.textContent = `${BUCKET_LABELS[b]} (${liste.length})`;
+    col.appendChild(h2);
+    for (const t of liste) col.appendChild(creerLigneAgenda(t, loadTasks));
+    box.appendChild(col);
+  }
+}
+
 function renderAgenda(items) {
   const box = $('#agenda-content');
   box.innerHTML = '';
@@ -6441,54 +6495,60 @@ function renderAgenda(items) {
     h2.textContent = `${BUCKET_LABELS[b]} (${groupes[b].length})`;
     section.appendChild(h2);
 
-    for (const t of groupes[b]) {
-      // <div>, pas <button> : il faut pouvoir héberger une vraie case à
-      // cocher (voir plus bas), et le HTML interdit un <input> à l'intérieur
-      // d'un <button> (contenu interactif imbriqué). Le clic reste géré à la
-      // main ci-dessous, en excluant la case (même schéma que .task-card,
-      // désormais retiré avec la vue "Notasks Prévues" en double).
-      const btn = document.createElement('div');
-      btn.tabIndex = 0;
-      btn.setAttribute('role', 'button');
-      // Fond = couleur propre de la note d'origine (même classe .c-* que
-      // sur sa carte), pas un simple repère en bordure : on veut
-      // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
-      btn.className = 'agenda-item c-' + t.color;
-      const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
-      // Icône toujours affichée dans un rond : celle de la notask si elle en
-      // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
-      // texte est ainsi toujours décalé de la même largeur.
-      const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
-      btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer">
-        <span class="agenda-item-icon">${icon}</span>
-        <span class="agenda-item-body">
-          <span class="agenda-item-text">${escapeHtml(label)}</span>
-          <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at)}</span>
-        </span>`;
-      btn.querySelector('input').onchange = async (e) => {
-        e.stopPropagation();
-        await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
-        loadAgenda();
-        updateTaskBadges();
-      };
-      btn.addEventListener('click', (e) => {
-        if (e.target.closest('input')) return;
-        ouvrirNoteParId(t.note_id);
-      });
-      // Avant, un vrai <button> gérait Entrée/Espace nativement — repris à
-      // la main puisque ce n'en est plus un (voir plus haut, HTML interdit
-      // un <input> dans un <button>).
-      btn.addEventListener('keydown', (e) => {
-        if (e.target.closest('input')) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          ouvrirNoteParId(t.note_id);
-        }
-      });
-      section.appendChild(btn);
-    }
+    for (const t of groupes[b]) section.appendChild(creerLigneAgenda(t, loadAgenda));
     box.appendChild(section);
   }
+}
+
+/* Une ligne d'échéance, partagée par la colonne de droite et la vue en
+   trois colonnes. `rafraichir` est la fonction de rechargement de l'appelant
+   (loadAgenda ou loadTasks) : sans ce paramètre, cocher depuis la vue en
+   trois colonnes rechargerait la colonne de droite, restée invisible, et la
+   ligne cochée ne bougerait pas sous les yeux de l'utilisateur. */
+function creerLigneAgenda(t, rafraichir) {
+  // <div>, pas <button> : il faut pouvoir héberger une vraie case à
+  // cocher, et le HTML interdit un <input> à l'intérieur d'un <button>
+  // (contenu interactif imbriqué). Le clic est donc géré à la main
+  // ci-dessous, en excluant la case.
+  const btn = document.createElement('div');
+  btn.tabIndex = 0;
+  btn.setAttribute('role', 'button');
+  // Fond = couleur propre de la note d'origine (même classe .c-* que
+  // sur sa carte), pas un simple repère en bordure : on veut
+  // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
+  btn.className = 'agenda-item c-' + t.color;
+  const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
+  // Icône toujours affichée dans un rond : celle de la notask si elle en
+  // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
+  // texte est ainsi toujours décalé de la même largeur.
+  const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
+  btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer">
+    <span class="agenda-item-icon">${icon}</span>
+    <span class="agenda-item-body">
+      <span class="agenda-item-text">${escapeHtml(label)}</span>
+      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at)}</span>
+    </span>`;
+  btn.querySelector('input').onchange = async (e) => {
+    e.stopPropagation();
+    await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
+    rafraichir();
+    updateTaskBadges();
+  };
+  btn.addEventListener('click', (e) => {
+    if (e.target.closest('input')) return;
+    ouvrirNoteParId(t.note_id);
+  });
+  // Avant, un vrai <button> gérait Entrée/Espace nativement — repris à
+  // la main puisque ce n'en est plus un (voir plus haut, HTML interdit
+  // un <input> dans un <button>).
+  btn.addEventListener('keydown', (e) => {
+    if (e.target.closest('input')) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      ouvrirNoteParId(t.note_id);
+    }
+  });
+  return btn;
 }
 
 /* -------------------------------- Comptes -------------------------------- */
