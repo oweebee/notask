@@ -1892,18 +1892,22 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 .label-new-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: .4rem;
-  padding: .3rem 1.5rem .3rem 2.5rem;
+  padding: .3rem 1rem;
   margin-top: .5rem;
 }
 .label-new-row input {
-  flex: 1;
+  flex: none;
+  width: 70%;
+  max-width: 160px;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--md-outline-variant);
   color: var(--md-on-surface);
   font-size: .8125rem;
   padding: .3rem 0;
+  text-align: center;
 }
 .label-new-row input:focus { outline: none; border-bottom-color: var(--md-primary); }
 .label-new-row button { flex: none; opacity: .7; }
