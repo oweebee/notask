@@ -3042,6 +3042,15 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
       baseLeft: box.left, baseTop: box.top,
       moved: false,
     };
+    // Le glisser souris ne démarre qu'après quelques pixels de mouvement :
+    // pendant ce court trajet, le navigateur a déjà commencé une sélection
+    // de texte, qui s'étendait ensuite aux cartes survolées. On l'efface au
+    // démarrage, et la classe sur <body> empêche toute nouvelle sélection
+    // pendant le geste (voir body.is-dragging dans style.css).
+    const selection = window.getSelection();
+    if (selection) selection.removeAllRanges();
+    document.body.classList.add('is-dragging');
+
     item.classList.add('dragging');
     try { item.setPointerCapture(pointerId); } catch { /* déjà relâché entretemps, sans conséquence */ }
   }
@@ -3132,6 +3141,7 @@ function enablePointerReorder(container, itemSelector, { excludeSelector, onSwap
     const moved = active.moved;
     el.classList.remove('dragging');
     el.style.transform = '';
+    document.body.classList.remove('is-dragging');
     active = null;
     if (moved) {
       marquerGesteDeGlisser(el);

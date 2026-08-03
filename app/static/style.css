@@ -1342,20 +1342,28 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   -webkit-touch-callout: none;
 }
 .note:hover, .note:focus-within { box-shadow: var(--elev-2); }
-/* Petit effet de "décrochage" au moment où la carte est prise pour être
-   déplacée : une brève vibration (rotation/échelle), jouée une seule fois
-   à l'ajout de la classe .dragging (animation-fill-mode: forwards, pas de
-   boucle) — pas pendant tout le glisser, juste l'instant de la prise en
-   main. Ne s'applique qu'à l'élément laissé dans la grille (l'image de
-   glisser-déposer natif du navigateur est une capture figée, hors de
-   portée de CSS). */
-.note.dragging { opacity: .4; animation: note-pickup-wobble .22s ease-out; }
-@keyframes note-pickup-wobble {
-  0%   { transform: scale(1) rotate(0deg); }
-  25%  { transform: scale(1.035) rotate(-2deg); }
-  55%  { transform: scale(1.035) rotate(1.5deg); }
-  80%  { transform: scale(1.02) rotate(-.75deg); }
-  100% { transform: scale(1.02) rotate(0deg); }
+/* Aucune animation de "décrochage" ici : elle jouait sur `transform`, or
+   c'est exactement la propriété que le JS pilote pour faire suivre la carte
+   au pointeur (voir enablePointerReorder). Une animation CSS l'emporte sur
+   un style inline pendant toute sa durée — la carte restait donc figée sur
+   place au lieu de suivre le curseur pendant les premières fractions de
+   seconde du geste. Le repère visuel de la prise en main passe donc par
+   l'opacité et l'ombre, qui n'entrent en conflit avec rien. */
+.note.dragging {
+  opacity: .55;
+  box-shadow: var(--elev-3);
+  cursor: grabbing;
+}
+/* Pendant un glisser : plus aucune sélection de texte possible, où que ce
+   soit. Sans ça, le trajet parcouru avant le déclenchement du geste amorce
+   une sélection native qui s'étend ensuite à toutes les cartes survolées.
+   Posée sur <body> par enablePointerReorder() (voir startDrag), retirée à
+   la fin du geste. */
+body.is-dragging,
+body.is-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grabbing !important;
 }
 
 /* Icône et titre sur la même ligne, icône à gauche. */
