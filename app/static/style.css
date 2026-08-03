@@ -2302,10 +2302,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
   font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* +2px sur la taille d'origine (.8125rem/13px) : VT323 a un œil plus
-     petit que les monospaces classiques, elle a besoin de ce supplément
-     pour rester aussi lisible. */
-  font-size: .9375rem;
+  /* 18px : VT323 a un œil bien plus petit que les monospaces classiques,
+     elle a besoin de cette taille pour rester lisible. */
+  font-size: 1.125rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
   border-radius: 4px;
@@ -2340,7 +2339,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    recours — aucune n'est garantie sur toutes les machines. */
 .note-archive-zone {
   font-family: "Satisfy", cursive;
-  font-size: .95em;
+  /* Taille fixe (16px) plutôt que relative au texte environnant : Satisfy
+     est une cursive à l'œil réduit, elle a besoin d'une taille propre. */
+  font-size: 1rem;
   background: rgba(0, 0, 0, .34);
   border-radius: var(--shape-xs);
   /* Liseré discret : sur une carte déjà sombre, l'assombrissement seul
@@ -2391,8 +2392,8 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 
 .note-code-block {
   font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* Cf. .note-code-inline : +2px pour compenser l'œil réduit de VT323. */
-  font-size: .9375rem;
+  /* Cf. .note-code-inline : 18px pour compenser l'œil réduit de VT323. */
+  font-size: 1.125rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;
