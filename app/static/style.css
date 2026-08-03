@@ -64,7 +64,7 @@
    cette classe sur <body> — #view-notes est partagé avec Notes/Favoris,
    rien d'autre dans le DOM ne distingue la vue Archives). */
 body.view-archives #view-notes {
-  font-family: "Harlow Solid Italic", cursive, serif;
+  font-family: "Satisfy", cursive;
 }
 
 body {
@@ -486,12 +486,12 @@ header.topbar .who {
 }
 .logs-ligne:last-child { border-bottom: none; }
 .logs-heure {
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   color: var(--md-on-surface-variant);
 }
 .logs-niveau {
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .68rem;
   letter-spacing: .04em;
 }
@@ -529,7 +529,7 @@ header.topbar .who {
   overflow: auto;
   background: rgba(0,0,0,.35);
   border-radius: var(--shape-xs);
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -1506,7 +1506,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   justify-content: flex-end;   /* la frappe se fait en bas, ça remonte */
   height: 100%;
   padding: .45rem .6rem;
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .72rem;
   line-height: 1.35;
 }
@@ -2299,7 +2299,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
@@ -2386,7 +2386,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-archive-inline .archive-icon-mark svg { width: 12px; height: 12px; display: block; }
 
 .note-code-block {
-  font-family: "TTY Virtuel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "VT323", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .8125rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
