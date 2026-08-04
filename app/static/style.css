@@ -1789,14 +1789,30 @@ body.is-dragging * {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255,82,82,.5); }
   70%      { box-shadow: 0 0 0 7px rgba(255,82,82,0); }
 }
-/* Ici la pulsation EST l'information (micro ouvert) : on la remplace par un
-   contour fixe plutôt que de la retirer, sans quoi l'état deviendrait
-   invisible pour qui a demandé moins d'animations. */
-@media (prefers-reduced-motion: reduce) {
-  .cal-btn.is-recording {
-    animation: none;
-    box-shadow: 0 0 0 2px rgba(255,82,82,.6);
-  }
+/* Aucun repli sous prefers-reduced-motion, ici comme ailleurs dans l'app :
+   les animations sont voulues dans tous les cas (choix explicite de
+   l'utilisateur sur cette application personnelle). */
+
+/* Apparition « gélatine » d'une nouvelle ligne à cocher : elle jaillit
+   écrasée puis rebondit en s'étirant alternativement en hauteur et en
+   largeur avant de se stabiliser. Une suite d'images clés et non une simple
+   courbe : un cubic-bezier ne fait varier qu'une échelle uniforme et ne
+   peut pas produire cette compensation entre les deux axes, qui est
+   justement ce qui donne l'impression de matière molle.
+   transform-origin à gauche : la ligne se déploie depuis sa case à cocher,
+   pas depuis son milieu. */
+@keyframes ligne-gelatine {
+  0%   { transform: scale(.55, .1); opacity: 0; }
+  30%  { transform: scale(1.04, 1.28); opacity: 1; }
+  50%  { transform: scale(.99, .86); }
+  68%  { transform: scale(1.01, 1.1); }
+  84%  { transform: scale(.998, .96); }
+  100% { transform: scale(1, 1); opacity: 1; }
+}
+.composer-item-row.ligne-apparait,
+.dn-item-row.ligne-apparait {
+  animation: ligne-gelatine .5s cubic-bezier(.3, .9, .4, 1);
+  transform-origin: left center;
 }
 
 .due-row { display: flex; align-items: center; gap: .625rem; }

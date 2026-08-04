@@ -2852,8 +2852,11 @@ function renderNotes() {
       aria-label="${n.pinned ? 'Désépingler' : 'Épingler'}">${n.pinned ? ICONS.pinFilled : ICONS.pin}</button>`;
 
     // Icône à gauche du titre, sur la même ligne (plutôt qu'au-dessus).
+    // data-act=icon : cliquable pour changer l'icône sans ouvrir la notask
+    // (voir plus bas). Aucune classe ni style en plus — l'apparence est
+    // exactement la même qu'avant.
     if ((n.icon && ICON_CHOICES[n.icon]) || n.title) {
-      const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
+      const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon" data-act="icon">${ICON_CHOICES[n.icon]}</span>` : '';
       const title = n.title ? `<h3>${escapeHtml(n.title)}</h3>` : '';
       inner += `<div class="note-title-row">${icon}${title}</div>`;
     }
@@ -2945,6 +2948,16 @@ function renderNotes() {
     el.querySelector('[data-act=pin]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { pinned: !n.pinned } });
       loadNotes();
+    };
+    // Changer l'icône directement depuis l'accueil, sans ouvrir la notask :
+    // même sélecteur que dans le composeur et la boîte d'édition.
+    const iconeCarte = el.querySelector('[data-act=icon]');
+    if (iconeCarte) iconeCarte.onclick = (e) => {
+      e.stopPropagation();  // sans ça, le clic ouvrirait aussi la notask
+      openIconPopup(iconeCarte, n.icon, async (icon) => {
+        await api('/notes/' + n.id, { method: 'PATCH', body: { icon } });
+        loadNotes();
+      });
     };
     el.querySelector('[data-act=archive]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
@@ -3347,7 +3360,10 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // gêner leurs propres clics ; réservé à la vue par défaut, voir
   // notesReorderable() — filtrer/rechercher ne mélange pas l'ordre du
   // sous-ensemble affiché avec celui, complet, des notasks masquées.
-  excludeSelector: '.pin-btn, .actions, .palette, .note-attachments, input',
+  // .note-icon exclue elle aussi : elle ouvre le sélecteur d'icône au clic
+  // (voir data-act=icon dans renderNotes), un geste de glisser partant de
+  // là gênerait ce clic.
+  excludeSelector: '.pin-btn, .actions, .palette, .note-attachments, .note-icon, input',
   enabled: notesReorderable,
   // La mosaïque est en positionnement absolu (voir layoutMosaic()) : sans
   // ce recalcul après chaque permutation, réordonner le DOM ne bouge plus
@@ -3567,9 +3583,12 @@ function renderComposer() {
   majSuppressionLigneVierge('#nc-items', composerItems);
 }
 
-function creerLigneComposeur(item, idx) {
+/* `anime` : réservé à la ligne qui vient d'apparaître sous la frappe (voir
+   l'animation gélatine dans style.css). Jamais au rendu complet, où toutes
+   les lignes surgiraient ensemble à chaque redessin. */
+function creerLigneComposeur(item, idx, anime = false) {
   const row = document.createElement('div');
-  row.className = 'composer-item-row';
+  row.className = 'composer-item-row' + (anime ? ' ligne-apparait' : '');
   row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
     <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
     <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
@@ -3584,7 +3603,7 @@ function creerLigneComposeur(item, idx) {
     if (idx === composerItems.length - 1 && txt.value.trim()) {
       assurerLigneVierge(composerItems);
       const nouvelIdx = composerItems.length - 1;
-      $('#nc-items').appendChild(creerLigneComposeur(composerItems[nouvelIdx], nouvelIdx));
+      $('#nc-items').appendChild(creerLigneComposeur(composerItems[nouvelIdx], nouvelIdx, true));
       majSuppressionLigneVierge('#nc-items', composerItems);
     }
   };
@@ -4117,13 +4136,25 @@ ncComposerEl.addEventListener('drop', (e) => {
 
 $('#nc-cancel').addEventListener('click', resetComposer);
 
-$('#nc-add').addEventListener('click', async () => {
+$('#nc-add').addEventListener('click', () => creerNotaskDepuisComposeur());
+
+/* Créer la notask en cours de saisie. Appelée par le bouton "Ajouter", et
+   aussi dès qu'on clique ailleurs dans l'application (voir plus bas) : une
+   saisie commencée puis abandonnée du regard ne doit pas se perdre. */
+let creationEnCours = false;
+
+async function creerNotaskDepuisComposeur() {
+  // La création part maintenant de deux endroits (le bouton et le clic
+  // ailleurs), et l'appel réseau dure : sans ce verrou, deux déclenchements
+  // rapprochés créeraient deux notasks identiques.
+  if (creationEnCours) return;
   const title = $('#nc-title').value.trim();
   const content = richToText($('#nc-content')).trim();
   const items = composerItems.filter((i) => i.text.trim());
 
   if (!title && !content && !(composerChecklist && items.length) && !composerPendingFiles.length) return;
 
+  creationEnCours = true;
   try {
     const body = {
       title: await encryptField(title),
@@ -4207,7 +4238,34 @@ $('#nc-add').addEventListener('click', async () => {
     // Sans ceci, un échec silencieux donne l'impression que le bouton ne
     // fait rien — on affiche toujours la cause dans le composeur.
     msg($('#composer-msg'), err.message);
+  } finally {
+    creationEnCours = false;
   }
+}
+
+/* Cliquer ailleurs dans l'application enregistre la notask en cours de
+   saisie, exactement comme le bouton "Ajouter".
+
+   Sur `mousedown` et non `click` : un clic sur une carte ouvre sa boîte
+   d'édition, or celle-ci est modale — le `click` final n'atteindrait alors
+   plus le document et la saisie serait perdue.
+
+   Volontairement limité à l'intérieur de la fenêtre : passer dans une autre
+   application (Alt+Tab, autre onglet) ne déclenche rien, une saisie laissée
+   en plan doit pouvoir être reprise telle quelle au retour. C'est aussi
+   pourquoi il n'y a pas d'écouteur sur `blur` de la fenêtre.
+
+   creerNotaskDepuisComposeur() sort d'elle-même quand tout est vide : un
+   clic anodin dans une application au composeur intact ne crée donc rien. */
+document.addEventListener('mousedown', (e) => {
+  const composeur = $('.note-composer');
+  if (!composeur || composeur.hidden) return;
+  if (composeur.contains(e.target)) return;
+  // Un clic dans une fenêtre modale ou un popover flottant (palette,
+  // sélecteur d'icône, calendrier…) n'est pas un "ailleurs" : ces éléments
+  // appartiennent à un geste en cours, pas à un abandon du composeur.
+  if (e.target.closest('dialog, .cal-popup, .icon-popup')) return;
+  creerNotaskDepuisComposeur();
 });
 
 renderComposer();
@@ -5632,9 +5690,11 @@ function renderNoteItemsSimple() {
   majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
 }
 
-function creerLigneNoteSimple(item, idx) {
+/* `anime` : cf. creerLigneComposeur — uniquement la ligne qui vient
+   d'apparaître sous la frappe. */
+function creerLigneNoteSimple(item, idx, anime = false) {
   const row = document.createElement('div');
-  row.className = 'dn-item-row';
+  row.className = 'dn-item-row' + (anime ? ' ligne-apparait' : '');
   row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
     <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
     <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
@@ -5650,7 +5710,7 @@ function creerLigneNoteSimple(item, idx) {
     if (idx === state.editingNoteItems.length - 1 && txt.value.trim()) {
       assurerLigneVierge(state.editingNoteItems);
       const nouvelIdx = state.editingNoteItems.length - 1;
-      $('#dns-items').appendChild(creerLigneNoteSimple(state.editingNoteItems[nouvelIdx], nouvelIdx));
+      $('#dns-items').appendChild(creerLigneNoteSimple(state.editingNoteItems[nouvelIdx], nouvelIdx, true));
       majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
     }
   };
