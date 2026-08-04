@@ -1026,12 +1026,12 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .toolbar input:focus { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 
 /* Écho de la cuillère bleue du logo sur la barre de tri, atténué. Alpha
-   aligné sur celui du composeur (.78) : ces barres doivent se détacher un
-   peu plus que les cartes autour, sans devenir opaques. */
-.search-toolbar input[type=search] { background: rgba(29, 84, 143, .78); }
+   aligné sur celui du composeur (.90) : ces barres doivent se détacher
+   nettement des cartes autour, sans devenir tout à fait opaques. */
+.search-toolbar input[type=search] { background: rgba(29, 84, 143, .90); }
 /* Seconde barre — recherche en profondeur — en jaune cuillère, pour la
    distinguer d'un coup d'œil de la barre de tri juste au-dessus. */
-.deep-search-toolbar input[type=search] { background: rgba(133, 102, 20, .78); }
+.deep-search-toolbar input[type=search] { background: rgba(133, 102, 20, .90); }
 
 /* Croix d'effacement : DANS la barre, calée contre son bord droit, et non
    posée à côté comme un bouton séparé. D'où le positionnement absolu par
@@ -1154,10 +1154,10 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   /* Écho de la cuillère jaune du logo, atténué (alpha) pour rester discret —
      les deux blocs partagent la même teinte, comme .dns-card/.dns-bottom-bar
      partagent --note-color en édition rapide.
-     Alpha remonté de .55 à .78 : composeur et recherche doivent se détacher
-     un peu plus nettement que les cartes qui les entourent, sans pour
-     autant devenir des aplats opaques. */
-  background: rgba(133, 102, 20, .78);
+     Alpha remonté de .55 à .90 : composeur et recherche doivent se détacher
+     nettement des cartes qui les entourent, tout en laissant transparaître
+     un peu du fond. */
+  background: rgba(133, 102, 20, .90);
   border-radius: var(--shape-md);
   box-shadow: var(--elev-1);
 }
