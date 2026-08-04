@@ -2572,6 +2572,13 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   align-items: center;
   gap: .3rem;
   padding: .1rem .4rem;
+  /* Même ancrage que la variante bloc : l'icône est sortie du flux et collée
+     à droite, avec la place réservée par le padding. Dans le flux, elle
+     suivait la fin du texte et sautait donc d'un coup à l'escamotage du
+     contenu — le bouton se retrouvait ailleurs sous le curseur au moment
+     même où l'on venait de cliquer dessus. */
+  padding-right: 1.75rem;
+  position: relative;
 }
 /* Archive repliée : ramenée à une seule ligne portant le mot « archive »,
    l'icône restant visible à droite pour pouvoir la rouvrir.
@@ -2627,6 +2634,14 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 }
 .note-archive-block .archive-icon-mark svg { width: 14px; height: 14px; display: block; }
 .note-archive-inline .archive-icon-mark {
+  /* Sortie du flux et collée à droite, comme dans la variante bloc : dans
+     le flux, elle suivait la fin du texte et sautait donc d'un coup à
+     l'escamotage du contenu — le bouton se retrouvait ailleurs sous le
+     curseur à l'instant même où l'on venait de cliquer dessus. */
+  position: absolute;
+  right: .3rem;
+  top: 50%;
+  transform: translateY(-50%);
   width: 16px;
   height: 16px;
   flex: none;

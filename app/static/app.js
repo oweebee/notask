@@ -2883,7 +2883,9 @@ function renderNotes() {
       // Le contenu peut porter des images insérées dans le texte
       // (`![att:ID]`) : le HTML sort avec des <img> sans src, hydratées
       // plus bas une fois la carte dans le DOM.
-      inner += `<div class="body">${renderFormatted(n.content)}</div>`;
+      // Archives dépliées uniquement quand une recherche est en cours :
+      // c'est peut-être un mot d'archive qui a fait ressortir cette notask.
+      inner += `<div class="body">${renderFormatted(n.content, !!(state.search || state.deepSearch))}</div>`;
     }
 
     // Sous le trait : aucun rendu visuel (plus de vignettes d'images). Le
@@ -5523,7 +5525,11 @@ function brancherLecteurAudio(bloc, url, blob) {
   })();
 }
 
-function renderFormatted(text) {
+/* `archivesDepliees` : voir le traitement de NOTE_ARCHIVE_MARK plus bas.
+   Faux par défaut — l'ouverture d'une notask part toujours archives
+   repliées, quel que soit l'état où on les avait laissées à la fermeture.
+   Seul l'affichage des résultats de recherche le passe à vrai. */
+function renderFormatted(text, archivesDepliees = false) {
   let html = escapeHtml(text);
   html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
   html = html.replace(NOTE_AUDIO_MARK, (m, id) => audioBlockHtml(id));
@@ -5533,21 +5539,23 @@ function renderFormatted(text) {
   html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);
     const tag = bloc ? 'div' : 'span';
-    // Replié par défaut : une archive est un passage mis de côté, il n'a
-    // pas à encombrer la lecture tant qu'on ne le redemande pas. Le dépli
-    // est un geste de consultation, valable le temps de l'affichage — pas
-    // un état conservé (le marqueur enregistré est donc ignoré ici).
+    // Replié par défaut, y compris à l'ouverture d'une notask et quel que
+    // soit l'état où on avait laissé les archives à la fermeture : une
+    // archive est un passage mis de côté, il n'a pas à encombrer la lecture
+    // tant qu'on ne le redemande pas. Le dépli est un geste de consultation
+    // valable le temps de l'affichage, jamais un état conservé — le
+    // marqueur enregistré est donc délibérément ignoré ici.
     //
-    // SAUF pendant une recherche : la recherche mord sur le texte brut,
-    // marqueurs compris, donc une notask peut très bien ressortir à cause
-    // d'un mot situé dans une archive. La laisser repliée reviendrait à
-    // afficher un résultat sans montrer ce qui l'a fait sortir.
+    // Seule exception, décidée par l'appelant : l'affichage des résultats
+    // de recherche. Celle-ci mord sur le texte brut, marqueurs compris,
+    // donc une notask peut ressortir à cause d'un mot situé dans une
+    // archive — la laisser repliée reviendrait à montrer un résultat sans
+    // montrer ce qui l'a fait sortir.
     //
     // Le contenu reste de toute façon présent dans le DOM (c'est le CSS
     // .is-closed qui le masque) : déplier ne coûte qu'un changement de
     // classe, rien n'est reconstruit.
-    const recherche = state.search || state.deepSearch;
-    const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${recherche ? '' : ' is-closed'}`;
+    const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${archivesDepliees ? '' : ' is-closed'}`;
     return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
