@@ -799,6 +799,159 @@ const ICON_CHOICES = {
   arcade: '<svg viewBox="0 0 24 24"><path d="M5.5 2.5h13a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2z" fill="#5c6bc0"/><rect x="6" y="5" width="12" height="7" rx="1" fill="#80deea"/><circle cx="9" cy="15.5" r="1.5" fill="#ef5350"/><circle cx="15" cy="15.5" r="1.5" fill="#ffca28"/><rect x="7" y="18.3" width="10" height="1.5" rx=".75" fill="#3949ab"/></svg>',
   chess: '<svg viewBox="0 0 24 24"><path d="M9 3.5c2.8 0 4.5 1.8 4.5 4.2L18 12v2.5h-2l-1-1.5-2 6H9.5l1.5-6-2.5-1.5-2 2.5-1.5-1.5 3-4.5V6a2.5 2.5 0 0 1 1-2.5z" fill="#455a64"/><rect x="6.5" y="19.5" width="11" height="2.4" rx="1.2" fill="#263238"/><circle cx="10" cy="7" r=".9" fill="#eceff1"/></svg>',
   quest: '<svg viewBox="0 0 24 24"><path d="M3 5.5 9 3.5l6 2 6-2v15l-6 2-6-2-6 2z" fill="#d7ccc8"/><path d="M9 3.5v15M15 5.5v15" stroke="#a1887f" stroke-width="1.2"/><path d="M6.5 9.5c1.5 1.5 3.5 2.5 5.5 4.5" fill="none" stroke="#ef5350" stroke-width="1.3" stroke-dasharray="1.8 1.8" stroke-linecap="round"/><path d="M17.5 8.5l1.2 2.4-1.2 2.4-1.2-2.4z" fill="#ef5350"/></svg>',
+
+  /* Encore trois par thème (104 -> 113), mêmes règles Material Design. */
+  // — crypto / serveurs / IT
+  storage: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="#546e7a"/><rect x="5.2" y="6.2" width="13.6" height="3.4" rx=".8" fill="#90a4ae"/><rect x="5.2" y="10.3" width="13.6" height="3.4" rx=".8" fill="#90a4ae"/><rect x="5.2" y="14.4" width="13.6" height="3.4" rx=".8" fill="#90a4ae"/><circle cx="16.6" cy="7.9" r=".8" fill="#69f0ae"/><circle cx="16.6" cy="12" r=".8" fill="#69f0ae"/><circle cx="16.6" cy="16.1" r=".8" fill="#ffca28"/></svg>',
+  ethernet: '<svg viewBox="0 0 24 24"><path d="M8 3.5h8v5h3v12H5v-12h3z" fill="#607d8b"/><rect x="7" y="10.5" width="2" height="4" fill="#cfd8dc"/><rect x="11" y="10.5" width="2" height="4" fill="#cfd8dc"/><rect x="15" y="10.5" width="2" height="4" fill="#cfd8dc"/><rect x="9.5" y="5" width="5" height="3.5" fill="#90a4ae"/></svg>',
+  loadbalancer: '<svg viewBox="0 0 24 24"><rect x="9" y="9.5" width="6" height="5" rx="1.3" fill="#26a69a"/><rect x="2" y="2.5" width="5.5" height="4" rx="1.2" fill="#80cbc4"/><rect x="16.5" y="2.5" width="5.5" height="4" rx="1.2" fill="#80cbc4"/><rect x="2" y="17.5" width="5.5" height="4" rx="1.2" fill="#80cbc4"/><rect x="16.5" y="17.5" width="5.5" height="4" rx="1.2" fill="#80cbc4"/><path d="M7.5 5.5h2.5v4M16.5 5.5H14v4M7.5 19.5h2.5v-5M16.5 19.5H14v-5" fill="none" stroke="#00796b" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // — développement
+  commit: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="#7e57c2"/><circle cx="12" cy="12" r="1.8" fill="#ede7f6"/><path d="M2.5 12h5.5M16 12h5.5" stroke="#5e35b1" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  issue: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ef5350"/><rect x="11.1" y="6.8" width="1.8" height="7" rx=".9" fill="#fff"/><circle cx="12" cy="16.4" r="1.2" fill="#fff"/></svg>',
+  pipeline: '<svg viewBox="0 0 24 24"><circle cx="4.5" cy="12" r="2.6" fill="#42a5f5"/><circle cx="12" cy="12" r="2.6" fill="#42a5f5"/><circle cx="19.5" cy="12" r="2.6" fill="#66bb6a"/><path d="M7.1 12h2.3M14.6 12h2.3" stroke="#1565c0" stroke-width="1.7" stroke-linecap="round"/><path d="M10.9 11 12 12.1 13.4 10.4" fill="none" stroke="#e3f2fd" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // — gaming
+  coin: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ffca28"/><circle cx="12" cy="12" r="6.2" fill="#ffe082"/><path d="M12 7.8v8.4M10 9.6h3a1.9 1.9 0 0 1 0 3.8h-3" fill="none" stroke="#f57f17" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  puzzle: '<svg viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 1 1 4 0h6v6a2 2 0 1 0 0 4v6h-6a2 2 0 1 0-4 0H4v-6a2 2 0 1 0 0-4z" fill="#66bb6a"/></svg>',
+  cards: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="10" height="14" rx="1.8" fill="#90a4ae" transform="rotate(-10 8 13)"/><rect x="10" y="4.5" width="10" height="14" rx="1.8" fill="#eceff1"/><path d="M15 8.5l1.6 2.6L15 13.7l-1.6-2.6z" fill="#ef5350"/></svg>',
+
+  /* Organisation (113 -> 119). */
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 6.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="#ffb74d"/><path d="M3 10h18v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="#ffa726"/></svg>',
+  kanban: '<svg viewBox="0 0 24 24"><rect x="2.5" y="3.5" width="19" height="17" rx="2" fill="#455a64"/><rect x="4.5" y="5.8" width="4.6" height="8" rx="1" fill="#4fc3f7"/><rect x="9.7" y="5.8" width="4.6" height="12" rx="1" fill="#66bb6a"/><rect x="14.9" y="5.8" width="4.6" height="5.5" rx="1" fill="#ffca28"/></svg>',
+  clipboard: '<svg viewBox="0 0 24 24"><rect x="4.5" y="4" width="15" height="17" rx="2" fill="#90a4ae"/><rect x="8.5" y="2.5" width="7" height="3.6" rx="1.2" fill="#546e7a"/><path d="M8 11l1.8 1.8L13 9.5M8 16l1.8 1.8L13 14.5" fill="none" stroke="#eceff1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  tag: '<svg viewBox="0 0 24 24"><path d="M11 3H21v10L11.5 22.5a1.6 1.6 0 0 1-2.3 0L1.5 14.8a1.6 1.6 0 0 1 0-2.3z" fill="#26a69a"/><circle cx="17.3" cy="6.7" r="1.9" fill="#e0f2f1"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M9 3.5h6l-1 5.5 3.5 3.5v2H6.5v-2L10 9z" fill="#ef5350"/><rect x="11.2" y="14.5" width="1.6" height="6.5" rx=".8" fill="#b71c1c"/></svg>',
+  filter: '<svg viewBox="0 0 24 24"><path d="M3 5h18l-6.8 8v6.5l-4.4 2V13z" fill="#7e57c2"/></svg>',
+
+  /* Flèches (119 -> 125). */
+  arrowup: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#42a5f5"/><path d="M12 16.5v-9M7.8 11.5 12 7.3l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowdown: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ef5350"/><path d="M12 7.5v9M7.8 12.5 12 16.7l4.2-4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowleft: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#78909c"/><path d="M16.5 12h-9M11.5 7.8 7.3 12l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowright: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#66bb6a"/><path d="M7.5 12h9M12.5 7.8 16.7 12l-4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowcycle: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7" fill="none" stroke="#26a69a" stroke-width="2.2" stroke-linecap="round"/><path d="M20.5 3v4.5H16" fill="none" stroke="#26a69a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowsplit: '<svg viewBox="0 0 24 24"><path d="M4 12h5.5L14 6.5h5M9.5 12 14 17.5h5" fill="none" stroke="#ab47bc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 4.2 20.5 6.5 17 8.8zM17 15.2 20.5 17.5 17 19.8z" fill="#ab47bc"/></svg>',
+
+  /* Symboles (125 -> 131). */
+  plus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#66bb6a"/><path d="M12 7.5v9M7.5 12h9" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  minus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ef5350"/><path d="M7.5 12h9" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#43a047"/><path d="M7.8 12.3l2.9 2.9 5.5-6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cross: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#e53935"/><path d="M8.6 8.6l6.8 6.8M15.4 8.6l-6.8 6.8" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#42a5f5"/><circle cx="12" cy="7.8" r="1.3" fill="#fff"/><rect x="11.1" y="10.4" width="1.8" height="6.4" rx=".9" fill="#fff"/></svg>',
+  question: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ffa726"/><path d="M9.4 9.4a2.7 2.7 0 1 1 3.4 2.6c-.6.2-.8.7-.8 1.3v.5" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.3" fill="#fff"/></svg>',
+
+  /* Ronds de couleur (131 -> 137) : repères purement visuels, pour coder
+     soi-même un statut ou une priorité sans qu'aucun dessin n'impose de
+     sens. Un léger reflet en haut à gauche leur évite de paraître plats. */
+  dotred: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#e53935"/><circle cx="9.4" cy="9.4" r="2.4" fill="#ef9a9a" opacity=".55"/></svg>',
+  dotorange: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#fb8c00"/><circle cx="9.4" cy="9.4" r="2.4" fill="#ffcc80" opacity=".55"/></svg>',
+  dotyellow: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#fdd835"/><circle cx="9.4" cy="9.4" r="2.4" fill="#fff59d" opacity=".55"/></svg>',
+  dotgreen: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#43a047"/><circle cx="9.4" cy="9.4" r="2.4" fill="#a5d6a7" opacity=".55"/></svg>',
+  dotblue: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#1e88e5"/><circle cx="9.4" cy="9.4" r="2.4" fill="#90caf9" opacity=".55"/></svg>',
+  dotpurple: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#8e24aa"/><circle cx="9.4" cy="9.4" r="2.4" fill="#ce93d8" opacity=".55"/></svg>',
+  dotpink: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#d81b60"/><circle cx="9.4" cy="9.4" r="2.4" fill="#f48fb1" opacity=".55"/></svg>',
+  dotteal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#00897b"/><circle cx="9.4" cy="9.4" r="2.4" fill="#80cbc4" opacity=".55"/></svg>',
+  dotcyan: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#00acc1"/><circle cx="9.4" cy="9.4" r="2.4" fill="#80deea" opacity=".55"/></svg>',
+  dotindigo: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#3949ab"/><circle cx="9.4" cy="9.4" r="2.4" fill="#9fa8da" opacity=".55"/></svg>',
+  dotbrown: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#6d4c41"/><circle cx="9.4" cy="9.4" r="2.4" fill="#bcaaa4" opacity=".55"/></svg>',
+  dotgrey: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#616161"/><circle cx="9.4" cy="9.4" r="2.4" fill="#bdbdbd" opacity=".55"/></svg>',
+  dotlime: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#c0ca33"/><circle cx="9.4" cy="9.4" r="2.4" fill="#e6ee9c" opacity=".55"/></svg>',
+  dotamber: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ffb300"/><circle cx="9.4" cy="9.4" r="2.4" fill="#ffe082" opacity=".55"/></svg>',
+  dotdeeporange: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#f4511e"/><circle cx="9.4" cy="9.4" r="2.4" fill="#ffab91" opacity=".55"/></svg>',
+  dotlightblue: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#039be5"/><circle cx="9.4" cy="9.4" r="2.4" fill="#81d4fa" opacity=".55"/></svg>',
+  dotlightgreen: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#7cb342"/><circle cx="9.4" cy="9.4" r="2.4" fill="#c5e1a5" opacity=".55"/></svg>',
+  dotdeeppurple: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#5e35b1"/><circle cx="9.4" cy="9.4" r="2.4" fill="#b39ddb" opacity=".55"/></svg>',
+  dotbluegrey: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#546e7a"/><circle cx="9.4" cy="9.4" r="2.4" fill="#b0bec5" opacity=".55"/></svg>',
+  dotwhite: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#eceff1"/><circle cx="9.4" cy="9.4" r="2.4" fill="#fff" opacity=".7"/></svg>',
+
+  /* Flèches (suite) — 20 au total dans le thème. */
+  arrowupright: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#66bb6a"/><path d="M8.5 15.5 15.5 8.5M9.6 8.5h5.9v5.9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowdownright: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ef5350"/><path d="M8.5 8.5 15.5 15.5M15.5 9.6v5.9H9.6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowupleft: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#26a69a"/><path d="M15.5 15.5 8.5 8.5M8.5 14.4V8.5h5.9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowdownleft: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ffa726"/><path d="M15.5 8.5 8.5 15.5M14.4 15.5H8.5V9.6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowdoubleup: '<svg viewBox="0 0 24 24"><path d="M6 13.5 12 7.5l6 6M6 19l6-6 6 6" fill="none" stroke="#42a5f5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3v2.5" stroke="#1565c0" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  arrowdoubledown: '<svg viewBox="0 0 24 24"><path d="M6 10.5 12 16.5l6-6M6 5l6 6 6-6" fill="none" stroke="#ef5350" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 21v-2.5" stroke="#b71c1c" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  arrowexpand: '<svg viewBox="0 0 24 24"><path d="M4 10V4h6M20 14v6h-6M4 4l6.5 6.5M20 20l-6.5-6.5" fill="none" stroke="#7e57c2" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowcollapse: '<svg viewBox="0 0 24 24"><path d="M10.5 4v6.5H4M13.5 20v-6.5H20M3.5 3.5l7 7M20.5 20.5l-7-7" fill="none" stroke="#7e57c2" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowswap: '<svg viewBox="0 0 24 24"><path d="M4 8.5h13M13.5 5 17 8.5 13.5 12M20 15.5H7M10.5 12 7 15.5 10.5 19" fill="none" stroke="#26a69a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowundo: '<svg viewBox="0 0 24 24"><path d="M4 9.5h9.5a5.5 5.5 0 0 1 0 11H8" fill="none" stroke="#78909c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4.5 3 9.5l5 5" fill="none" stroke="#78909c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowredo: '<svg viewBox="0 0 24 24"><path d="M20 9.5h-9.5a5.5 5.5 0 0 0 0 11H16" fill="none" stroke="#78909c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 4.5 21 9.5l-5 5" fill="none" stroke="#78909c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowexternal: '<svg viewBox="0 0 24 24"><path d="M13.5 4H20v6.5M20 4l-8.5 8.5" fill="none" stroke="#42a5f5" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h5" fill="none" stroke="#42a5f5" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arrowdownload: '<svg viewBox="0 0 24 24"><path d="M12 3.5v11M7.8 10.3 12 14.5l4.2-4.2" fill="none" stroke="#43a047" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="#2e7d32" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  arrowupload: '<svg viewBox="0 0 24 24"><path d="M12 14.5v-11M7.8 7.7 12 3.5l4.2 4.2" fill="none" stroke="#1e88e5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="#1565c0" stroke-width="2.2" stroke-linecap="round"/></svg>',
+
+  /* Symboles (suite) — 20 au total dans le thème. */
+  exclamation: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fb8c00"/><rect x="11.1" y="6.4" width="1.8" height="8" rx=".9" fill="#fff"/><circle cx="12" cy="16.8" r="1.3" fill="#fff"/></svg>',
+  asterisk: '<svg viewBox="0 0 24 24"><path d="M12 4v16M4.9 8 19.1 16M19.1 8 4.9 16" stroke="#ab47bc" stroke-width="2.3" stroke-linecap="round"/></svg>',
+  hash: '<svg viewBox="0 0 24 24"><path d="M9.5 3.5 7.5 20.5M16.5 3.5 14.5 20.5M3.5 9h17M3 15h17" stroke="#42a5f5" stroke-width="2.1" stroke-linecap="round"/></svg>',
+  at: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="#26a69a" stroke-width="2"/><path d="M16 8v5.5a2.6 2.6 0 0 0 5 0V12a9 9 0 1 0-3.6 7.2" fill="none" stroke="#26a69a" stroke-width="2" stroke-linecap="round"/></svg>',
+  percent: '<svg viewBox="0 0 24 24"><circle cx="7.5" cy="7.5" r="3" fill="none" stroke="#7e57c2" stroke-width="2.1"/><circle cx="16.5" cy="16.5" r="3" fill="none" stroke="#7e57c2" stroke-width="2.1"/><path d="M19 5 5 19" stroke="#7e57c2" stroke-width="2.1" stroke-linecap="round"/></svg>',
+  euro: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#43a047"/><path d="M16.2 8.2a4.8 4.8 0 1 0 0 7.6M6.8 10.8h6M6.8 13.2h6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  dollar: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#2e7d32"/><path d="M12 5.8v12.4M15 9.2a2.7 2.7 0 0 0-2.7-1.6h-.9a2.4 2.4 0 0 0 0 4.8h1.2a2.4 2.4 0 0 1 0 4.8h-.9A2.7 2.7 0 0 1 9 15.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  ellipsis: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="2" fill="#90a4ae"/><circle cx="12" cy="12" r="2" fill="#90a4ae"/><circle cx="18.5" cy="12" r="2" fill="#90a4ae"/></svg>',
+  equal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#546e7a"/><path d="M7.8 10h8.4M7.8 14h8.4" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/></svg>',
+  infinity: '<svg viewBox="0 0 24 24"><path d="M8.4 8.4a5.1 5.1 0 1 0 0 7.2L15.6 8.4a5.1 5.1 0 1 1 0 7.2z" fill="none" stroke="#5e35b1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13.5 2 4.5 13.5h5.5L9 22l9.5-12H12.5z" fill="#ffca28"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6-5.6-1.9 5.6-1.9z" fill="#ffd54f"/><path d="M18.5 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" fill="#fff59d"/></svg>',
+  ban: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#e53935" stroke-width="2.4"/><path d="M5.9 5.9 18.1 18.1" stroke="#e53935" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  copyright: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#78909c"/><path d="M14.8 9.4a3.6 3.6 0 1 0 0 5.2" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>',
+
+  /* Organisation (suite) — 20 au total dans le thème. */
+  calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="#5c6bc0"/><rect x="3" y="5" width="18" height="4.5" fill="#3949ab"/><rect x="6.5" y="2.8" width="2" height="4" rx="1" fill="#9fa8da"/><rect x="15.5" y="2.8" width="2" height="4" rx="1" fill="#9fa8da"/><rect x="6.5" y="12" width="3" height="3" rx=".6" fill="#e8eaf6"/><rect x="11" y="12" width="3" height="3" rx=".6" fill="#e8eaf6"/><rect x="15.5" y="12" width="3" height="3" rx=".6" fill="#e8eaf6"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><circle cx="5" cy="6.5" r="1.8" fill="#90a4ae"/><circle cx="5" cy="12" r="1.8" fill="#90a4ae"/><circle cx="5" cy="17.5" r="1.8" fill="#90a4ae"/><path d="M9.5 6.5h11M9.5 12h11M9.5 17.5h11" stroke="#607d8b" stroke-width="2" stroke-linecap="round"/></svg>',
+  grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.6" fill="#42a5f5"/><rect x="13" y="3" width="8" height="8" rx="1.6" fill="#90caf9"/><rect x="3" y="13" width="8" height="8" rx="1.6" fill="#90caf9"/><rect x="13" y="13" width="8" height="8" rx="1.6" fill="#42a5f5"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24"><path d="M3.5 13 6 4.5h12L20.5 13v5.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="#78909c"/><path d="M3.5 13h4.5a4 4 0 0 0 8 0h4.5" fill="none" stroke="#eceff1" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24"><path d="M6 3.5h12v17.5l-6-4.5-6 4.5z" fill="#ef5350"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 1 0-6.4-6.4L11.2 6.4" fill="none" stroke="#42a5f5" stroke-width="2.1" stroke-linecap="round"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0L5 12.6a4.5 4.5 0 1 0 6.4 6.4l1.4-1.4" fill="none" stroke="#42a5f5" stroke-width="2.1" stroke-linecap="round"/></svg>',
+  attachment: '<svg viewBox="0 0 24 24"><path d="M19 10.5 11 18.5a4.6 4.6 0 0 1-6.5-6.5l8-8a3.1 3.1 0 1 1 4.4 4.4l-8 8a1.6 1.6 0 0 1-2.2-2.2l7.4-7.4" fill="none" stroke="#90a4ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  timeline: '<svg viewBox="0 0 24 24"><path d="M6 3.5v17" stroke="#607d8b" stroke-width="2" stroke-linecap="round"/><circle cx="6" cy="7" r="2.6" fill="#42a5f5"/><circle cx="6" cy="14.5" r="2.6" fill="#66bb6a"/><path d="M10.5 7h9M10.5 14.5h6.5" stroke="#90a4ae" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  sort: '<svg viewBox="0 0 24 24"><path d="M4 6.5h14M4 12h9M4 17.5h5" stroke="#7e57c2" stroke-width="2.1" stroke-linecap="round"/><path d="M18 11v9M15 17l3 3 3-3" fill="none" stroke="#5e35b1" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  note: '<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9l-6 6H6a2 2 0 0 1-2-2z" fill="#ffca28"/><path d="M20 14h-4a2 2 0 0 0-2 2v4z" fill="#ffa000"/><path d="M7.5 8h9M7.5 11.5h6" stroke="#8d6e63" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  boite: '<svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="5" rx="1.2" fill="#8d6e63"/><path d="M4.5 9h15v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z" fill="#a1887f"/><path d="M9.5 13h5" stroke="#5d4037" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  planning: '<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="2" fill="#455a64"/><rect x="5.5" y="7.5" width="8" height="2.4" rx="1.2" fill="#4fc3f7"/><rect x="7.5" y="11" width="9" height="2.4" rx="1.2" fill="#66bb6a"/><rect x="5.5" y="14.5" width="6" height="2.4" rx="1.2" fill="#ffca28"/></svg>',
+  priorite: '<svg viewBox="0 0 24 24"><path d="M5 3.5v17" stroke="#b71c1c" stroke-width="2.1" stroke-linecap="round"/><path d="M6.5 4.5h12l-2.6 4 2.6 4h-12z" fill="#ef5350"/></svg>',
+  dossierlock: '<svg viewBox="0 0 24 24"><path d="M3 6.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="#90a4ae"/><rect x="9.5" y="12.5" width="5" height="4" rx="1" fill="#37474f"/><path d="M10.6 12.5v-1.3a1.4 1.4 0 0 1 2.8 0v1.3" fill="none" stroke="#37474f" stroke-width="1.3"/></svg>',
+
+  /* Nature (suite) — 20 au total dans le thème. */
+  leaf: '<svg viewBox="0 0 24 24"><path d="M20 3.5C10 3.5 4 8 4 15a6 6 0 0 0 .8 3C7 12.5 11 9.5 16 8.5c-4 2-7.5 5-9.4 10.5A6 6 0 0 0 20 15z" fill="#66bb6a"/></svg>',
+  mountain: '<svg viewBox="0 0 24 24"><path d="M2 20 9 7l4.5 8 2.5-4 6 9z" fill="#78909c"/><path d="M9 7l2.6 4.8H6.4z" fill="#eceff1"/></svg>',
+  wave: '<svg viewBox="0 0 24 24"><path d="M2 9c2.5-2.5 5-2.5 7.5 0S15 11.5 17.5 9 22 6.5 22 6.5" fill="none" stroke="#29b6f6" stroke-width="2.2" stroke-linecap="round"/><path d="M2 14c2.5-2.5 5-2.5 7.5 0s5.5 2.5 8 0 4.5-2.5 4.5-2.5" fill="none" stroke="#4fc3f7" stroke-width="2.2" stroke-linecap="round"/><path d="M2 19c2.5-2.5 5-2.5 7.5 0s5.5 2.5 8 0 4.5-2.5 4.5-2.5" fill="none" stroke="#81d4fa" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  snow: '<svg viewBox="0 0 24 24"><path d="M12 2.5v19M3.8 7.2l16.4 9.6M20.2 7.2 3.8 16.8" stroke="#4fc3f7" stroke-width="1.9" stroke-linecap="round"/><path d="M9.5 4.5 12 6.8l2.5-2.3M9.5 19.5 12 17.2l2.5 2.3" fill="none" stroke="#81d4fa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  rain: '<svg viewBox="0 0 24 24"><path d="M7 13.5a3.8 3.8 0 0 1-.5-7.6 5.2 5.2 0 0 1 10.1-1.6A4 4 0 0 1 17 13.5z" fill="#90a4ae"/><path d="M8 16.5 7 20M12 16.5 11 20M16 16.5 15 20" stroke="#4fc3f7" stroke-width="2" stroke-linecap="round"/></svg>',
+  fire: '<svg viewBox="0 0 24 24"><path d="M12 2.5c4 3.6 6 6.6 6 9.5a6 6 0 0 1-12 0c0-2.9 2-5.9 6-9.5z" fill="#ff7043"/><path d="M12 11c1.8 1.7 2.7 3 2.7 4.3a2.7 2.7 0 0 1-5.4 0c0-1.3.9-2.6 2.7-4.3z" fill="#ffca28"/></svg>',
+  cactus: '<svg viewBox="0 0 24 24"><rect x="10" y="4" width="4" height="16" rx="2" fill="#43a047"/><path d="M10 12H8a2.5 2.5 0 0 1-2.5-2.5V8M14 14h2a2.5 2.5 0 0 0 2.5-2.5V10" fill="none" stroke="#43a047" stroke-width="3" stroke-linecap="round"/><rect x="7" y="19.5" width="10" height="2.4" rx="1.2" fill="#8d6e63"/></svg>',
+  mushroom: '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 0 1 17 0z" fill="#ef5350"/><circle cx="8.5" cy="9" r="1.4" fill="#ffcdd2"/><circle cx="14.5" cy="8.5" r="1.1" fill="#ffcdd2"/><path d="M9.5 12h5v6a2.5 2.5 0 0 1-5 0z" fill="#f5f5f5"/></svg>',
+  butterfly: '<svg viewBox="0 0 24 24"><path d="M11.5 12 4 6.5c-2 3-1.5 8 1.5 10 2 1.3 4.5-1.5 6-4.5z" fill="#ba68c8"/><path d="M12.5 12 20 6.5c2 3 1.5 8-1.5 10-2 1.3-4.5-1.5-6-4.5z" fill="#ce93d8"/><rect x="11.3" y="6" width="1.4" height="12" rx=".7" fill="#5d4037"/></svg>',
+  starnight: '<svg viewBox="0 0 24 24"><path d="M19 14.5A8 8 0 1 1 9.5 5a6.5 6.5 0 0 0 9.5 9.5z" fill="#5c6bc0"/><path d="M17 3l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" fill="#ffd54f"/><circle cx="21" cy="9" r=".9" fill="#fff59d"/></svg>',
+  wind: '<svg viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3" fill="none" stroke="#90a4ae" stroke-width="2.1" stroke-linecap="round"/><path d="M3 13h14a3 3 0 1 1-3 3" fill="none" stroke="#b0bec5" stroke-width="2.1" stroke-linecap="round"/><path d="M3 18h7" stroke="#cfd8dc" stroke-width="2.1" stroke-linecap="round"/></svg>',
+
+  /* Crypto et finance (suite) — 20 au total dans le thème. */
+  bank: '<svg viewBox="0 0 24 24"><path d="M12 3 22 8.5H2z" fill="#78909c"/><rect x="4" y="10" width="2.6" height="8" fill="#90a4ae"/><rect x="10.7" y="10" width="2.6" height="8" fill="#90a4ae"/><rect x="17.4" y="10" width="2.6" height="8" fill="#90a4ae"/><rect x="2.5" y="18.5" width="19" height="2.6" rx="1.1" fill="#607d8b"/></svg>',
+  creditcard: '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.2" fill="#5c6bc0"/><rect x="2.5" y="8.5" width="19" height="3" fill="#3949ab"/><rect x="5" y="14" width="6" height="2" rx="1" fill="#c5cae9"/></svg>',
+  invoice: '<svg viewBox="0 0 24 24"><path d="M5 2.5h14v19l-2.3-1.6-2.3 1.6-2.4-1.6-2.4 1.6L7.3 20 5 21.5z" fill="#eceff1"/><path d="M8 7h8M8 10.5h8M8 14h5" stroke="#78909c" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  safe: '<svg viewBox="0 0 24 24"><rect x="2.5" y="3.5" width="19" height="17" rx="2.2" fill="#546e7a"/><rect x="5" y="6" width="11.5" height="12" rx="1.4" fill="#37474f"/><circle cx="10.7" cy="12" r="3.1" fill="none" stroke="#ffca28" stroke-width="1.8"/><path d="M10.7 8.9v-1.2M10.7 16.3v-1.2M13.8 12H15M6.4 12H7.6" stroke="#ffca28" stroke-width="1.5" stroke-linecap="round"/><rect x="18" y="9" width="1.8" height="6" rx=".9" fill="#37474f"/></svg>',
+  coins: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="17.5" rx="7.5" ry="3" fill="#f9a825"/><ellipse cx="12" cy="13.5" rx="7.5" ry="3" fill="#ffb300"/><ellipse cx="12" cy="9.5" rx="7.5" ry="3" fill="#ffca28"/><ellipse cx="12" cy="9.5" rx="4.5" ry="1.7" fill="#ffe082"/></svg>',
+  trendup: '<svg viewBox="0 0 24 24"><path d="M3 17 9.5 10.5l4 4L21 7" fill="none" stroke="#43a047" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 7h6v6" fill="none" stroke="#43a047" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  trenddown: '<svg viewBox="0 0 24 24"><path d="M3 7 9.5 13.5l4-4L21 17" fill="none" stroke="#e53935" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 17h6v-6" fill="none" stroke="#e53935" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  piechart: '<svg viewBox="0 0 24 24"><path d="M12 12V3a9 9 0 1 1-9 9z" fill="#42a5f5"/><path d="M13.5 2.6A9 9 0 0 1 21.4 10.5L13.5 12z" fill="#ffca28"/></svg>',
+  calculator: '<svg viewBox="0 0 24 24"><rect x="4" y="2.5" width="16" height="19" rx="2.2" fill="#546e7a"/><rect x="6.4" y="5" width="11.2" height="4" rx="1" fill="#b2ebf2"/><circle cx="8.2" cy="12.4" r="1.3" fill="#eceff1"/><circle cx="12" cy="12.4" r="1.3" fill="#eceff1"/><circle cx="15.8" cy="12.4" r="1.3" fill="#eceff1"/><circle cx="8.2" cy="16.4" r="1.3" fill="#eceff1"/><circle cx="12" cy="16.4" r="1.3" fill="#eceff1"/><circle cx="15.8" cy="16.4" r="1.3" fill="#ffa726"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24"><path d="M4.5 2.5h15v19l-2.5-1.6-2.5 1.6-2.5-1.6-2.5 1.6L7 19.9l-2.5 1.6z" fill="#cfd8dc"/><path d="M7.5 7h9M7.5 10.5h9M7.5 14h6" stroke="#607d8b" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  exchange: '<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="4.2" fill="#ffca28"/><circle cx="17" cy="17" r="4.2" fill="#42a5f5"/><path d="M12.5 6.5h5.5M15.5 3.5 18.5 6.5 15.5 9.5M11.5 17.5H6M9 14.5 6 17.5 9 20.5" fill="none" stroke="#78909c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ledger: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="#5d4037"/><rect x="6.5" y="5.5" width="11" height="13" rx="1" fill="#efebe9"/><path d="M9 9h6M9 12h6M9 15h4" stroke="#8d6e63" stroke-width="1.4" stroke-linecap="round"/><rect x="3" y="7" width="3" height="2" rx="1" fill="#a1887f"/><rect x="3" y="15" width="3" height="2" rx="1" fill="#a1887f"/></svg>',
+  piggybank: '<svg viewBox="0 0 24 24"><path d="M20 12.5a6.5 6.5 0 0 0-6.5-6H10a6 6 0 0 0-6 6c0 2 1 3.8 2.5 4.9V20h3v-1.5h4V20h3v-2.6a6.4 6.4 0 0 0 2-3.4h1.5v-1.5z" fill="#f06292"/><circle cx="15.5" cy="11.5" r="1.1" fill="#fff"/><path d="M8 6.5 6.5 3.5" stroke="#f06292" stroke-width="2" stroke-linecap="round"/></svg>',
+  goldbar: '<svg viewBox="0 0 24 24"><path d="M4 16h16l1.5 4h-19z" fill="#ffb300"/><path d="M6 10.5h5.5l1.2 4.5H4.8z" fill="#ffca28"/><path d="M12.5 10.5H18l1.2 4.5h-7.9z" fill="#ffd54f"/></svg>',
+  contract: '<svg viewBox="0 0 24 24"><path d="M5 3.5h9l5 5v12H5z" fill="#eceff1"/><path d="M14 3.5v5h5" fill="#b0bec5"/><path d="M8 12h8M8 15h8" stroke="#90a4ae" stroke-width="1.4" stroke-linecap="round"/><path d="M8 18.2c1.5-1.4 2.5-.4 3.5.4s2-.6 3.5-1.4" fill="none" stroke="#42a5f5" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  nft: '<svg viewBox="0 0 24 24"><path d="M12 2.5 21 7.5v9L12 21.5 3 16.5v-9z" fill="#7e57c2"/><path d="M9 15V9l6 6V9" fill="none" stroke="#ede7f6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+  /* Développement (suite) — 20 au total dans le thème. */
+  fonction: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="#37474f"/><path d="M9 17V9.5A2.5 2.5 0 0 1 11.5 7h1M8 12h5" fill="none" stroke="#4fc3f7" stroke-width="1.9" stroke-linecap="round"/><path d="M14.5 14.5 18 11M14.5 11l3.5 3.5" stroke="#ff8a65" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  variable: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="#37474f"/><path d="M7.5 7.5c-1.6 3-1.6 6 0 9M16.5 7.5c1.6 3 1.6 6 0 9" fill="none" stroke="#ce93d8" stroke-width="1.8" stroke-linecap="round"/><path d="M10 9.5 14 15M14 9.5 10 15" stroke="#4fc3f7" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  regex: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="#37474f"/><path d="M12 6.5v7M8.9 8.3l6.2 3.4M15.1 8.3l-6.2 3.4" stroke="#ffca28" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="16.5" r="1.5" fill="#66bb6a"/></svg>',
+  refactor: '<svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="8" height="6" rx="1.6" fill="#42a5f5"/><rect x="13.5" y="14" width="8" height="6" rx="1.6" fill="#66bb6a"/><path d="M6.5 10v5a2 2 0 0 0 2 2h4M13 14l-2.5 3 2.5 3" fill="none" stroke="#90a4ae" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  review: '<svg viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="14" rx="2" fill="#455a64"/><path d="M7 8l-2 2.5L7 13M17 8l2 2.5-2 2.5M13.5 7l-3 9" fill="none" stroke="#80cbc4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 20.5h8" stroke="#607d8b" stroke-width="2" stroke-linecap="round"/></svg>',
+  deploy: '<svg viewBox="0 0 24 24"><path d="M6.5 13.5a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.7-1.7A4.3 4.3 0 0 1 17.5 13.5z" fill="#90a4ae"/><path d="M12 21v-8M8.8 16.2 12 13l3.2 3.2" fill="none" stroke="#43a047" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  docs: '<svg viewBox="0 0 24 24"><path d="M4.5 4.5A2 2 0 0 1 6.5 3H12v18H6.5a2 2 0 0 1-2-2z" fill="#42a5f5"/><path d="M19.5 4.5A2 2 0 0 0 17.5 3H12v18h5.5a2 2 0 0 0 2-2z" fill="#90caf9"/><path d="M7 8h3M7 11h3M14 8h3M14 11h3" stroke="#e3f2fd" stroke-width="1.3" stroke-linecap="round"/></svg>',
+
+  /* Général (suite) — 20 au total dans le thème. */
+  trombone: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#8d6e63"/><path d="M15.5 9.5v6a3 3 0 0 1-6 0V9a2 2 0 0 1 4 0v5.5a1 1 0 0 1-2 0V10" fill="none" stroke="#efebe9" stroke-width="1.6" stroke-linecap="round"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
@@ -1033,6 +1186,224 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   dateInput.focus();
 }
 
+/* Classement des icônes par thème, dans l'ordre d'affichage du sélecteur.
+   Les clés absentes de cette table iraient dans « divers » (voir
+   groupesDIcones) — c'est le filet qui évite qu'une icône ajoutée plus tard
+   disparaisse du sélecteur faute d'avoir été classée.
+
+   `mots` sert uniquement à la recherche : les clés étant en anglais
+   (`shopping`, `key`…), une recherche tapée en français ne trouverait rien
+   sans ces synonymes. On y met les mots qu'on a des chances de taper, pas
+   une description exhaustive. */
+const ICON_THEMES = [
+  {
+    titre: 'Général',
+    cles: ['star', 'heart', 'flag', 'idea', 'gift', 'money', 'target', 'gem', 'key', 'lock', 'warning', 'document', 'trombone', 'book', 'school', 'work', 'home', 'shopping', 'travel', 'globe'],
+  },
+  {
+    titre: 'Vie quotidienne',
+    cles: ['health', 'sport', 'football', 'bike', 'car', 'train', 'plane', 'bed', 'coffee', 'food', 'pizza', 'cake', 'umbrella', 'alarm', 'phone', 'mail', 'camera', 'music', 'paintbrush', 'scissors', 'tool', 'magnifier'],
+  },
+  {
+    titre: 'Nature',
+    cles: ['sun', 'moon', 'cloud', 'tree', 'plant', 'flower', 'fish', 'bird', 'paw', 'leaf', 'mountain', 'wave', 'snow', 'rain', 'fire', 'cactus', 'mushroom', 'butterfly', 'starnight', 'wind'],
+  },
+  {
+    titre: 'Informatique et réseau',
+    cles: ['server', 'storage', 'database', 'cloudserver', 'network', 'router', 'ethernet', 'loadbalancer', 'wifi', 'vpn', 'firewall', 'shield', 'certificate', 'password', 'monitoring', 'backup', 'cpu', 'laptop', 'terminal', 'docker', 'api'],
+  },
+  {
+    titre: 'Crypto et finance',
+    cles: ['bitcoin', 'ethereum', 'nft', 'wallet', 'coins', 'goldbar', 'bank', 'safe', 'piggybank', 'creditcard', 'exchange', 'chart', 'piechart', 'trendup', 'trenddown', 'calculator', 'invoice', 'receipt', 'ledger', 'contract'],
+  },
+  {
+    titre: 'Développement',
+    cles: ['code', 'bracket', 'fonction', 'variable', 'regex', 'git', 'branch', 'commit', 'merge', 'issue', 'bug', 'test', 'build', 'pipeline', 'package', 'deploy', 'rocket', 'refactor', 'review', 'docs'],
+  },
+  {
+    titre: 'Jeu vidéo',
+    cles: ['gamepad', 'joystick', 'arcade', 'console', 'headset', 'keyboard', 'mouse', 'vr', 'stream', 'game', 'dice', 'cards', 'puzzle', 'chess', 'quest', 'sword', 'potion', 'coin', 'ghost', 'trophy', 'medal', 'achievement'],
+  },
+  {
+    titre: 'Organisation',
+    cles: ['folder', 'dossierlock', 'boite', 'kanban', 'planning', 'timeline', 'calendar', 'clipboard', 'list', 'grid', 'note', 'inbox', 'tag', 'bookmark', 'pin', 'filter', 'sort', 'priorite', 'link', 'attachment'],
+  },
+  {
+    titre: 'Flèches',
+    cles: ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'arrowupright', 'arrowdownright', 'arrowupleft', 'arrowdownleft', 'arrowdoubleup', 'arrowdoubledown', 'arrowcycle', 'arrowsplit', 'arrowswap', 'arrowundo', 'arrowredo', 'arrowexpand', 'arrowcollapse', 'arrowexternal', 'arrowdownload', 'arrowupload'],
+  },
+  {
+    titre: 'Symboles',
+    cles: ['plus', 'minus', 'check', 'cross', 'info', 'question', 'exclamation', 'ban', 'equal', 'percent', 'hash', 'at', 'asterisk', 'ellipsis', 'infinity', 'euro', 'dollar', 'bolt', 'sparkle', 'copyright'],
+  },
+  {
+    titre: 'Pastilles',
+    cles: ['dotred', 'dotdeeporange', 'dotorange', 'dotamber', 'dotyellow', 'dotlime', 'dotlightgreen', 'dotgreen', 'dotteal', 'dotcyan', 'dotlightblue', 'dotblue', 'dotindigo', 'dotdeeppurple', 'dotpurple', 'dotpink', 'dotbrown', 'dotbluegrey', 'dotgrey', 'dotwhite'],
+  },
+  {
+    titre: 'notask',
+    cles: ['spoonyellow', 'spoonblue', 'spoons'],
+  },
+];
+
+/* Mots-clés français par icône, pour la recherche du sélecteur. */
+const ICON_MOTS = {
+  star: 'étoile favori', home: 'maison logement', work: 'travail mallette bureau',
+  shopping: 'courses panier achat', heart: 'cœur amour', flag: 'drapeau repère',
+  book: 'livre lecture', idea: 'idée ampoule', travel: 'voyage avion papier',
+  gift: 'cadeau', money: 'argent monnaie euro', music: 'musique note',
+  spoonyellow: 'cuillère jaune notask', spoonblue: 'cuillère bleue notask',
+  spoons: 'cuillères notask logo', health: 'santé médical croix pharmacie',
+  sport: 'sport ballon', car: 'voiture auto', laptop: 'ordinateur portable pc',
+  school: 'école étude diplôme', plant: 'plante feuille', camera: 'appareil photo',
+  game: 'jeu manette', tool: 'outil clé bricolage', warning: 'attention danger alerte',
+  lock: 'cadenas verrou sécurité', globe: 'monde terre international',
+  phone: 'téléphone mobile', mail: 'courriel mail enveloppe', coffee: 'café tasse',
+  sun: 'soleil jour météo', moon: 'lune nuit', paw: 'patte animal chien chat',
+  food: 'nourriture repas couverts', document: 'document fichier papier',
+  fish: 'poisson', bird: 'oiseau', tree: 'arbre', flower: 'fleur',
+  pizza: 'pizza', cake: 'gâteau anniversaire', bike: 'vélo bicyclette',
+  plane: 'avion vol', train: 'train', paintbrush: 'pinceau peinture dessin',
+  football: 'football ballon foot', bed: 'lit sommeil dormir', key: 'clé',
+  umbrella: 'parapluie pluie', alarm: 'réveil alarme horloge minuteur',
+  target: 'cible objectif but', cloud: 'nuage météo', scissors: 'ciseaux couper',
+  magnifier: 'loupe recherche', gem: 'gemme diamant précieux',
+  server: 'serveur baie', database: 'base de données bdd sql',
+  cloudserver: 'cloud serveur hébergement', network: 'réseau topologie',
+  terminal: 'terminal console shell commande', code: 'code programmation',
+  bug: 'bogue bug erreur insecte', shield: 'bouclier protection sécurité',
+  vpn: 'vpn tunnel sécurité', wifi: 'wifi sans fil réseau',
+  bitcoin: 'bitcoin btc crypto monnaie', ethereum: 'ethereum eth crypto',
+  wallet: 'portefeuille wallet crypto', chart: 'graphique statistiques cours',
+  cpu: 'processeur cpu puce', backup: 'sauvegarde backup restauration',
+  docker: 'docker conteneur container', api: 'api service endpoint',
+  password: 'mot de passe identifiants', monitoring: 'supervision monitoring métrique',
+  git: 'git dépôt versions', branch: 'branche git', bracket: 'accolades code syntaxe',
+  rocket: 'fusée lancement déploiement', package: 'paquet colis dépendance',
+  gamepad: 'manette jeu', joystick: 'joystick manche', dice: 'dé hasard',
+  trophy: 'trophée coupe victoire', console: 'console jeu portable',
+  ghost: 'fantôme', headset: 'casque audio micro', keyboard: 'clavier',
+  mouse: 'souris', sword: 'épée arme combat', potion: 'potion fiole',
+  achievement: 'succès récompense', vr: 'réalité virtuelle casque vr',
+  medal: 'médaille récompense', stream: 'stream direct diffusion',
+  firewall: 'pare-feu firewall sécurité', certificate: 'certificat ssl tls',
+  router: 'routeur box', merge: 'fusion merge branches', test: 'test éprouvette essai',
+  build: 'build compilation engrenage', arcade: 'arcade borne',
+  chess: 'échecs stratégie', quest: 'quête carte aventure',
+  storage: 'stockage disque nas', ethernet: 'ethernet câble rj45 prise',
+  loadbalancer: 'répartiteur de charge load balancer',
+  commit: 'commit git validation', issue: 'ticket incident problème',
+  pipeline: 'pipeline chaîne intégration', coin: 'pièce or monnaie',
+  puzzle: 'puzzle pièce', cards: 'cartes jeu',
+  folder: 'dossier répertoire', kanban: 'kanban tableau colonnes',
+  clipboard: 'presse-papier liste tâches', tag: 'étiquette libellé',
+  pin: 'épingle punaise', filter: 'filtre entonnoir tri',
+  arrowup: 'flèche haut monter', arrowdown: 'flèche bas descendre',
+  arrowleft: 'flèche gauche retour', arrowright: 'flèche droite suivant',
+  arrowcycle: 'flèche cycle rafraîchir boucle', arrowsplit: 'flèche division embranchement',
+  plus: 'plus ajouter', minus: 'moins retirer', check: 'coche validé ok',
+  cross: 'croix annuler refusé', info: 'information', question: 'question aide',
+  dotred: 'pastille rouge point', dotorange: 'pastille orange point',
+  dotyellow: 'pastille jaune point', dotgreen: 'pastille verte point',
+  dotblue: 'pastille bleue point', dotpurple: 'pastille violette point',
+  dotpink: 'pastille rose point', dotteal: 'pastille turquoise point',
+  dotcyan: 'pastille cyan point', dotindigo: 'pastille indigo point',
+  dotbrown: 'pastille marron brun point', dotgrey: 'pastille grise point',
+  dotlime: 'pastille citron vert point', dotamber: 'pastille ambre point',
+  dotdeeporange: 'pastille orange foncé point', dotlightblue: 'pastille bleu clair point',
+  dotlightgreen: 'pastille vert clair point', dotdeeppurple: 'pastille violet foncé point',
+  dotbluegrey: 'pastille gris bleu point', dotwhite: 'pastille blanche point',
+  arrowupright: 'flèche diagonale haut droite', arrowdownright: 'flèche diagonale bas droite',
+  arrowupleft: 'flèche diagonale haut gauche', arrowdownleft: 'flèche diagonale bas gauche',
+  arrowdoubleup: 'flèche double haut priorité haute', arrowdoubledown: 'flèche double bas priorité basse',
+  arrowexpand: 'agrandir plein écran étendre', arrowcollapse: 'réduire fermer rétrécir',
+  arrowswap: 'échanger permuter inverser', arrowundo: 'annuler retour arrière',
+  arrowredo: 'rétablir refaire', arrowexternal: 'lien externe ouvrir nouvel onglet',
+  arrowdownload: 'télécharger download', arrowupload: 'téléverser envoyer upload',
+  exclamation: 'exclamation important attention', asterisk: 'astérisque étoile note',
+  hash: 'dièse hashtag numéro', at: 'arobase mail', percent: 'pourcentage pourcent',
+  euro: 'euro monnaie', dollar: 'dollar monnaie', ellipsis: 'points de suspension plus options',
+  equal: 'égal identique', infinity: 'infini illimité', bolt: 'éclair rapide énergie',
+  sparkle: 'étincelle magie nouveau', ban: 'interdit bloqué refusé',
+  copyright: 'copyright droits',
+  calendar: 'calendrier agenda date', list: 'liste puces', grid: 'grille mosaïque vignettes',
+  inbox: 'boîte de réception arrivée', bookmark: 'signet marque-page favori',
+  link: 'lien url chaîne', attachment: 'pièce jointe trombone fichier',
+  timeline: 'chronologie frise étapes', sort: 'trier tri ordre', note: 'note pense-bête post-it',
+  boite: 'boîte carton rangement archive', planning: 'planning diagramme gantt',
+  priorite: 'priorité fanion important', dossierlock: 'dossier verrouillé privé sécurisé',
+  leaf: 'feuille végétal écologie', mountain: 'montagne sommet randonnée',
+  wave: 'vague mer océan eau', snow: 'neige flocon hiver froid',
+  rain: 'pluie averse météo', fire: 'feu flamme brûler',
+  cactus: 'cactus désert plante', mushroom: 'champignon',
+  butterfly: 'papillon insecte', starnight: 'nuit étoilée ciel',
+  wind: 'vent brise air',
+  bank: 'banque agence', creditcard: 'carte bancaire paiement cb',
+  invoice: 'facture note de frais', safe: 'coffre-fort sécurité',
+  coins: 'pièces monnaie épargne', trendup: 'hausse croissance progression',
+  trenddown: 'baisse chute perte', piechart: 'camembert répartition part',
+  calculator: 'calculatrice calcul', receipt: 'ticket reçu caisse',
+  exchange: 'change conversion devise', ledger: 'grand livre comptabilité registre',
+  piggybank: 'tirelire épargne économies', goldbar: 'lingot or',
+  contract: 'contrat signature accord', nft: 'nft jeton non fongible',
+  fonction: 'fonction méthode', variable: 'variable valeur',
+  regex: 'expression régulière regex motif', refactor: 'refactorisation réécriture',
+  review: 'revue de code relecture', deploy: 'déploiement mise en production',
+  docs: 'documentation manuel', trombone: 'trombone attache pièce jointe',
+};
+
+/* Thèmes prêts à l'affichage : chaque entrée ne garde que les icônes qui
+   existent réellement, et tout ce qui n'a été classé nulle part atterrit
+   dans « Divers » plutôt que de disparaître silencieusement. */
+/* Icônes récemment choisies, de la plus récente à la plus ancienne. Sert à
+   remonter en tête de son thème une icône déjà utilisée : au fil du temps,
+   chaque catégorie s'ouvre donc sur ce qu'on y prend le plus souvent.
+
+   localStorage et non sessionStorage : c'est une préférence d'usage qui a
+   tout intérêt à survivre à la fermeture du navigateur — et elle ne révèle
+   rien du contenu des notasks, contrairement à la clé de chiffrement. */
+const ICONS_RECENTES_KEY = 'notask_icones_recentes';
+const ICONS_RECENTES_MAX = 60;
+
+function iconesRecentes() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(ICONS_RECENTES_KEY) || '[]');
+    return Array.isArray(brut) ? brut : [];
+  } catch {
+    return [];  // entrée illisible (édition manuelle, version antérieure)
+  }
+}
+
+function memoriserIconeUtilisee(cle) {
+  if (!cle || !ICON_CHOICES[cle]) return;
+  const liste = [cle, ...iconesRecentes().filter((k) => k !== cle)].slice(0, ICONS_RECENTES_MAX);
+  try { localStorage.setItem(ICONS_RECENTES_KEY, JSON.stringify(liste)); } catch { /* quota plein : sans conséquence */ }
+}
+
+function groupesDIcones() {
+  const recentes = iconesRecentes();
+  // Rang dans la liste des récentes : plus il est petit, plus l'icône est
+  // récente. Les jamais utilisées prennent l'infini et gardent donc entre
+  // elles l'ordre d'origine du thème (tri stable en JS).
+  const rang = (k) => {
+    const i = recentes.indexOf(k);
+    return i === -1 ? Infinity : i;
+  };
+
+  const classees = new Set();
+  const groupes = [];
+  for (const theme of ICON_THEMES) {
+    const cles = theme.cles.filter((k) => ICON_CHOICES[k]).sort((a, b) => rang(a) - rang(b));
+    cles.forEach((k) => classees.add(k));
+    if (cles.length) groupes.push({ titre: theme.titre, cles });
+  }
+  const restantes = Object.keys(ICON_CHOICES)
+    .filter((k) => !classees.has(k))
+    .sort((a, b) => rang(a) - rang(b));
+  if (restantes.length) groupes.push({ titre: 'Divers', cles: restantes });
+  return groupes;
+}
+
 /* Popover de choix d'icône, même ancrage top-layer que le calendrier :
    dans le dialog s'il y en a un d'ouvert, sinon dans document.body. */
 let _closeIconPopup = null;
@@ -1046,12 +1417,26 @@ function openIconPopup(anchor, currentIcon, onChange) {
 
   const pop = document.createElement('div');
   pop.className = 'cal-popup icon-popup';
+  // Recherche en tête, puis les thèmes les uns sous les autres. Les titres
+  // restent discrets (petites capitales grises, voir .icon-theme-titre) :
+  // ils servent de repère au défilement, pas de découpage appuyé.
   pop.innerHTML = `
-    <div class="icon-popup-grid">
-      <button type="button" class="icon-opt" data-icon="" title="Aucune icône">${ICONS.plus}</button>
-      ${Object.entries(ICON_CHOICES).map(([key, svg]) =>
-        `<button type="button" class="icon-opt${key === currentIcon ? ' active' : ''}" data-icon="${key}">${svg}</button>`
-      ).join('')}
+    <input type="search" class="icon-popup-search" placeholder="Rechercher une icône…" aria-label="Rechercher une icône">
+    <div class="icon-popup-scroll">
+      <div class="icon-popup-grid icon-theme-tete">
+        <button type="button" class="icon-opt" data-icon="" title="Aucune icône">${ICONS.plus}</button>
+      </div>
+      ${groupesDIcones().map((g) => `
+        <div class="icon-theme" data-titre="${escapeHtml(g.titre.toLowerCase())}">
+          <div class="icon-theme-titre">${escapeHtml(g.titre)}</div>
+          <div class="icon-popup-grid">
+            ${g.cles.map((key) => `
+              <button type="button" class="icon-opt${key === currentIcon ? ' active' : ''}"
+                      data-icon="${key}" data-mots="${escapeHtml(ICON_MOTS[key] || key)}"
+                      title="${escapeHtml(ICON_MOTS[key] || key)}">${ICON_CHOICES[key]}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+      <div class="icon-popup-vide" hidden>Aucune icône trouvée.</div>
     </div>`;
 
   const hostDialog = anchor.closest('dialog');
@@ -1073,8 +1458,41 @@ function openIconPopup(anchor, currentIcon, onChange) {
   }
 
   pop.querySelectorAll('.icon-opt').forEach((btn) => {
-    btn.onclick = () => { onChange(btn.dataset.icon || null); closeIconPopup(); };
+    btn.onclick = () => {
+      memoriserIconeUtilisee(btn.dataset.icon);  // remonte en tête de son thème
+      onChange(btn.dataset.icon || null);
+      closeIconPopup();
+    };
   });
+
+  /* Recherche : filtre sur les mots-clés français (voir ICON_MOTS), sur la
+     clé technique et sur le nom du thème. Sans accents ni casse des deux
+     côtés, sinon « fleche » ne trouverait pas « flèche ». Un thème dont
+     plus aucune icône ne ressort est masqué avec son titre, pour ne pas
+     laisser des intitulés flotter au-dessus du vide. */
+  const champ = pop.querySelector('.icon-popup-search');
+  const sansAccents = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  champ.addEventListener('input', () => {
+    const terme = sansAccents(champ.value.trim());
+    let total = 0;
+    pop.querySelectorAll('.icon-theme').forEach((groupe) => {
+      const titre = sansAccents(groupe.dataset.titre || '');
+      let visibles = 0;
+      groupe.querySelectorAll('.icon-opt').forEach((btn) => {
+        const foin = sansAccents(`${btn.dataset.mots || ''} ${btn.dataset.icon || ''} ${titre}`);
+        const ok = !terme || foin.includes(terme);
+        btn.hidden = !ok;
+        if (ok) visibles += 1;
+      });
+      groupe.hidden = visibles === 0;
+      total += visibles;
+    });
+    // "Aucune icône" (la case de retrait) n'a pas à apparaître dans une
+    // recherche : on ne la cherche pas, on la trouve en tête de liste.
+    pop.querySelector('.icon-theme-tete').hidden = !!terme;
+    pop.querySelector('.icon-popup-vide').hidden = total > 0;
+  });
+  champ.focus();
 
   const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) closeIconPopup(); };
   const onKey = (e) => { if (e.key === 'Escape') closeIconPopup(); };
@@ -3519,6 +3937,10 @@ function resetComposer() {
 function composerExpand() {
   if (composerExpanded) return;
   composerExpanded = true;
+  // Le composeur quitte son jaune d'appel pour prendre la teinte d'une
+  // vraie carte : une fois la composition engagée, il fait partie de la
+  // mosaïque et doit s'y fondre (voir appliquerCouleurComposeur).
+  appliquerCouleurComposeur();
   renderComposer();
 }
 // Le clic peut partir de n'importe quel champ du composeur (titre,
@@ -3695,9 +4117,15 @@ $('#nc-color-btn').addEventListener('click', () => {
    habituel — c'est aussi ce qui se produit après création, resetComposer()
    remettant composerColor à 'default'. */
 function appliquerCouleurComposeur() {
-  const teinte = composerColor === 'default' ? '' : (LABEL_COLOR_HEX[composerColor] || '');
+  // `default` = la teinte de base des cartes (--md-surface-2, le presque
+  // noir du thème), et non le jaune du composeur replié : dès que la
+  // composition est engagée, la carte doit se lire comme une vraie carte,
+  // dans la palette des autres.
+  const teinte = composerColor === 'default'
+    ? 'var(--md-surface-2)'
+    : (LABEL_COLOR_HEX[composerColor] || 'var(--md-surface-2)');
   for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
-    bloc.style.background = teinte;
+    bloc.style.background = composerExpanded ? teinte : '';
   }
 }
 

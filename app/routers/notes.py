@@ -75,6 +75,37 @@ ICON_KEYS = {
     "firewall", "certificate", "router",      # crypto / serveurs / IT
     "merge", "test", "build",                 # développement
     "arcade", "chess", "quest",               # gaming
+    # Encore trois par thème (104 -> 113).
+    "storage", "ethernet", "loadbalancer",    # crypto / serveurs / IT
+    "commit", "issue", "pipeline",            # développement
+    "coin", "puzzle", "cards",                # gaming
+    # Nouveaux thèmes (113 -> 137).
+    "folder", "kanban", "clipboard", "tag", "pin", "filter",          # organisation
+    "arrowup", "arrowdown", "arrowleft", "arrowright",
+    "arrowcycle", "arrowsplit",                                       # flèches
+    "plus", "minus", "check", "cross", "info", "question",            # symboles
+    "dotred", "dotorange", "dotyellow", "dotgreen", "dotblue",
+    "dotpurple",                                                      # ronds
+    # Complément pour porter chaque thème à 20 icônes (137 -> 227).
+    "dotpink", "dotteal", "dotcyan", "dotindigo", "dotbrown", "dotgrey",
+    "dotlime", "dotamber", "dotdeeporange", "dotlightblue",
+    "dotlightgreen", "dotdeeppurple", "dotbluegrey", "dotwhite",
+    "arrowupright", "arrowdownright", "arrowupleft", "arrowdownleft",
+    "arrowdoubleup", "arrowdoubledown", "arrowexpand", "arrowcollapse",
+    "arrowswap", "arrowundo", "arrowredo", "arrowexternal",
+    "arrowdownload", "arrowupload",
+    "exclamation", "asterisk", "hash", "at", "percent", "euro", "dollar",
+    "ellipsis", "equal", "infinity", "bolt", "sparkle", "ban", "copyright",
+    "calendar", "list", "grid", "inbox", "bookmark", "link", "attachment",
+    "timeline", "sort", "note", "boite", "planning", "priorite",
+    "dossierlock",
+    "leaf", "mountain", "wave", "snow", "rain", "fire", "cactus",
+    "mushroom", "butterfly", "starnight", "wind",
+    "bank", "creditcard", "invoice", "safe", "coins", "trendup",
+    "trenddown", "piechart", "calculator", "receipt", "exchange",
+    "ledger", "piggybank", "goldbar", "contract", "nft",
+    "fonction", "variable", "regex", "refactor", "review", "deploy",
+    "docs", "trombone",
 }
 
 

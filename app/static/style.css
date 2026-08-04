@@ -2760,9 +2760,42 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
      l'agrandissement des icônes, la fenêtre gardant exactement la même
      largeur. */
   gap: .125rem;
-  max-height: 13.5rem;
+}
+/* Le défilement porte désormais sur l'ensemble (recherche exclue, elle
+   reste fixe en tête) et non sur chaque grille : sinon chaque thème aurait
+   sa propre barre de défilement. */
+.icon-popup-scroll {
+  max-height: 15rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+.icon-popup-search {
+  width: 100%;
+  margin-bottom: .5rem;
+  padding: .375rem .5rem;
+  background: var(--md-surface-2);
+  border: none;
+  border-radius: var(--shape-xs);
+  color: var(--md-on-surface);
+  font-size: .8125rem;
+}
+.icon-popup-search:focus { outline: 2px solid #42a5f5; outline-offset: 1px; }
+/* Titres de thème : repères de défilement, pas des séparateurs appuyés —
+   d'où les petites capitales grises et le simple filet au-dessus. */
+.icon-theme + .icon-theme .icon-theme-titre { border-top: 1px solid var(--md-outline-variant); padding-top: .5rem; }
+.icon-theme-titre {
+  font-size: .625rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md-on-surface-variant);
+  opacity: .75;
+  margin: .375rem 0 .25rem;
+}
+.icon-popup-vide {
+  padding: .75rem .25rem;
+  font-size: .8125rem;
+  color: var(--md-on-surface-variant);
+  text-align: center;
 }
 .icon-opt {
   width: 34px; height: 34px;
