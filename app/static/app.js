@@ -1125,21 +1125,39 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   // le popup débordait alors du bord droit. offsetWidth est disponible dès
   // l'insertion dans le document, juste au-dessus.
   const largeur = pop.offsetWidth;
+  const hauteur = pop.offsetHeight;
   const marge = 8;
+
+  /* Ordonnée à l'écran : sous l'ancre par défaut, AU-DESSUS s'il n'y a pas
+     la place en dessous. Le bouton d'échéance se trouve tout en bas de la
+     boîte d'édition : ouvert systématiquement vers le bas, le sélecteur
+     sortait de l'écran. En dernier recours (ni assez de place en haut ni en
+     bas, petit écran) on le colle au bas de la fenêtre visible. */
+  const placerEnOrdonnee = (anchorRect) => {
+    let haut = anchorRect.bottom + 6;
+    if (haut + hauteur > window.innerHeight - marge) {
+      const auDessus = anchorRect.top - hauteur - 6;
+      haut = auDessus >= marge
+        ? auDessus
+        : Math.max(marge, window.innerHeight - hauteur - marge);
+    }
+    return haut;
+  };
+
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
-    const top = anchorRect.bottom - dialogRect.top + 6;
+    // Coordonnées relatives à la boîte (dialog { position: relative }),
+    // d'où la conversion depuis la position à l'écran.
     let left = anchorRect.left - dialogRect.left;
     left = Math.min(left, dialogRect.width - largeur - marge);
-    pop.style.top = `${top}px`;
+    pop.style.top = `${placerEnOrdonnee(anchorRect) - dialogRect.top}px`;
     pop.style.left = `${Math.max(marge, left)}px`;
   } else {
     const rect = anchor.getBoundingClientRect();
-    const top = rect.bottom + window.scrollY + 6;
     let left = rect.left + window.scrollX;
     left = Math.min(left, window.scrollX + document.documentElement.clientWidth - largeur - marge);
-    pop.style.top = `${top}px`;
+    pop.style.top = `${placerEnOrdonnee(rect) + window.scrollY}px`;
     pop.style.left = `${Math.max(marge, left)}px`;
   }
 
@@ -1443,17 +1461,28 @@ function openIconPopup(anchor, currentIcon, onChange) {
   const host = hostDialog || document.body;
   host.appendChild(pop);
 
+  // Même placement que le sélecteur de date : sous l'ancre, ou au-dessus
+  // faute de place en dessous (voir placerEnOrdonnee dans openCalPopup).
+  const hauteurPop = pop.offsetHeight;
+  const placerEnOrdonnee = (anchorRect) => {
+    let haut = anchorRect.bottom + 6;
+    if (haut + hauteurPop > window.innerHeight - 8) {
+      const auDessus = anchorRect.top - hauteurPop - 6;
+      haut = auDessus >= 8 ? auDessus : Math.max(8, window.innerHeight - hauteurPop - 8);
+    }
+    return haut;
+  };
+
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
-    let top = anchorRect.bottom - dialogRect.top + 6;
     let left = anchorRect.left - dialogRect.left;
     left = Math.min(left, dialogRect.width - 220);
-    pop.style.top = `${top}px`;
+    pop.style.top = `${placerEnOrdonnee(anchorRect) - dialogRect.top}px`;
     pop.style.left = `${Math.max(8, left)}px`;
   } else {
     const rect = anchor.getBoundingClientRect();
-    pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    pop.style.top = `${placerEnOrdonnee(rect) + window.scrollY}px`;
     pop.style.left = `${Math.max(8, rect.left + window.scrollX)}px`;
   }
 
@@ -3915,8 +3944,11 @@ function resetComposer() {
   $('#nc-content').innerHTML = '';
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
-  composerColor = 'default';
-  appliquerCouleurComposeur();  // rend au composeur son jaune habituel
+  // composerColor n'est VOLONTAIREMENT pas remis à 'default' : la couleur
+  // choisie est conservée d'une note à l'autre, qu'on ait ajouté ou annulé
+  // (voir appliquerCouleurComposeur, appelée plus bas une fois le composeur
+  // replié). Pour en changer, on repasse par la palette — y compris pour
+  // revenir à la couleur par défaut.
   composerLabelIds = [];
   composerMasked = false;
   renderBoutonMasque('#nc-toggle-mask', false);
@@ -3930,6 +3962,10 @@ function resetComposer() {
   renderComposerLabelChips();
   state.composerIcon = null;
   renderIconBtn($('#nc-icon-btn'), null);
+  // Après le repli (composerExpanded = false ci-dessus) : sans couleur
+  // choisie, le composeur doit retrouver son jaune d'appel et non rester
+  // sur le noir de l'état déplié.
+  appliquerCouleurComposeur();
   renderComposer();
   msg($('#composer-msg'), '');
 }
@@ -4117,15 +4153,23 @@ $('#nc-color-btn').addEventListener('click', () => {
    habituel — c'est aussi ce qui se produit après création, resetComposer()
    remettant composerColor à 'default'. */
 function appliquerCouleurComposeur() {
-  // `default` = la teinte de base des cartes (--md-surface-2, le presque
-  // noir du thème), et non le jaune du composeur replié : dès que la
-  // composition est engagée, la carte doit se lire comme une vraie carte,
-  // dans la palette des autres.
-  const teinte = composerColor === 'default'
-    ? 'var(--md-surface-2)'
-    : (LABEL_COLOR_HEX[composerColor] || 'var(--md-surface-2)');
+  // Trois cas :
+  // - une couleur a été choisie : elle s'applique en permanence, repliée ou
+  //   non. Elle survit à l'ajout comme à l'annulation (composerColor n'est
+  //   pas réinitialisé, voir resetComposer) : la note suivante repart donc
+  //   dans la couleur de la précédente, ce qui évite de la rechoisir à
+  //   chaque fois quand on saisit une série de notes d'un même sujet ;
+  // - aucune couleur, composeur déplié : le presque noir des cartes
+  //   (--md-surface-2), pour que la note en cours se lise comme une vraie
+  //   carte au milieu des autres ;
+  // - aucune couleur, composeur replié : rien, donc le jaune d'appel de la
+  //   feuille de style reprend la main.
+  let teinte = '';
+  if (composerColor !== 'default') teinte = LABEL_COLOR_HEX[composerColor] || '';
+  else if (composerExpanded) teinte = 'var(--md-surface-2)';
+
   for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
-    bloc.style.background = composerExpanded ? teinte : '';
+    bloc.style.background = teinte;
   }
 }
 

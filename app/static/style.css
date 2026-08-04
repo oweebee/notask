@@ -2396,9 +2396,17 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
    le relais (voir overflow-y:auto plus bas) plutôt que de couper le
    contenu ou dépasser l'écran. */
 #dlg-note-simple[open] {
-  min-height: 584px;
+  /* min() : sur un écran court, un plancher fixe de 584px rendait la boîte
+     PLUS HAUTE que la fenêtre. Une <dialog> modale étant centrée, le
+     débordement se répartit en haut ET en bas — le haut de la notask
+     passait donc hors de l'écran, sans aucun moyen d'y revenir (signalé en
+     posant une échéance, qui rallonge la barre du bas d'une ligne). Le
+     plancher ne peut désormais jamais dépasser la fenêtre.
+     dvh plutôt que vh : sur mobile, vh ignore la barre d'adresse et vaut
+     plus que la hauteur réellement visible. */
+  min-height: min(584px, 88dvh);
   height: auto;
-  max-height: 90vh;
+  max-height: 88dvh;
   /* Pas de largeur ici : la base `dialog` (552px, +20% demandé) suffit
      désormais, toutes les boîtes en ont bénéficié — cette règle avait
      d'abord posé le +20% ici seule, avant que la demande soit étendue. */
