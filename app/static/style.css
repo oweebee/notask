@@ -911,9 +911,9 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   text-align: left;
   border: none;
   border-radius: var(--shape-full) 0 0 var(--shape-full);
-  /* Retrait gauche augmenté de 5px (6px -> 11px) : l'icône et le texte
-     sont décalés d'autant vers la droite, à l'écart du bord. */
-  padding: .375rem .875rem .375rem 11px;
+  /* Retrait gauche : 6px à l'origine, puis 11px, puis 19px — case à cocher,
+     icône et texte s'écartent d'autant du bord gauche de la pilule. */
+  padding: .375rem .875rem .375rem 19px;
   margin-bottom: 4px;
   color: var(--md-on-surface);
   font-size: .8125rem;
