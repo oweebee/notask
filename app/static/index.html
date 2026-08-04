@@ -167,12 +167,11 @@
               <div id="nc-content" class="nc-content-editable" contenteditable="true" data-placeholder="Nouvelle notask…"></div>
               <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
             </div>
+            <!-- Plus de bouton "+ Élément" : une ligne vierge attend en
+                 permanence sous la dernière, et devient une vraie ligne dès
+                 qu'on y tape quelque chose (voir assurerLigneVierge dans
+                 app.js). Idem en édition rapide. -->
             <div id="nc-items" hidden></div>
-            <!-- "+ Élément" juste sous la dernière ligne à cocher, pas dans
-                 la barre d'outils du bas : c'est là qu'on l'attend quand on
-                 vient de saisir une ligne. Idem en édition rapide
-                 (#dns-add-item). -->
-            <button class="btn ghost sm" id="nc-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
             <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
                  encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
                  rien n'est envoyé avant ce moment-là (voir
@@ -357,10 +356,8 @@
     <div class="field" id="dns-items-field" hidden>
       <div id="dns-items"></div>
     </div>
-    <!-- "+ Élément" juste sous la dernière ligne à cocher plutôt que dans
-         la barre du bas : c'est là qu'on l'attend après avoir saisi une
-         ligne. Idem dans le composeur (#nc-add-item). -->
-    <button class="btn ghost sm" id="dns-add-item" type="button" hidden style="margin-top:.4rem">+ Élément</button>
+    <!-- Plus de bouton "+ Élément" : une ligne vierge attend en permanence
+         sous la dernière (voir assurerLigneVierge dans app.js). -->
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
          la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
          l'envoi (voir uploadAttachment() dans app.js). -->

@@ -3482,6 +3482,7 @@ function resetComposer() {
   composerChecklist = false;
   composerItems = [{ text: '', checked: false }];
   composerColor = 'default';
+  appliquerCouleurComposeur();  // rend au composeur son jaune habituel
   composerLabelIds = [];
   composerMasked = false;
   renderBoutonMasque('#nc-toggle-mask', false);
@@ -3520,6 +3521,17 @@ $('#nc-icon-btn').addEventListener('click', () => {
   });
 });
 
+/* Garantit qu'une ligne vierge attend toujours en dernière position, prête à
+   être remplie — elle remplace l'ancien bouton "+ Élément". Les lignes vides
+   sont de toute façon écartées à l'enregistrement (filter sur text.trim()),
+   celle-ci ne risque donc jamais de se retrouver dans la notask. */
+function assurerLigneVierge(liste) {
+  const derniere = liste[liste.length - 1];
+  if (!derniere || derniere.text.trim()) {
+    liste.push({ text: '', checked: false, due_at: null, due_end_at: null });
+  }
+}
+
 function renderComposer() {
   // Déclenchement DIRECT, en plus du ResizeObserver global (voir
   // mosaicResizeObserver/layoutMosaic()) : signalé encore chevauchant les
@@ -3533,7 +3545,6 @@ function renderComposer() {
   scheduleLayoutMosaic(0);
   $('#nc-content').hidden = composerChecklist;
   $('#nc-items').hidden = !composerChecklist;
-  $('#nc-add-item').hidden = !composerChecklist;
   // Gras/italique/souligné/code ne s'appliquent qu'au texte libre : groupe
   // masqué en mode liste à cocher, comme #dns-fmt-group en édition rapide.
   // La bascule note/liste, elle, reste visible dans les deux sens.
@@ -3551,31 +3562,53 @@ function renderComposer() {
 
   const box = $('#nc-items');
   box.innerHTML = '';
-  composerItems.forEach((item, idx) => {
-    const row = document.createElement('div');
-    row.className = 'composer-item-row';
-    row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-      <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
-      <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
-    const [cb, txt, del] = row.children;
-    cb.onchange = (e) => { item.checked = e.target.checked; };
-    txt.oninput = (e) => { item.text = e.target.value; };
-    txt.onkeydown = (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      // Entrée sur la dernière ligne : on en ouvre une nouvelle, comme Keep.
-      if (idx === composerItems.length - 1 && txt.value.trim()) {
-        composerItems.push({ text: '', checked: false });
-        renderComposer();
-        $('#nc-items').lastElementChild.querySelector('input[type=text]').focus();
-      }
-    };
-    del.onclick = () => {
-      composerItems.splice(idx, 1);
-      if (composerItems.length === 0) composerItems.push({ text: '', checked: false });
-      renderComposer();
-    };
-    box.appendChild(row);
+  assurerLigneVierge(composerItems);
+  composerItems.forEach((item, idx) => box.appendChild(creerLigneComposeur(item, idx)));
+  majSuppressionLigneVierge('#nc-items', composerItems);
+}
+
+function creerLigneComposeur(item, idx) {
+  const row = document.createElement('div');
+  row.className = 'composer-item-row';
+  row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
+    <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
+    <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
+  const [cb, txt, del] = row.children;
+  cb.onchange = (e) => { item.checked = e.target.checked; };
+  txt.oninput = (e) => {
+    item.text = e.target.value;
+    // Dès qu'on écrit dans la ligne d'attente, elle devient une vraie ligne
+    // et une nouvelle vient prendre sa place en dessous. La rangée est
+    // ajoutée au DOM à la main plutôt que par un rendu complet : celui-ci
+    // recréerait le champ en cours de frappe et ferait perdre le curseur.
+    if (idx === composerItems.length - 1 && txt.value.trim()) {
+      assurerLigneVierge(composerItems);
+      const nouvelIdx = composerItems.length - 1;
+      $('#nc-items').appendChild(creerLigneComposeur(composerItems[nouvelIdx], nouvelIdx));
+      majSuppressionLigneVierge('#nc-items', composerItems);
+    }
+  };
+  txt.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    // Entrée : on saute à la ligne d'attente, déjà présente en dessous.
+    const suivante = row.nextElementSibling;
+    if (suivante) suivante.querySelector('input[type=text]').focus();
+  };
+  del.onclick = () => {
+    composerItems.splice(idx, 1);
+    renderComposer();
+  };
+  return row;
+}
+
+/* La ligne d'attente n'a rien à supprimer : son bouton ✕ est masqué tant
+   qu'elle est vide, pour ne pas laisser croire à une ligne réelle. */
+function majSuppressionLigneVierge(boxSelecteur, liste) {
+  const rangees = [...$(boxSelecteur).children];
+  rangees.forEach((row, i) => {
+    const bouton = row.querySelector('button.btn');
+    if (bouton) bouton.hidden = (i === liste.length - 1) && !(liste[i] || {}).text.trim();
   });
 }
 
@@ -3626,9 +3659,28 @@ $('#nc-color-btn').addEventListener('click', () => {
   composerExpand();
   if (!ncColorsBox.hidden) { ncColorsBox.hidden = true; return; }
   $('#nc-text-colors').hidden = true;    // une seule palette ouverte à la fois
-  construirePalette(ncColorsBox, composerColor, (c) => { composerColor = c; });
+  construirePalette(ncColorsBox, composerColor, (c) => {
+    composerColor = c;
+    appliquerCouleurComposeur();
+  });
   ncColorsBox.hidden = false;
 });
+
+/* Aperçu en direct de la couleur choisie sur le composeur lui-même : on voit
+   la carte telle qu'elle sera avant même de la créer.
+
+   Posé en style inline plutôt qu'en classe .c-* : le fond du composeur vient
+   d'une règle CSS propre (.nc-card/.nc-toolbar-block, jaune cuillère), qu'une
+   simple classe de couleur ne pourrait pas supplanter à égalité de
+   spécificité. `default` retire le style et rend donc au composeur son jaune
+   habituel — c'est aussi ce qui se produit après création, resetComposer()
+   remettant composerColor à 'default'. */
+function appliquerCouleurComposeur() {
+  const teinte = composerColor === 'default' ? '' : (LABEL_COLOR_HEX[composerColor] || '');
+  for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
+    bloc.style.background = teinte;
+  }
+}
 
 // Libellés : rangée persistante + bouton "+", strictement la même que dans
 // les boîtes d'édition — même fonction de rendu (renderLabelChipsInto),
@@ -4061,13 +4113,6 @@ ncComposerEl.addEventListener('drop', (e) => {
   e.preventDefault();
   ncComposerEl.classList.remove('drag-over');
   queueComposerFiles(e.dataTransfer.files);
-});
-
-// Bouton explicite, indépendant du raccourci Entrée — toujours visible et fiable.
-$('#nc-add-item').addEventListener('click', () => {
-  composerItems.push({ text: '', checked: false });
-  renderComposer();
-  $('#nc-items').lastElementChild.querySelector('input[type=text]').focus();
 });
 
 $('#nc-cancel').addEventListener('click', resetComposer);
@@ -4573,7 +4618,6 @@ function renderDnsMode() {
   $('#dns-content-field').hidden = state.editingIsChecklist;
   $('#dns-fmt-group').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
-  $('#dns-add-item').hidden = !state.editingIsChecklist;
   const btn = $('#dns-toggle-checklist');
   btn.innerHTML = state.editingIsChecklist ? ICONS.pencil : ICONS.tasks;
   const label = state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
@@ -5583,33 +5627,49 @@ function renderFormatted(text, archivesDepliees = false) {
 function renderNoteItemsSimple() {
   const box = $('#dns-items');
   box.innerHTML = '';
-  state.editingNoteItems.forEach((item, idx) => {
-    const row = document.createElement('div');
-    row.className = 'dn-item-row';
-    row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-      <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
-      <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
-              title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
-      <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
-    const [cb, txt, cal, del] = row.children;
-    cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
-    txt.oninput = (e) => { state.editingNoteItems[idx].text = e.target.value; };
-    cal.onclick = () => {
-      openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso, finIso) => {
-        state.editingNoteItems[idx].due_at = iso;
-        state.editingNoteItems[idx].due_end_at = (iso && finIso) || null;
-        renderNoteItemsSimple();
-      }, state.editingNoteItems[idx].due_end_at || null);
-    };
-    del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
-    box.appendChild(row);
-  });
+  assurerLigneVierge(state.editingNoteItems);
+  state.editingNoteItems.forEach((item, idx) => box.appendChild(creerLigneNoteSimple(item, idx)));
+  majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
 }
 
-$('#dns-add-item').addEventListener('click', () => {
-  state.editingNoteItems.push({ text: '', checked: false, due_at: null });
-  renderNoteItemsSimple();
-});
+function creerLigneNoteSimple(item, idx) {
+  const row = document.createElement('div');
+  row.className = 'dn-item-row';
+  row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
+    <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
+    <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
+            title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
+    <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
+  const [cb, txt, cal, del] = row.children;
+  cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
+  txt.oninput = (e) => {
+    state.editingNoteItems[idx].text = e.target.value;
+    // Cf. creerLigneComposeur : la ligne d'attente devient réelle et une
+    // nouvelle apparaît en dessous, sans rendu complet (qui ferait perdre
+    // le curseur en pleine frappe).
+    if (idx === state.editingNoteItems.length - 1 && txt.value.trim()) {
+      assurerLigneVierge(state.editingNoteItems);
+      const nouvelIdx = state.editingNoteItems.length - 1;
+      $('#dns-items').appendChild(creerLigneNoteSimple(state.editingNoteItems[nouvelIdx], nouvelIdx));
+      majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
+    }
+  };
+  txt.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const suivante = row.nextElementSibling;
+    if (suivante) suivante.querySelector('input[type=text]').focus();
+  };
+  cal.onclick = () => {
+    openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso, finIso) => {
+      state.editingNoteItems[idx].due_at = iso;
+      state.editingNoteItems[idx].due_end_at = (iso && finIso) || null;
+      renderNoteItemsSimple();
+    }, state.editingNoteItems[idx].due_end_at || null);
+  };
+  del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
+  return row;
+}
 
 /* Couleur en édition rapide : elle n'y était pas (réservée à la boîte
    "Modifier" complète), ajoutée pour que les trois barres d'outils —
