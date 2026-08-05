@@ -2536,6 +2536,34 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Sens inverse quand l'action proposée est de tout rouvrir. */
 .fmt-archive-all.is-expand svg { transform: rotate(180deg); }
 
+/* Lien (voir NOTE_URL_MARK / renderFormatted). Jaune de la cuillère du logo
+   et gras : deux repères qui le distinguent du texte courant sans recourir
+   au soulignement, déjà pris par la mise en forme « souligné ».
+   inline-flex + gap : la pastille de copie se pose à la suite du libellé,
+   dans le flux, comme sur le code en ligne. */
+.note-url {
+  color: #ffd54f;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+}
+.note-url:hover { text-decoration: underline; }
+.note-url .code-copy-btn {
+  /* Annule le sticky/float du bouton des blocs de code : ici il suit
+     simplement le texte. */
+  position: static;
+  float: none;
+  margin-left: 0;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: #ffd54f;
+}
+.note-url .code-copy-btn svg { width: 11px; height: 11px; }
+
 /* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
 .note-code-inline {
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

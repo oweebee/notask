@@ -641,6 +641,7 @@ const ICONS = {
   maskEye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>',
 
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.8"/><path d="M15 6.5V5.8A1.8 1.8 0 0 0 13.2 4H5.8A1.8 1.8 0 0 0 4 5.8v7.4A1.8 1.8 0 0 0 5.8 15h.7"/></svg>',
+  lien: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.3 4.3 0 0 0 6.1 0l2.5-2.5a4.3 4.3 0 1 0-6.1-6.1l-1.3 1.3"/><path d="M14 10.5a4.3 4.3 0 0 0-6.1 0L5.4 13a4.3 4.3 0 1 0 6.1 6.1l1.3-1.3"/></svg>',
 
   // Couleur du texte : un "A" surmontant une barre colorée, comme dans les
   // traitements de texte. La barre prend la couleur courante via
@@ -3466,7 +3467,9 @@ function renderNotes() {
       // Les libellés en bas de carte sont désormais en lecture seule (plus
       // aucun élément interactif dedans) : plus besoin de les exclure ici,
       // cliquer dessus ouvre l'édition rapide comme le reste de la carte.
-      if (e.target.closest('.pin-btn, .actions button, .palette, .note-attachments, input')) return;
+      // a.note-url exclu : un lien s'ouvre dans un nouvel onglet, il ne doit
+      // pas ouvrir la notask par-dessus au passage.
+      if (e.target.closest('.pin-btn, .actions button, .palette, .note-attachments, a.note-url, input')) return;
       if (clicTermineUneSelection(el)) return;
       if (geleParGlisser(el)) return;
       openNoteSimpleDialog(n);
@@ -3810,7 +3813,7 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // .note-icon exclue elle aussi : elle ouvre le sélecteur d'icône au clic
   // (voir data-act=icon dans renderNotes), un geste de glisser partant de
   // là gênerait ce clic.
-  excludeSelector: '.pin-btn, .actions, .palette, .note-attachments, .note-icon, input',
+  excludeSelector: '.pin-btn, .actions, .palette, .note-attachments, .note-icon, a.note-url, input',
   enabled: notesReorderable,
   // La mosaïque est en positionnement absolu (voir layoutMosaic()) : sans
   // ce recalcul après chaque permutation, réordonner le DOM ne bouge plus
@@ -5260,6 +5263,7 @@ const FMT_ENVELOPPES = {
   // distinction que le code, voir wrapSelectionRich().
   archive: 'div.note-archive-zone, span.note-archive-zone',
   color: 'span[style*="color"]',
+  url: 'a.note-url',
 };
 
 /* Icône décorative de la zone d'archive : purement informative, jamais un
@@ -5428,7 +5432,10 @@ function retirerEnveloppe(range, enveloppe) {
   return nu;
 }
 
-function wrapSelectionRich(el, kind, couleur) {
+/* `couleur` sert aussi d'ADRESSE pour kind === 'url' (le paramètre est la
+   valeur libre de l'effet), et `texteImpose` de libellé de repli quand rien
+   n'est sélectionné — l'adresse s'affiche alors telle quelle. */
+function wrapSelectionRich(el, kind, couleur, texteImpose) {
   const retablirDefilement = memoriserDefilements(el);
   el.focus();
   const sel = window.getSelection();
@@ -5472,6 +5479,15 @@ function wrapSelectionRich(el, kind, couleur) {
     wrapper = document.createElement('span');
     wrapper.style.color = couleur;
     wrapper.textContent = text || '​';
+  } else if (kind === 'url') {
+    // Le libellé affiché est la sélection ; sans sélection, l'adresse
+    // elle-même fait office de libellé.
+    wrapper = document.createElement('a');
+    wrapper.className = 'note-url';
+    wrapper.setAttribute('href', couleur);
+    wrapper.setAttribute('target', '_blank');
+    wrapper.setAttribute('rel', 'noopener noreferrer');
+    wrapper.textContent = text || texteImpose || couleur;
   } else if (kind === 'code') {
     // Bloc de code si la sélection contient un saut de ligne, sinon code en
     // ligne — même distinction que renderFormatted() (``` contre `) pour
@@ -5539,6 +5555,35 @@ function basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel) {
   box.hidden = false;
 }
 
+/* Associe une adresse au texte sélectionné. Sans sélection, l'adresse
+   s'affiche telle quelle et sert donc à la fois de lien et de libellé.
+
+   La sélection est relevée AVANT le prompt : celui-ci prend le focus et la
+   fait disparaître, il serait ensuite trop tard pour savoir sur quoi poser
+   le lien. On la restaure juste après pour que wrapSelectionRich() la
+   retrouve intacte. */
+function poserLienSurSelection(el) {
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  if (range && !el.contains(range.commonAncestorContainer)) return;
+  const texte = range ? range.toString() : '';
+
+  const saisie = prompt('Adresse du lien :', 'https://');
+  if (!saisie) return;
+  const url = urlSure(saisie);
+  if (!url) {
+    alert("Adresse non valide : seules les adresses http://, https:// et mailto: sont acceptées.");
+    return;
+  }
+
+  el.focus();
+  if (range) {
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  wrapSelectionRich(el, 'url', url, texte);
+}
+
 /* Branche une barre de mise en forme sur sa zone de texte. Mutualisée
    entre l'édition rapide et le composeur : les deux ont exactement les
    mêmes boutons, il n'y a aucune raison d'en tenir deux copies. */
@@ -5547,6 +5592,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
     if (btn.dataset.fmt === 'code') btn.innerHTML = ICONS.code;
     if (btn.dataset.fmt === 'color') btn.innerHTML = ICONS.textColor;
     if (btn.dataset.fmt === 'archive') btn.innerHTML = ICONS.archive;
+    if (btn.dataset.fmt === 'url') btn.innerHTML = ICONS.lien;
     if (btn.dataset.fmt === 'clear') btn.innerHTML = ICONS.clearFormat;
     // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
     // la zone contenteditable au mousedown et efface la sélection avant même
@@ -5556,6 +5602,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
     btn.addEventListener('click', () => {
       if (btn.dataset.fmt === 'color') basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel);
       else if (btn.dataset.fmt === 'clear') effacerMiseEnForme($(editableSel));
+      else if (btn.dataset.fmt === 'url') poserLienSurSelection($(editableSel));
       else wrapSelectionRich($(editableSel), btn.dataset.fmt);
     });
   });
@@ -5673,8 +5720,17 @@ function richToText(root) {
         const hex = cssColorToHex(node.style.color);
         return hex ? `[c:${hex}]${inner()}[/c]` : inner();
       }
+      // Lien : l'adresse repart dans le marqueur, donc chiffrée avec le
+      // reste (voir NOTE_URL_MARK). inner() ignore au passage la pastille
+      // de copie injectée dedans, traitée par `case 'button'` juste en
+      // dessous.
+      case 'a': {
+        const href = node.getAttribute('href');
+        return href ? `[url:${href}]${inner()}[/url]` : inner();
+      }
       // Éléments d'interface injectés dans le rendu (pastille de copie des
-      // blocs de code) : ils ne font pas partie du texte de la notask.
+      // blocs de code et des liens) : ils ne font pas partie du texte de la
+      // notask.
       case 'button': return '';
       // Variante BLOC de la zone d'archive (sélection contenant un saut de
       // ligne, voir wrapSelectionRich) : même marqueur que la variante en
@@ -5747,6 +5803,34 @@ const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
    titre que son texte — et non un état d'interface perdu au rechargement. */
 const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
 
+/* Lien : `[url:https://exemple.fr]texte affiché[/url]`. L'adresse voyage
+   DANS le marqueur, donc chiffrée avec le reste du contenu — le serveur ne
+   voit jamais les liens d'une notask.
+   `[^\]]+` sur l'adresse : tout sauf le crochet fermant, qui délimite le
+   marqueur. Une URL ne peut de toute façon pas en contenir sans être
+   encodée (%5D). */
+const NOTE_URL_MARK = /\[url:([^\]]+)\]([\s\S]*?)\[\/url\]/g;
+
+/* Adresse collée telle quelle dans le texte, sans passer par le bouton :
+   elle devient un lien automatiquement (voir brancherCollagePropre).
+   Bornée par des espaces/début/fin pour ne pas mordre au milieu d'un mot,
+   et la ponctuation finale courante est laissée hors du lien — « voir
+   https://exemple.fr. » ne doit pas embarquer le point dans l'adresse. */
+const URL_BRUTE = /(^|\s)(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])/g;
+
+/* Adresse jugée sûre pour un href, sinon null. Seuls http(s) et mailto sont
+   acceptés : `javascript:` (ou `data:`) exécuterait du code au simple clic
+   sur un lien, y compris dans une notask reçue par copier-coller depuis
+   n'importe où. Le texte est déjà échappé quand on arrive ici, on ne se
+   protège donc que du schéma. */
+function urlSure(brut) {
+  const url = String(brut || '').trim();
+  if (!/^(https?:\/\/|mailto:)/i.test(url)) return null;
+  // Les guillemets fermeraient l'attribut href ; ils n'ont rien à faire
+  // dans une adresse non encodée.
+  return url.replace(/["'<>]/g, '');
+}
+
 /* Collage depuis l'extérieur (page web, Word, Google Docs...) : le
    navigateur insère par défaut le HTML tel quel dans la zone éditable (la
    tâche #74 en dépend, pour garder gras/italique/souligné venus d'ailleurs)
@@ -5761,7 +5845,7 @@ const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
    richToText() ferait de toute façon à l'enregistrement (case 'default').
    N'agit que si le presse-papier contient du HTML : un simple texte brut
    ne peut cacher aucune couleur, le collage natif du navigateur suffit. */
-const PASTE_TAG_WHITELIST = new Set(['B', 'STRONG', 'EM', 'I', 'U', 'BR', 'DIV', 'P', 'SPAN', 'PRE', 'CODE']);
+const PASTE_TAG_WHITELIST = new Set(['B', 'STRONG', 'EM', 'I', 'U', 'BR', 'DIV', 'P', 'SPAN', 'PRE', 'CODE', 'A']);
 function nettoyerHtmlColle(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
@@ -5780,7 +5864,22 @@ function nettoyerHtmlColle(html) {
         node.removeChild(enfant);
         return;
       }
+      // Un lien collé depuis une page web garde son adresse, à condition
+      // qu'elle passe le filtre de schéma — sans quoi il ne resterait qu'un
+      // texte souligné pointant nulle part. Tous les autres attributs
+      // (styles, classes de la page d'origine…) partent comme avant.
+      const href = enfant.tagName === 'A' ? urlSure(enfant.getAttribute('href')) : null;
       Array.from(enfant.attributes).forEach((a) => enfant.removeAttribute(a.name));
+      if (href) {
+        enfant.className = 'note-url';
+        enfant.setAttribute('href', href);
+        enfant.setAttribute('target', '_blank');
+        enfant.setAttribute('rel', 'noopener noreferrer');
+      } else if (enfant.tagName === 'A') {
+        // Adresse refusée : on déballe, il ne reste que le texte.
+        while (enfant.firstChild) node.insertBefore(enfant.firstChild, enfant);
+        node.removeChild(enfant);
+      }
     });
   })(tmp);
   return tmp.innerHTML;
@@ -5818,6 +5917,20 @@ function brancherCollagePropre(el) {
     if (!e.clipboardData) return;
     const aDesFichiers = Array.from(e.clipboardData.items || []).some((it) => it.kind === 'file');
     if (aDesFichiers) return; // laissé au gestionnaire de pièce jointe de l'ancêtre
+
+    // Une adresse collée seule devient directement un lien, sans passer par
+    // le bouton : c'est le geste le plus courant, et le texte brut collé tel
+    // quel n'aurait servi à rien d'autre qu'à être recopié à la main.
+    const brut = (e.clipboardData.getData('text/plain') || '').trim();
+    const url = urlSure(brut);
+    if (url && !/\s/.test(brut)) {
+      e.preventDefault();
+      insererHtmlDansSelection(
+        `<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(brut)}</a>`
+      );
+      return;
+    }
+
     const html = e.clipboardData.getData('text/html');
     if (!html) return; // texte brut : rien à nettoyer, comportement natif intact
     e.preventDefault();
@@ -5859,7 +5972,9 @@ function ajouterBoutonsCopieCode(root) {
   if (!root) return;
   // Blocs ET code en ligne : un mot de passe ou une clé se met souvent en
   // code en ligne, c'est justement là qu'on veut copier d'un geste.
-  const zones = root.querySelectorAll('pre.note-code-block, code.note-code-inline');
+  // Les liens en font partie : on veut pouvoir récupérer l'adresse sans
+  // avoir à l'ouvrir (même pastille, même geste que pour le code).
+  const zones = root.querySelectorAll('pre.note-code-block, code.note-code-inline, a.note-url');
   zones.forEach((zone) => {
     // Un <code> situé à l'intérieur d'un bloc est déjà couvert par le
     // bouton du bloc : pas de second bouton imbriqué.
@@ -5870,8 +5985,9 @@ function ajouterBoutonsCopieCode(root) {
     btn.type = 'button';
     btn.className = 'code-copy-btn';
     btn.contentEditable = 'false';
-    btn.title = 'Copier';
-    btn.setAttribute('aria-label', 'Copier le code');
+    const estLien = zone.tagName === 'A';
+    btn.title = estLien ? "Copier l'adresse" : 'Copier';
+    btn.setAttribute('aria-label', estLien ? "Copier l'adresse du lien" : 'Copier le code');
     btn.innerHTML = ICONS.copy;
     // Sans ce preventDefault, le mousedown déplace le curseur/efface la
     // sélection dans la zone éditable avant même que le clic n'arrive.
@@ -5881,9 +5997,14 @@ function ajouterBoutonsCopieCode(root) {
       // la notask.
       e.stopPropagation();
       e.preventDefault();
-      const cible = zone.tagName === 'PRE' ? (zone.querySelector('code') || zone) : zone;
+      // Sur un lien, c'est l'ADRESSE qu'on copie, pas le texte affiché :
+      // celui-ci peut être un simple libellé ("la doc", "ici") qui ne sert
+      // à rien une fois collé ailleurs.
+      const texte = estLien
+        ? (zone.getAttribute('href') || '')
+        : texteCodeSansBouton(zone.tagName === 'PRE' ? (zone.querySelector('code') || zone) : zone);
       try {
-        await navigator.clipboard.writeText(texteCodeSansBouton(cible));
+        await navigator.clipboard.writeText(texte);
         afficherBulleCopie(e.clientX, e.clientY, 'Copié');
       } catch {
         afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
@@ -6110,6 +6231,16 @@ function renderFormatted(text, archivesDepliees = false) {
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
+  /* Liens. `target=_blank` + `rel=noopener noreferrer` : ouverture dans un
+     nouvel onglet, sans donner à la page ouverte la moindre prise sur
+     notask (window.opener). L'adresse est filtrée par urlSure() — un
+     `javascript:` glissé dans un marqueur exécuterait sinon du code au
+     simple clic. */
+  html = html.replace(NOTE_URL_MARK, (m, href, texte) => {
+    const url = urlSure(href);
+    if (!url) return texte;  // adresse refusée : on garde le texte, sans lien
+    return `<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer">${texte}</a>`;
+  });
   html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);
     const tag = bloc ? 'div' : 'span';
