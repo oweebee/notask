@@ -2536,14 +2536,14 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Sens inverse quand l'action proposée est de tout rouvrir. */
 .fmt-archive-all.is-expand svg { transform: rotate(180deg); }
 
-/* Lien (voir NOTE_URL_MARK / renderFormatted). Jaune de la cuillère du logo
-   et gras : deux repères qui le distinguent du texte courant sans recourir
-   au soulignement, déjà pris par la mise en forme « souligné ».
+/* Lien (voir NOTE_URL_MARK / renderFormatted). Le jaune de la cuillère du
+   logo suffit à le distinguer du texte courant — pas de soulignement (déjà
+   pris par la mise en forme « souligné ») ni de gras (qui alourdissait la
+   lecture d'un texte truffé de liens).
    inline-flex + gap : la pastille de copie se pose à la suite du libellé,
    dans le flux, comme sur le code en ligne. */
 .note-url {
   color: #ffd54f;
-  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
   display: inline-flex;
