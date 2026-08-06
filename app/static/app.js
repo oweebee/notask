@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9003';
+const APP_VERSION = '0.9004';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -121,6 +121,13 @@ if (window.visualViewport) {
   const ajusterPourClavier = () => {
     const hauteurClavier = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
     document.documentElement.style.setProperty('--kb-inset', hauteurClavier + 'px');
+    // Marqueur binaire en plus de la mesure : certaines règles n'ont pas
+    // besoin de la hauteur exacte mais seulement de savoir que le clavier
+    // est là (voir .quick-capture #nc-content dans style.css, dont le
+    // min-height doit sauter pour ne pas pousser la barre d'outils sous le
+    // clavier). Seuil de 80px : filtre le rétrécissement de la barre
+    // d'adresse mobile, qui n'est pas un clavier.
+    document.documentElement.classList.toggle('clavier-ouvert', hauteurClavier > 80);
   };
   vv.addEventListener('resize', ajusterPourClavier);
   vv.addEventListener('scroll', ajusterPourClavier);
@@ -1961,8 +1968,19 @@ async function boot() {
   }
   try {
     state.user = await api('/auth/me');
-    enterApp();
-  } catch { showLogin(); }
+  } catch {
+    // Seul un échec de /auth/me signifie « session invalide ».
+    showLogin();
+    return;
+  }
+  // enterApp() est VOLONTAIREMENT hors du try ci-dessus : il y était avant,
+  // et la moindre erreur d'affichage (élément absent du DOM, par ex. sur la
+  // page fantôme /quick qui ne contient qu'une partie du balisage) était
+  // alors attrapée par le même catch et interprétée comme une session
+  // expirée — d'où un écran de connexion à CHAQUE rechargement, alors que
+  // le jeton et la clé en cache étaient parfaitement valides. Une erreur de
+  // rendu doit remonter au journal, pas déconnecter l'utilisateur.
+  enterApp();
 }
 
 /* Pseudo en lettres alternées : une sur deux en jaune cuillère, l'autre en
@@ -2066,8 +2084,12 @@ function switchView(view) {
 
   const isNotes = view === 'notes' || view === 'archives' || view === 'favorites';
 
+  // Chaînage optionnel obligatoire ici : la page fantôme /quick (quick.html)
+  // ne reprend PAS tout le balisage de l'accueil — #view-tasks n'y existe
+  // pas. Sans ça, switchView() lançait une TypeError dès enterApp().
   $('#view-notes').hidden = !isNotes;
-  $('#view-tasks').hidden = view !== 'tasks';
+  const vTasks = $('#view-tasks');
+  if (vTasks) vTasks.hidden = view !== 'tasks';
   $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
@@ -2447,7 +2469,10 @@ async function loadNotes() {
    archivée, seule cette ligne l'est. Cliquer dessus ouvre la notask
    complète qui la contient, comme partout ailleurs. */
 async function loadArchivedItems() {
+  // Absent de la page fantôme /quick (voir switchView) : on sort sans rien
+  // faire plutôt que de lancer une TypeError.
   const bloc = $('#archived-items');
+  if (!bloc) return;
   if (!state.showArchived) { bloc.hidden = true; return; }
 
   let items;

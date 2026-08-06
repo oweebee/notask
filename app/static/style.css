@@ -3627,11 +3627,23 @@ body.quick-capture .notes-grid .composer-stack {
   max-width: 640px;
   margin: 0 auto;
   padding: 1rem;
-  min-height: 100dvh;
+  /* 100dvh MOINS la hauteur du clavier virtuel (--kb-inset, tenu à jour par
+     l'API VisualViewport — voir app.js) : sur iOS, le clavier recouvre le
+     bas de l'écran sans redimensionner la mise en page, donc une colonne de
+     100dvh pleine et entière laisse forcément sa dernière ligne — la barre
+     d'outils — dessous. En retirant cette hauteur, le bas de la colonne
+     tombe exactement sur le haut du clavier, et la barre remonte avec lui.
+     Rien à changer quand le clavier est fermé : --kb-inset vaut alors 0. */
+  min-height: calc(100dvh - var(--kb-inset, 0px));
   display: flex;
   flex-direction: column;
   transition: none !important;
 }
+/* La colonne se resserre : #nc-content ne peut plus réclamer 30vh, sinon il
+   repousse la barre d'outils hors de l'espace restant, ce que ce calcul
+   cherche précisément à éviter. Il garde flex:1, donc il occupe toujours
+   tout ce qui reste — simplement plus de plancher. */
+html.clavier-ouvert body.quick-capture #nc-content { min-height: 0; }
 body.quick-capture .note-composer { display: flex; flex-direction: column; flex: 1; }
 /* Le bloc d'outils est révélé par composerExpand() (appelé au chargement,
    voir app.js) — [hidden] gagnerait quand même si jamais cet appel
