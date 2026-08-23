@@ -158,10 +158,30 @@ def asset_links():
 
     from fastapi.responses import Response
 
+    def _nettoyer(valeur: str) -> str:
+        """Ne garde que l'empreinte elle-même.
+
+        Un panneau de configuration comme Coolify sépare le nom et la valeur
+        en deux champs. Coller la ligne entière dans le champ « valeur » est
+        l'erreur naturelle, et elle produisait un fichier assetlinks.json
+        syntaxiquement valide mais contenant
+        `NOTASK_ANDROID_CERT_SHA256=3D:C2:...` en guise d'empreinte — donc une
+        vérification qui échoue sans le moindre message, côté Android comme
+        côté serveur. On retire donc un éventuel préfixe `NOM=`.
+        """
+        valeur = valeur.strip()
+        if "=" in valeur:
+            valeur = valeur.rsplit("=", 1)[1].strip()
+        return valeur.upper()
+
     empreintes = [
-        f.strip().upper()
-        for f in os.getenv("NOTASK_ANDROID_CERT_SHA256", "").split(",")
-        if f.strip()
+        e
+        for e in (
+            _nettoyer(f) for f in os.getenv("NOTASK_ANDROID_CERT_SHA256", "").split(",")
+        )
+        # Une empreinte SHA-256 fait 32 octets, soit 95 caractères en
+        # hexadécimal séparé par des deux-points. Tout le reste est du bruit.
+        if len(e) == 95 and all(c in "0123456789ABCDEF:" for c in e)
     ]
     paquet = os.getenv("NOTASK_ANDROID_PACKAGE", "com.oweebee.notaskwidget")
 
