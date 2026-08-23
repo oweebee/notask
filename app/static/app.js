@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9004';
+const APP_VERSION = '0.9005';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2069,7 +2069,50 @@ function enterApp() {
   if (window.NOTASK_QUICK_CAPTURE) {
     composerExpand();
     $('#nc-title').focus();
+    appliquerModeRapide();
   }
+}
+
+/* Mode demandé à l'ouverture de /quick, via ?mode=… — utilisé par le widget
+   de création de l'application Android compagnon, dont chaque bouton ouvre
+   directement le composeur dans la bonne forme (liste à cocher, dictée,
+   tableau blanc, note vocale).
+
+   On se contente de CLIQUER sur le bouton existant du composeur, jamais de
+   rejouer sa logique : dictée, tableau blanc et note vocale demandent des
+   permissions, gèrent des états et se annulent proprement — dupliquer tout
+   ça pour un raccourci serait la garantie de voir les deux chemins diverger.
+
+   L'URL est nettoyée derrière : sans ça, l'enregistrement d'une notask (qui
+   recharge la page, voir le gestionnaire #nc-add) relancerait le micro ou le
+   tableau blanc en boucle. */
+function appliquerModeRapide() {
+  const mode = new URLSearchParams(location.search).get('mode');
+  if (!mode) return;
+  history.replaceState(null, '', location.pathname);
+
+  const boutons = {
+    liste: '#nc-toggle-checklist',
+    dictee: '#nc-dictee-btn',
+    tableau: '#nc-board-btn',
+    audio: '#nc-mic-btn',
+  };
+  const selecteur = boutons[mode];
+  if (!selecteur) return; // mode "texte" ou valeur inconnue : composeur nu
+
+  const bouton = $(selecteur);
+  if (!bouton) return;
+
+  // Un cran de retard volontaire : composerExpand() vient de révéler le bloc
+  // d'outils, et un clic envoyé avant que le navigateur ait fini de le poser
+  // ne déclenche rien du tout.
+  setTimeout(() => {
+    try {
+      bouton.click();
+    } catch (err) {
+      log.warn('quick', `Mode ${mode} impossible à activer`, err);
+    }
+  }, 60);
 }
 
 function switchView(view) {
