@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9007';
+const APP_VERSION = '0.9008';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4127,6 +4127,15 @@ function renderComposer() {
   $('#nc-cancel').hidden = !composerExpanded;
   if (!composerChecklist) return;
 
+  renderComposerItems();
+}
+
+/* Rendu des seules lignes à cocher du composeur. Extrait de renderComposer()
+   pour avoir un pendant à renderNoteItemsSimple() côté édition : dater une
+   ligne doit redessiner les lignes, et rien d'autre. Passer par
+   renderComposer() entier rejouerait aussi l'état déplié, les libellés et la
+   palette — beaucoup de travail pour afficher une pastille de date. */
+function renderComposerItems() {
   const box = $('#nc-items');
   box.innerHTML = '';
   assurerLigneVierge(composerItems);
@@ -4140,10 +4149,17 @@ function renderComposer() {
 function creerLigneComposeur(item, idx, anime = false) {
   const row = document.createElement('div');
   row.className = 'composer-item-row' + (anime ? ' ligne-apparait' : '');
+  // Bouton d'échéance identique à celui de l'édition rapide (voir
+  // creerLigneNoteSimple) : il n'existait qu'à l'édition, si bien qu'une
+  // liste à cocher devait être créée puis rouverte pour dater ses lignes.
+  // Rien ne le justifiait — le format d'envoi transporte déjà due_at par
+  // ligne (voir le gestionnaire #nc-add).
   row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
     <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
+    <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
+            title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
     <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
-  const [cb, txt, del] = row.children;
+  const [cb, txt, cal, del] = row.children;
   cb.onchange = (e) => { item.checked = e.target.checked; };
   txt.oninput = (e) => {
     item.text = e.target.value;
@@ -4164,6 +4180,13 @@ function creerLigneComposeur(item, idx, anime = false) {
     // Entrée : on saute à la ligne d'attente, déjà présente en dessous.
     const suivante = row.nextElementSibling;
     if (suivante) suivante.querySelector('input[type=text]').focus();
+  };
+  cal.onclick = () => {
+    openCalPopup(cal, composerItems[idx].due_at, (iso, finIso) => {
+      composerItems[idx].due_at = iso;
+      composerItems[idx].due_end_at = (iso && finIso) || null;
+      renderComposerItems();
+    }, composerItems[idx].due_end_at || null);
   };
   del.onclick = () => {
     composerItems.splice(idx, 1);
@@ -4726,8 +4749,19 @@ async function creerNotaskDepuisComposeur() {
       description: await encryptField($('#nc-description').value.trim()),
       content: composerChecklist ? '' : await encryptField(content),
       is_checklist: composerChecklist,
+      // calendar_title par ligne, comme à l'édition (voir
+      // saveNoteSimpleDialog) : c'est le seul texte en clair que le serveur
+      // reçoit d'une ligne, et uniquement quand elle porte une échéance —
+      // il lui sert à nommer l'événement Google Calendar correspondant.
+      // Il manquait ici, si bien qu'une ligne datée dès la création
+      // n'arrivait jamais dans l'agenda. Calculé AVANT le chiffrement, qui
+      // écrase i.text sur le même objet.
       items: composerChecklist
-        ? await Promise.all(items.map(async (i) => ({ ...i, text: await encryptField(i.text) })))
+        ? await Promise.all(items.map(async (i) => ({
+          ...i,
+          calendar_title: i.due_at ? i.text : null,
+          text: await encryptField(i.text),
+        })))
         : [],
       icon: state.composerIcon,
       color: composerColor,
