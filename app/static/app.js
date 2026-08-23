@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9005';
+const APP_VERSION = '0.9006';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2069,7 +2069,8 @@ function enterApp() {
   if (window.NOTASK_QUICK_CAPTURE) {
     composerExpand();
     $('#nc-title').focus();
-    appliquerModeRapide();
+    // appliquerModeRapide() n'est PAS appelée ici : voir la fin de
+    // loadNotes(), qui s'exécute après et écraserait le changement.
   }
 }
 
@@ -2087,8 +2088,12 @@ function enterApp() {
    recharge la page, voir le gestionnaire #nc-add) relancerait le micro ou le
    tableau blanc en boucle. */
 function appliquerModeRapide() {
+  if (!window.NOTASK_QUICK_CAPTURE) return;
   const mode = new URLSearchParams(location.search).get('mode');
   if (!mode) return;
+  // Le paramètre est retiré de l'URL AVANT tout le reste : loadNotes() peut
+  // être rappelée (rendu, filtre, rechargement), et sans ça le tableau blanc
+  // ou le micro se relanceraient à chaque fois.
   history.replaceState(null, '', location.pathname);
 
   const boutons = {
@@ -2103,16 +2108,17 @@ function appliquerModeRapide() {
   const bouton = $(selecteur);
   if (!bouton) return;
 
-  // Un cran de retard volontaire : composerExpand() vient de révéler le bloc
-  // d'outils, et un clic envoyé avant que le navigateur ait fini de le poser
-  // ne déclenche rien du tout.
+  // Un cran de retard volontaire : le rendu de la mosaïque vient de se
+  // terminer, et un clic envoyé avant que le navigateur ait fini de poser le
+  // bloc d'outils ne déclenche rien du tout.
   setTimeout(() => {
     try {
       bouton.click();
+      log.info('quick', `Mode ${mode} activé`);
     } catch (err) {
       log.warn('quick', `Mode ${mode} impossible à activer`, err);
     }
-  }, 60);
+  }, 150);
 }
 
 function switchView(view) {
@@ -2504,6 +2510,13 @@ async function loadNotes() {
   if (!$('#agenda-col').hidden) loadAgenda();
   updateTaskBadges();
   ouvrirNotaskDemandeeParUrl();
+  // Mode demandé par ?mode=… (widget de création Android). Appliqué ICI et
+  // pas dans enterApp() : le composeur y était bien basculé, mais loadNotes()
+  // est asynchrone et son rendu, arrivant après, remettait le composeur à
+  // zéro — le mode était donc systématiquement perdu, et les cinq boutons
+  // ouvraient tous une notask texte. Même raison qui fait
+  // qu'ouvrirNotaskDemandeeParUrl() est appelée ici plutôt qu'au démarrage.
+  appliquerModeRapide();
 }
 
 /* Lignes à cocher archivées seules — affichées sous la mosaïque, dans les
