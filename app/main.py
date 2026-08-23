@@ -59,6 +59,12 @@ async def no_cache(request: Request, call_next):
     quand le fichier n'a pas changé.
     """
     response = await call_next(request)
+    # Seule exception : /.well-known/assetlinks.json, lu par Chrome et par les
+    # serveurs de Google pour vérifier l'application Android compagnon. Son
+    # contenu ne change qu'à une rotation de clé de signature, et il pose
+    # lui-même son propre Cache-Control — que la ligne ci-dessous écraserait.
+    if request.url.path.startswith("/.well-known/"):
+        return response
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     else:
@@ -122,3 +128,63 @@ def quick_manifest():
 @app.get("/sw.js", include_in_schema=False)
 def service_worker():
     return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
+
+
+# Digital Asset Links — moitié « site » de la vérification qui autorise
+# l'application Android compagnon (widgets d'écran d'accueil) à afficher ce
+# site en plein écran, sans la barre d'adresse de Chrome. Sa moitié
+# « application » est la ressource `asset_statements` de l'APK, qui désigne
+# en retour cette adresse.
+#
+# NOTASK_ANDROID_CERT_SHA256 contient l'empreinte de la clé ayant signé
+# l'APK, au format majuscules séparées par des deux-points
+# (AA:BB:CC:...), telle que la sort `keytool -list -v`. Plusieurs empreintes
+# peuvent être séparées par des virgules — utile pendant une rotation de clé,
+# où deux versions signées différemment circulent en même temps.
+#
+# Variable absente = pas d'application Android déclarée : on renvoie une
+# liste vide plutôt qu'une 404. Chrome traite les deux pareil (vérification
+# refusée), mais une liste vide dit « rien à déclarer ici », là où une 404
+# laisse penser à une erreur de configuration du serveur.
+#
+# La route est publique et le doit : Chrome la lit sans aucun jeton, depuis
+# les serveurs de Google pour la vérification des liens d'application. Elle
+# n'expose qu'une empreinte de certificat, qui est une donnée publique par
+# construction — c'est l'empreinte de la clé, jamais la clé.
+@app.get("/.well-known/assetlinks.json", include_in_schema=False)
+def asset_links():
+    import json
+    import os
+
+    from fastapi.responses import Response
+
+    empreintes = [
+        f.strip().upper()
+        for f in os.getenv("NOTASK_ANDROID_CERT_SHA256", "").split(",")
+        if f.strip()
+    ]
+    paquet = os.getenv("NOTASK_ANDROID_PACKAGE", "com.oweebee.notaskwidget")
+
+    corps = (
+        []
+        if not empreintes
+        else [
+            {
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": paquet,
+                    "sha256_cert_fingerprints": empreintes,
+                },
+            }
+        ]
+    )
+    # Cache-Control explicite, respecté grâce à l'exemption /.well-known/
+    # posée dans le middleware no_cache plus haut : ce fichier ne change qu'à
+    # une rotation de clé de signature, le faire revalider à chaque lecture
+    # n'apporterait rien.
+    return Response(
+        content=json.dumps(corps),
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

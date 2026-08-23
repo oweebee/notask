@@ -17,3 +17,12 @@ data/
 # Journal de travail avec l'assistant IA — usage local uniquement, jamais
 # poussé sur GitHub (le dépôt est public, voir README « Déploiement »).
 ClaudeProject/
+
+# Application Android compagnon (widgets d'écran d'accueil + notifications).
+# Dépôt Git IMBRIQUÉ, avec son propre remote : github.com/oweebee/notask-widget.
+# Ignoré ici en entier, son .git compris — rien de ce dossier ne peut donc
+# remonter dans ce dépôt-ci, qui est public. Le sens du lien est à sens
+# unique et volontaire : le client Android consomme l'API définie ici
+# (voir notask-widget/README.md, section « Contrat d'API »), le serveur
+# n'a aucune connaissance de l'application Android.
+notask-widget/
