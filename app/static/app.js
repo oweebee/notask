@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9008';
+const APP_VERSION = '0.9009';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5313,6 +5313,8 @@ function openNoteSimpleDialog(note) {
   state.editingColor = note.color || 'default';
   state.editingMasked = !!note.masked;
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
+  state.editingPinned = !!note.pinned;
+  renderBoutonEpingle();
   $('#dns-colors').hidden = true;
   state.editingIcon = note.icon || null;
   renderIconBtn($('#dns-icon-btn'), state.editingIcon);
@@ -6464,6 +6466,27 @@ function creerLigneNoteSimple(item, idx, anime = false) {
    cocher — proposent la même base. La couleur choisie s'applique tout de
    suite au fond de la boîte (applyDialogColor), et part avec le reste à
    la fermeture (voir saveNoteSimpleDialog). */
+/* Épingle de la boîte d'édition. Purement locale jusqu'à la fermeture, comme
+   la couleur, l'icône ou les libellés : `pinned` part avec le reste dans le
+   PATCH de saveNoteSimpleDialog(). L'épingle de la CARTE, elle, envoie son
+   PATCH tout de suite (voir renderNotes) — il n'y a rien d'autre en attente
+   à cet endroit-là. */
+function renderBoutonEpingle() {
+  const btn = $('#dns-pin-btn');
+  if (!btn) return;
+  const actif = !!state.editingPinned;
+  btn.innerHTML = actif ? ICONS.pinFilled : ICONS.pin;
+  btn.classList.toggle('has-due', actif); // même mise en évidence jaune
+  btn.title = actif ? 'Retirer des favoris' : 'Épingler';
+  btn.setAttribute('aria-label', btn.title);
+  btn.setAttribute('aria-pressed', actif ? 'true' : 'false');
+}
+
+$('#dns-pin-btn').addEventListener('click', () => {
+  state.editingPinned = !state.editingPinned;
+  renderBoutonEpingle();
+});
+
 const dnsColorsBox = $('#dns-colors');
 $('#dns-color-btn').innerHTML = ICONS.palette;
 $('#dns-color-btn').addEventListener('click', () => {
@@ -6525,6 +6548,7 @@ async function saveNoteSimpleDialog() {
       color: state.editingColor || n.color,
       masked: state.editingMasked,
       icon: state.editingIcon,
+      pinned: state.editingPinned,
     };
     // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
     // celui du mode courant : sinon, après une bascule, l'ancien contenu
