@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9006';
+const APP_VERSION = '0.9007';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2576,8 +2576,17 @@ async function ouvrirNotaskDemandeeParUrl() {
   // laisse simplement l'application ouverte sur la liste. Pas de message
   // bloquant — il n'existe pas de bandeau global dans cette appli, et
   // fabriquer une alerte pour ce cas limite serait plus gênant qu'utile.
-  if (note) openNoteSimpleDialog(note);
-  else console.warn('[notask] lien ?notask=%s : notask introuvable', id);
+  // log.* et non console.* : sur un téléphone la console est inaccessible en
+  // pratique, alors que le journal est consultable depuis Outils. C'est le
+  // seul moyen de savoir, depuis l'appareil, si un lien profond est bien
+  // arrivé jusqu'ici — et donc de distinguer « l'application n'a pas
+  // transmis l'adresse » de « la notask n'a pas été retrouvée ».
+  if (note) {
+    log.info('lien', `?notask=${id} : notask ouverte`);
+    openNoteSimpleDialog(note);
+  } else {
+    log.warn('lien', `?notask=${id} : notask introuvable`);
+  }
 }
 
 /* -------------------------------- Corbeille --------------------------------
