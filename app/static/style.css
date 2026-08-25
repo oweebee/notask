@@ -3133,26 +3133,39 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
-/* Échéance (+ bouton calendrier) : posées AU-DESSUS de la case, entièrement
-   hors de sa boîte — pas à cheval sur le bord (essayé en 0.9024, à moitié
-   dedans ça retombait sur le texte), pas dedans non plus (essayé en 0.9025,
-   ça collait au texte sur une case d'une seule ligne, faute de place). Le
-   correctif attendu était uniquement le SENS : au-dessus, jamais en dessous.
-   `bottom: 100%` les colle au bord supérieur de la case puis les fait
-   basculer entièrement par-dessus ; `margin-bottom` ouvre un petit espace
-   pour ne pas les souder au texte. `position: absolute` les sort du flux,
-   donc .note-ligne-txt (flex: 1 1 auto) garde toute la largeur — c'était le
-   problème d'origine (pastille dans le fil du texte, qui le rétrécissait). */
+/* Échéance (+ bouton calendrier) : au-dessus du texte de la case, calées à
+   droite. Trois essais ratés avant celui-ci, qui valent d'être écrits pour
+   ne pas les refaire :
+
+   - dans le fil du texte (d'origine) : la pastille prenait de la largeur au
+     texte, qui se retrouvait rétréci sur 3-4 lignes très étroites ;
+   - `translateY(-50%)`, à cheval sur le bord (0.9024) : la moitié haute
+     sortait de la boîte de la notask et se faisait rogner ;
+   - `bottom: 100%`, entièrement au-dessus (0.9026) : TOUT sortait de la
+     boîte, la pastille devenait carrément invisible.
+
+   La leçon : sortir du flux ne crée pas de place, ça déplace juste le
+   problème hors de la boîte, là où overflow rogne. Il faut donc RÉSERVER la
+   place — d'où le padding-top posé sur la case elle-même juste en dessous,
+   dans lequel la pastille vient se loger. Elle reste ainsi strictement à
+   l'intérieur (jamais rognée), au-dessus du texte (jamais superposée), et
+   hors du flux horizontal (le texte garde toute sa largeur). */
 .note-ligne-due-wrap {
   position: absolute;
-  bottom: 100%;
+  top: .18rem;
   right: .5rem;
-  margin-bottom: .15rem;
   display: flex;
   align-items: center;
   gap: .2rem;
   z-index: 1;
 }
+/* Place réservée à la pastille, UNIQUEMENT sur les cases qui en portent une
+   (data-due est vidé, pas retiré, quand l'échéance est effacée — voir
+   majEcheanceLigne dans app.js, d'où le :not([data-due=""])). Sans cette
+   réserve, la pastille se superposerait au texte d'une case d'une seule
+   ligne. Avec, la case datée est un peu plus haute que ses voisines : c'est
+   le prix de la place, et ça reste discret dans un bloc. */
+.note-ligne[data-due]:not([data-due=""]) { padding-top: 1.5rem; }
 .note-ligne-due {
   flex: none;
   margin: 0;
