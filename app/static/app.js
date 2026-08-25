@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9033';
+const APP_VERSION = '0.9034';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4627,7 +4627,16 @@ $('.note-composer').addEventListener('paste', (e) => {
     .filter(Boolean);
   if (!files.length) return;
   e.preventDefault();
-  queueComposerFiles(files);
+  // Cf. le collage en édition rapide : une image collée dans le corps
+  // s'affiche là où on l'a mise, le reste rejoint les pièces jointes.
+  const { images, autres } = trierImages(files);
+  if (images.length && estDansZoneDeSaisie(e.target, $('#nc-content'))) {
+    // `null` explicite : dans le composeur la notask n'existe pas encore.
+    collerImagesEnLigne(images, $('#nc-content'), null);
+  } else if (images.length) {
+    queueComposerFiles(images);
+  }
+  if (autres.length) queueComposerFiles(autres);
 });
 brancherCollagePropre($('#nc-content'));
 
@@ -5062,6 +5071,80 @@ function renderAttachmentsSimple() {
 // saveNoteSimpleDialog() qui attend ce tableau avant de continuer.
 let pendingAttachmentUploads = [];
 
+/* Sépare les images du reste : seules les premières savent s'afficher dans le
+   corps d'une notask (voir NOTE_IMG_MARK). Un PDF ou une archive n'a rien à
+   montrer en ligne et reste une pièce jointe classique. */
+function trierImages(files) {
+  const images = [];
+  const autres = [];
+  for (const f of Array.from(files)) {
+    (f && /^image\//.test(f.type) ? images : autres).push(f);
+  }
+  return { images, autres };
+}
+
+/* Le collage n'est traité en ligne que si le curseur était bien DANS la zone
+   de texte : coller une image alors qu'on est dans le champ titre ou
+   description n'a pas d'endroit où l'insérer, elle redevient alors une pièce
+   jointe ordinaire plutôt que d'atterrir au hasard dans le contenu. */
+function estDansZoneDeSaisie(cible, zone) {
+  return !!(zone && cible && zone.contains(cible.nodeType === 1 ? cible : cible.parentNode));
+}
+
+/* Colle une ou plusieurs images DANS le contenu, à l'endroit du curseur.
+
+   Réutilise tel quel le chemin des dessins insérés en ligne
+   (insererImageDansContenu + marqueur `![att:ID]`) : l'image n'est pas
+   dupliquée dans le texte, seul son identifiant y figure, et les octets
+   partent chiffrés comme n'importe quelle pièce jointe.
+
+   La position du curseur est relevée TOUT DE SUITE, avant le moindre `await`
+   : l'envoi au serveur prend du temps, et la sélection n'existe plus au
+   retour (la zone a pu perdre le focus entre-temps). */
+async function collerImagesEnLigne(images, zone, note) {
+  inlineDrawTarget = zone;
+  const sel = window.getSelection();
+  inlineDrawRange = (sel && sel.rangeCount && zone.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ? sel.getRangeAt(0).cloneRange()
+    : null;
+
+  const job = (async () => {
+    for (const file of images) {
+      const apercu = URL.createObjectURL(file);
+      try {
+        if (note) {
+          const created = await uploadAttachment(note.id, file);
+          created.meta = JSON.parse(await decryptField(created.enc_meta) || '{}');
+          if (!note.attachments) note.attachments = [];
+          note.attachments.push(created);
+          insererImageDansContenu(created.id, apercu);
+        } else {
+          // Composeur : la notask n'existe pas encore, donc pas d'identifiant
+          // à référencer. Marqueur provisoire, résolu à la création — même
+          // mécanique que le tableau blanc (voir imgEditorPersistBoard).
+          insererImageDansContenu('tmp' + composerPendingFiles.length, apercu);
+          composerPendingFiles.push(file);
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+    if (note) renderAttachmentsSimple();
+    // Une image insérée peut atterrir juste après un bloc non éditable : sans
+    // ce point d'accueil, impossible de reprendre la saisie en dessous.
+    assurerLigneApresBloc(zone);
+  })();
+  /* Suivi au même titre qu'une pièce jointe classique : l'enregistrement doit
+     attendre la fin de l'envoi, sinon le marqueur partirait dans le contenu
+     avant que la pièce jointe correspondante n'existe en base.
+
+     Uniquement pour une notask DÉJÀ créée : dans le composeur, rien n'est
+     envoyé maintenant (le fichier attend dans composerPendingFiles), il n'y a
+     donc aucun envoi à attendre. */
+  if (note) pendingAttachmentUploads.push(job);
+  return job;
+}
+
 function handleIncomingAttachments(fileList) {
   const note = state.editingNote;
   if (!note || !fileList || !fileList.length) return;
@@ -5101,7 +5184,17 @@ $('#dlg-note-simple').addEventListener('paste', (e) => {
     .filter(Boolean);
   if (!files.length) return;
   e.preventDefault();
-  handleIncomingAttachments(files);
+  const { images, autres } = trierImages(files);
+  // Une capture d'écran collée doit se VOIR, là où on l'a collée — pas
+  // atterrir dans la liste des pièces jointes en bas de carte. Les autres
+  // types de fichiers (PDF, archive…) n'ont rien à afficher en ligne et
+  // gardent le chemin d'origine.
+  if (images.length && state.editingNote && estDansZoneDeSaisie(e.target, $('#dns-content'))) {
+    collerImagesEnLigne(images, $('#dns-content'), state.editingNote);
+  } else if (images.length) {
+    handleIncomingAttachments(images);
+  }
+  if (autres.length) handleIncomingAttachments(autres);
 });
 brancherCollagePropre($('#dns-content'));
 
