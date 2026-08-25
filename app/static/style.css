@@ -3045,6 +3045,10 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   align-items: baseline;
   gap: .4rem;
   user-select: none;
+  /* Ancre .note-ligne-due-wrap, positionnée en absolu (voir plus bas) — sans
+     ça elle se positionnerait par rapport à un ancêtre bien plus loin,
+     potentiellement toute la zone de saisie. */
+  position: relative;
 
   /* Rythme vertical en PADDING et non en marge : deux cases voisines doivent
      se toucher, sinon le fond du bloc actif (voir .bloc-actif plus bas) se
@@ -3129,31 +3133,55 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
+/* Échéance (+ bouton calendrier) : posées en haut à droite de LA LIGNE, à
+   cheval sur son bord supérieur, plutôt que dans le fil du texte — demande
+   explicite après capture d'écran, où la pastille de date grignotait la
+   largeur dispo pour le texte d'une case cochée jusqu'à la faire déborder
+   sur 3-4 lignes très étroites. `position: absolute` les sort entièrement du
+   flux, donc .note-ligne-txt (flex: 1 1 auto) récupère toute la largeur.
+   translateY(-50%) est ce qui les met « à cheval » : la moitié de la
+   pastille déborde au-dessus du bord de la case (ou de l'arrondi du bloc,
+   si c'est la première case). */
+.note-ligne-due-wrap {
+  position: absolute;
+  top: 0;
+  right: .5rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: .2rem;
+  z-index: 1;
+}
 .note-ligne-due {
   flex: none;
-  align-self: center;
-  margin-left: .4rem;
-  padding: .05rem .4rem;
+  margin: 0;
+  padding: .05rem .5rem;
   border-radius: var(--shape-full);
-  background: rgba(230,224,233,.10);
+  /* Alpha remonté (.10 → .55) : posée à cheval sur le bord, la pastille se
+     détache aussi bien du fond de la carte que de celui, plus sombre, d'un
+     bloc actif — un fond quasi transparent s'y lisait mal. */
+  background: rgba(45, 42, 51, .55);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
   font-size: .6875rem;
   font-style: normal;
   color: var(--md-on-surface-variant);
 }
-/* Boutons : discrets au repos, révélés au survol de la ligne — ils ne doivent
-   pas encombrer la lecture d'une notask qui en compte dix. align-self: center
-   les sort de l'alignement sur la ligne de base, qui les ferait flotter. */
-.note-ligne-cal,
+/* Bouton calendrier : discret au repos, révélé au survol de la ligne — il ne
+   doit pas encombrer la lecture d'une notask qui en compte dix. */
+.note-ligne-cal {
+  flex: none;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.note-ligne:hover .note-ligne-cal,
+.note-ligne-cal.has-due { opacity: 1; }
+/* Retirer (✕) : reste dans le fil du texte, à sa place habituelle — seules
+   la date et le calendrier étaient en cause dans la demande. */
 .note-ligne-del {
   flex: none;
   align-self: center;
   opacity: 0;
   transition: opacity .15s ease;
-}
-.note-ligne:hover .note-ligne-cal,
-.note-ligne:hover .note-ligne-del,
-.note-ligne-cal.has-due { opacity: 1; }
-.note-ligne-del {
   padding: 0 .25rem;
   border: none;
   background: none;
@@ -3161,6 +3189,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   cursor: pointer;
   line-height: 1.2;
 }
+.note-ligne:hover .note-ligne-del { opacity: 1; }
 /* Écran tactile : pas de survol possible, les boutons restent visibles. */
 @media (hover: none) {
   .note-ligne-cal,

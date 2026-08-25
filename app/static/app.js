@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9023';
+const APP_VERSION = '0.9024';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -6030,11 +6030,19 @@ function ligneBlockHtml(ligneId, editable) {
   return `<div class="note-ligne" data-ligne="${ligneId}" contenteditable="false">`
     + `<input type="checkbox" class="note-ligne-case">`
     + `<span class="note-ligne-txt"${editable ? ' contenteditable="true"' : ''}></span>`
+    // Enveloppe positionnée hors du flux (voir .note-ligne-due-wrap dans
+    // style.css) : la date et le bouton calendrier ne mangent plus la
+    // largeur réservée au texte, ils se posent à cheval sur le coin
+    // supérieur droit de la case.
+    + `<span class="note-ligne-due-wrap">`
     + `<em class="note-ligne-due" hidden></em>`
     + (editable
       ? `<button type="button" class="note-ligne-cal cal-btn" tabindex="-1"
              title="Dater cette ligne en fait une tâche">${ICONS.calendar}</button>`
-        + `<button type="button" class="note-ligne-del" tabindex="-1"
+      : '')
+    + `</span>`
+    + (editable
+      ? `<button type="button" class="note-ligne-del" tabindex="-1"
              title="Retirer la ligne" aria-label="Retirer la ligne">✕</button>`
       : '')
     + `</div>`;
