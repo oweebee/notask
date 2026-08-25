@@ -3159,6 +3159,13 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   gap: .2rem;
   z-index: 1;
 }
+/* En zone de saisie, le bouton ✕ est resté dans le fil du texte, donc calé
+   tout à droite — exactement là où ce groupe vient se poser. Les deux se
+   superposaient au survol : le calendrier apparaissait barré d'une croix,
+   comme une icône « rendez-vous annulé » qui n'existe pas. On décale donc le
+   groupe de la largeur du ✕. Sélecteur sur la zone éditable et non sur le
+   bouton lui-même : il n'est rendu que là (voir ligneBlockHtml). */
+[contenteditable="true"] .note-ligne-due-wrap { right: 1.6rem; }
 /* Place réservée à la pastille, UNIQUEMENT sur les cases qui en portent une
    (data-due est vidé, pas retiré, quand l'échéance est effacée — voir
    majEcheanceLigne dans app.js, d'où le :not([data-due=""])). Sans cette
