@@ -1410,6 +1410,17 @@ body.is-dragging * {
   -webkit-line-clamp: 10;
   line-clamp: 10;
   overflow: hidden;
+  /* Même calage à mi-chemin que dans la boîte d'édition (voir
+     #dns-content-field) : moitié du padding horizontal de .note (1rem), et
+     le même padding+marge négative compensatoire pour que le débord de
+     .note-ligne.bloc-actif reste À L'INTÉRIEUR de la boîte de padding de
+     .body, jamais au-delà — sinon `overflow: hidden` ci-dessus (nécessaire
+     au troncage à 10 lignes) le rognerait net, comme le faisait la
+     coercition overflow-x/y dans la boîte d'édition. Le texte ne bouge pas :
+     la marge négative annule exactement le padding ajouté. */
+  --marge-bloc: .5rem;
+  margin: 0 calc(var(--marge-bloc) * -1);
+  padding: 0 var(--marge-bloc);
 }
 
 /* Même plafond pour une liste à cocher : au-delà de 10 lignes, le reste
@@ -1599,6 +1610,13 @@ body.is-dragging * {
   -webkit-line-clamp: 4;
   line-clamp: 4;
   overflow: hidden;
+  /* Même raison qu'sur .note .body : .trash-card a 1rem de padding
+     horizontal, la moitié sert de --marge-bloc pour que le fond de bloc
+     puisse déborder sans jamais franchir la boîte de padding (que
+     `overflow: hidden` ci-dessus rognerait sinon net). */
+  --marge-bloc: .5rem;
+  margin: 0 calc(var(--marge-bloc) * -1);
+  padding: 0 var(--marge-bloc);
 }
 .trash-card-meta {
   margin-top: .625rem;
