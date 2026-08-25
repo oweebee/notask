@@ -2421,6 +2421,26 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   flex-direction: column;
   overflow-y: auto;
 }
+/* Poser --marge-bloc ICI (et non sur .dns-content-editable, son propre
+   enfant) est indispensable : `overflow-y: auto` ci-dessus, combiné à un
+   `overflow-x` resté à sa valeur par défaut `visible`, force le navigateur à
+   calculer overflow-x comme `auto` lui aussi (règle CSS : impossible de
+   n'avoir qu'un seul axe en 'visible' quand l'autre ne l'est pas). Le débord
+   horizontal du fond de bloc (voir .note-ligne.bloc-actif plus bas), qui
+   sort de la boîte de #dns-content par une marge négative, se faisait donc
+   purement et simplement ROGNER à la bordure de #dns-content-field — le fond
+   restait collé au texte, sans jamais atteindre le milieu de la marge de la
+   carte. Un habillage padding+margin négatif compensatoire résout ça sans
+   toucher à `overflow-y` : le débord de .note-ligne reste ainsi À
+   L'INTÉRIEUR du padding fraîchement ouvert ici, jamais au-delà de la boîte
+   de bordure — zone que le rognage laisse toujours visible, quel que soit
+   l'axe. Le texte normal, lui, ne bouge pas d'un pixel : la marge négative
+   de #dns-content-field annule exactement son propre padding. */
+#dns-content-field {
+  --marge-bloc: .75rem;
+  margin: 0 calc(var(--marge-bloc) * -1);
+  padding: 0 var(--marge-bloc);
+}
 #dns-content { flex: 1; resize: none; }
 #dns-items-field #dns-items { flex: 1; overflow-y: auto; }
 
@@ -3025,16 +3045,18 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    position du texte ne bouge pas d'un pixel, seul le fond s'étend. Et comme
    il vaut 0 par défaut, l'affichage sur la carte d'accueil n'est pas touché —
    là, une case doit rester alignée sur le reste du contenu. */
-.dns-content-editable { --marge-bloc: .75rem; }
 .nc-content-editable { --marge-bloc: .625rem; }
 
-/* Bloc de cases sous le curseur. Un « bloc » est une suite de cases qui se
-   suivent, ne serait-ce qu'une seule ; il n'a pas d'existence dans le DOM
-   (les cases sont des frères à plat dans la zone de saisie), il est dessiné
-   en peignant le fond de chaque case de la suite et en n'arrondissant que la
-   première et la dernière. Pas d'enveloppe ajoutée : en zone contenteditable,
-   déplacer des nœuds sous le curseur au moment où l'utilisateur écrit est le
-   plus sûr moyen de lui faire perdre sa saisie.
+/* Fond des blocs de cases à cocher — PERMANENT, peu importe où se trouve le
+   curseur ou si la notask est en cours de modification (voir
+   peindreTousLesBlocs dans app.js, appelée à l'hydratation puis à chaque
+   insertion/suppression de ligne, jamais au focus/blur). Un « bloc » est une
+   suite de cases qui se suivent, ne serait-ce qu'une seule ; il n'a pas
+   d'existence dans le DOM (les cases sont des frères à plat dans la zone de
+   saisie), il est dessiné en peignant le fond de chaque case de la suite et
+   en n'arrondissant que la première et la dernière. Pas d'enveloppe ajoutée :
+   en zone contenteditable, déplacer des nœuds sous le curseur au moment où
+   l'utilisateur écrit est le plus sûr moyen de lui faire perdre sa saisie.
 
    Aucun contour, juste un fond à peine plus sombre : il s'agit de délimiter,
    pas d'encadrer. Et rien de tout ça ne change la mise en page — seule la

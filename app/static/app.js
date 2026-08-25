@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9020';
+const APP_VERSION = '0.9021';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4246,12 +4246,6 @@ brancherBarreFormat('#nc-fmt-group', '#nc-content', '#nc-text-colors', '#nc-colo
    index.html comme dans quick.html, seule leur visibilité change. */
 activerClicDansLeVide($('#nc-content'));
 activerClicDansLeVide($('#dns-content'));
-// Fond du bloc de cases sous le curseur (voir majBlocActif) : chaque case sait
-// se peindre quand on entre dedans, il ne reste qu'à effacer le dessin quand
-// le curseur repart dans le texte libre ou quitte la zone.
-brancherBlocActif('#nc-content');
-brancherBlocActif('#dns-content');
-
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
 
@@ -5295,6 +5289,10 @@ function openNoteSimpleDialog(note) {
   // sans cette ligne d'accueil, impossible de reprendre la saisie en
   // dessous (voir assurerLigneApresBloc).
   assurerLigneApresBloc($('#dns-content'));
+  // Fond des blocs de cases : peint dès l'ouverture, pas seulement au
+  // premier focus dans une case (voir peindreTousLesBlocs — persistant,
+  // pas un simple retour de saisie).
+  peindreTousLesBlocs($('#dns-content'));
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
   renderNoteDueBtnSimple();
@@ -6401,42 +6399,22 @@ function voisineDuBloc(bloc, sens) {
   return n && n.nodeType === Node.ELEMENT_NODE && n.classList.contains('note-ligne') ? n : null;
 }
 
-/* Dessine le bloc de cases où se trouve le curseur, et efface les autres.
-   `bloc` à null = le curseur n'est dans aucune case, plus rien n'est dessiné. */
-function majBlocActif(zone, bloc) {
+/* Peint TOUS les blocs de cases d'une zone, qu'on soit en train d'y écrire
+   ou pas — le fond délimite la structure de la notask, ce n'est pas un
+   retour visuel de saisie. D'abord posé comme « bloc actif sous le
+   curseur » uniquement (disparaissant dès qu'on quittait la case), ça a été
+   corrigé sur demande explicite : le cadre doit rester visible même quand on
+   n'est pas en train de modifier le bloc.
+
+   Idempotent et sans état : relit la structure réelle du DOM à chaque appel
+   plutôt que de mémoriser quoi que ce soit, donc jamais désynchronisé après
+   une insertion/suppression de ligne. */
+function peindreTousLesBlocs(zone) {
   if (!zone) return;
-  zone.querySelectorAll('.note-ligne').forEach((b) =>
-    b.classList.remove('bloc-actif', 'bloc-debut', 'bloc-fin'));
-  if (!bloc || !zone.contains(bloc)) return;
-
-  let premier = bloc;
-  for (let p = voisineDuBloc(premier, 'previousSibling'); p; p = voisineDuBloc(premier, 'previousSibling')) {
-    premier = p;
-  }
-  let courante = premier;
-  while (courante) {
-    courante.classList.add('bloc-actif');
-    const suivante = voisineDuBloc(courante, 'nextSibling');
-    if (!suivante) break;
-    courante = suivante;
-  }
-  premier.classList.add('bloc-debut');
-  courante.classList.add('bloc-fin');
-}
-
-/* Le curseur quitte les cases (clic dans le texte libre, fermeture) : plus
-   aucun bloc n'est dessiné. Posé sur la zone et non sur chaque case, parce
-   qu'il s'agit justement d'attraper ce qui se passe EN DEHORS d'elles. */
-function brancherBlocActif(zoneSel) {
-  const zone = $(zoneSel);
-  if (!zone || zone.dataset.blocActifBranche === '1') return;
-  zone.dataset.blocActifBranche = '1';
-  zone.addEventListener('focusin', (e) => {
-    const cible = e.target && e.target.closest ? e.target.closest('.note-ligne') : null;
-    if (!cible) majBlocActif(zone, null);
-  });
-  zone.addEventListener('focusout', (e) => {
-    if (!zone.contains(e.relatedTarget)) majBlocActif(zone, null);
+  zone.querySelectorAll('.note-ligne').forEach((b) => {
+    b.classList.add('bloc-actif');
+    b.classList.toggle('bloc-debut', !voisineDuBloc(b, 'previousSibling'));
+    b.classList.toggle('bloc-fin', !voisineDuBloc(b, 'nextSibling'));
   });
 }
 
@@ -6454,7 +6432,13 @@ function brancherBlocActif(zoneSel) {
      d'une liste ne propose rien : la case suivante est déjà là.
 
    L'insertion est un simple insertBefore dans le flux : le reste de la notask
-   descend tout seul, il n'y a aucune position à calculer. */
+   descend tout seul, il n'y a aucune position à calculer.
+
+   Repeint systématiquement à la fin (voir peindreTousLesBlocs) : ajouter ou
+   retirer une case en attente change la structure des blocs (une case en
+   moins ou en plus peut déplacer un arrondi de fin), et cette fonction est
+   appelée à chaque frappe — c'est le point de passage le plus fiable pour
+   garder le fond des blocs synchronisé avec le DOM réel. */
 function majLigneAttente(zone, blocActif) {
   if (!zone) return;
   zone.querySelectorAll('.note-ligne').forEach((b) => {
@@ -6463,10 +6447,13 @@ function majLigneAttente(zone, blocActif) {
     if (b.contains(document.activeElement)) return;
     b.remove();
   });
-  if (!blocActif || caseEstVide(blocActif)) return;
-  const suivant = blocActif.nextElementSibling;
-  if (suivant && suivant.classList.contains('note-ligne')) return;  // pas la dernière
-  blocActif.parentNode.insertBefore(creerBlocLigne(), blocActif.nextSibling);
+  if (blocActif && !caseEstVide(blocActif)) {
+    const suivant = blocActif.nextElementSibling;
+    if (!suivant || !suivant.classList.contains('note-ligne')) {  // dernière du bloc
+      blocActif.parentNode.insertBefore(creerBlocLigne(), blocActif.nextSibling);
+    }
+  }
+  peindreTousLesBlocs(zone);
 }
 
 /* Rend une ligne interactive dans une zone de saisie. Idempotent : appelé
@@ -6501,7 +6488,7 @@ function brancherLigneEditable(bloc) {
       bloc.remove();
       // Retirer une case peut couper un bloc en deux : les arrondis de début
       // et de fin ne sont plus au bon endroit tant qu'on n'a pas redessiné.
-      majBlocActif(zoneDuBloc, null);
+      peindreTousLesBlocs(zoneDuBloc);
     });
   }
 
@@ -6518,16 +6505,12 @@ function brancherLigneEditable(bloc) {
      ni ligne à l'enregistrement (voir richToText et lignesDepuisZone), et elle
      disparaît dès qu'on va travailler ailleurs. */
   const zone = () => bloc.closest('[contenteditable=true]');
-  txt.addEventListener('focus', () => {
-    majLigneAttente(zone(), bloc);
-    // APRÈS majLigneAttente : elle vient peut-être d'ajouter une case en
-    // attente au bloc, qui doit être peinte avec lui.
-    majBlocActif(zone(), bloc);
-  });
+  // majLigneAttente repeint déjà tous les blocs à la fin (voir sa
+  // définition) : pas besoin d'un second appel séparé ici.
+  txt.addEventListener('focus', () => majLigneAttente(zone(), bloc));
   txt.addEventListener('input', () => {
     majCaseVide(bloc);
     majLigneAttente(zone(), bloc);
-    majBlocActif(zone(), bloc);
   });
 
   txt.addEventListener('keydown', (e) => {
@@ -6555,7 +6538,7 @@ function brancherLigneEditable(bloc) {
       const zone = bloc.closest('[contenteditable=true]');
       const precedent = voisineDuBloc(bloc, 'previousSibling');
       bloc.remove();
-      majBlocActif(zone, precedent);
+      peindreTousLesBlocs(zone);
       if (precedent) {
         placerCurseurEnFin(precedent.querySelector('.note-ligne-txt'));
       } else if (zone) {
@@ -6672,7 +6655,6 @@ function insererLigneACocher(editableSel) {
      déclenche pas quand la fenêtre elle-même n'a pas la main — constaté au
      banc d'essai, où deux cases vides restaient côte à côte. */
   majLigneAttente(el, bloc);
-  majBlocActif(el, bloc);
 }
 
 /* Relit les lignes à cocher d'une zone de saisie, dans l'ordre du document,
