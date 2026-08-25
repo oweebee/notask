@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9031';
+const APP_VERSION = '0.9032';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -6062,10 +6062,11 @@ function ligneBlockHtml(ligneId, editable) {
              title="Dater cette ligne en fait une tâche">${ICONS.calendar}</button>`
       : '')
     + `</span>`
-    + (editable
-      ? `<button type="button" class="note-ligne-del" tabindex="-1"
-             title="Retirer la ligne" aria-label="Retirer la ligne">✕</button>`
-      : '')
+    // Pas de bouton « retirer » : vider le texte d'une case suffit à la faire
+    // disparaître (Retour arrière sur une case vide la retire tout de suite,
+    // et une case vide ne produit de toute façon ni marqueur ni NoteItem à
+    // l'enregistrement — voir richToText et lignesDepuisZone). Un bouton
+    // dédié faisait double emploi avec le geste naturel dans un texte.
     + `</div>`;
 }
 
@@ -6499,7 +6500,6 @@ function brancherLigneEditable(bloc) {
   const case_ = bloc.querySelector('.note-ligne-case');
   const txt = bloc.querySelector('.note-ligne-txt');
   const cal = bloc.querySelector('.note-ligne-cal');
-  const del = bloc.querySelector('.note-ligne-del');
 
   case_.addEventListener('change', () => {
     bloc.classList.toggle('done', case_.checked);
@@ -6513,17 +6513,6 @@ function brancherLigneEditable(bloc) {
       openCalPopup(cal, bloc.dataset.due || null, (iso, finIso) => {
         majEcheanceLigne(bloc, iso, finIso);
       }, bloc.dataset.dueEnd || null);
-    });
-  }
-
-  if (del) {
-    del.addEventListener('mousedown', (e) => e.preventDefault());
-    del.addEventListener('click', () => {
-      const zoneDuBloc = bloc.closest('[contenteditable=true]');
-      bloc.remove();
-      // Retirer une case peut couper un bloc en deux : les arrondis de début
-      // et de fin ne sont plus au bon endroit tant qu'on n'a pas redessiné.
-      peindreTousLesBlocs(zoneDuBloc);
     });
   }
 
