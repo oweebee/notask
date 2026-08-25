@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9021';
+const APP_VERSION = '0.9022';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -6348,6 +6348,12 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
       // comme n'importe quel autre endroit de la carte.
     }
   });
+  // Fond des blocs : visible partout où des cases sont affichées, pas
+  // seulement dans les zones de saisie — la carte d'accueil et la corbeille
+  // passent ici aussi (editable: false). Sans effet visuel là où
+  // --marge-bloc vaut 0 (défaut), donc pas de débord ni de risque de
+  // rognage à gérer pour ces vues-là.
+  peindreTousLesBlocs(root);
 }
 
 /* Étiquette d'échéance d'une ligne, et mise en évidence du bouton calendrier.
