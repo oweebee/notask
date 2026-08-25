@@ -1245,13 +1245,6 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 }
 .nc-content-editable .note-code-block { white-space: pre-wrap; }
 
-/* Bascule "Liste à cocher" : état enfoncé une fois activée */
-#nc-toggle-checklist.active-toggle {
-  background: var(--md-secondary-container);
-  color: var(--md-on-secondary-container);
-  border-color: transparent;
-}
-
 /* Barre d'outils secondaire du composeur : masquée tant qu'aucun champ n'a
    été touché (voir composerExpand() dans app.js). Agencement calqué sur la
    barre basse de l'édition rapide (.dns-bottom-bar) — mise en forme +
@@ -3013,8 +3006,47 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   display: flex;
   align-items: baseline;
   gap: .4rem;
-  margin: .3rem 0;
   user-select: none;
+
+  /* Rythme vertical en PADDING et non en marge : deux cases voisines doivent
+     se toucher, sinon le fond du bloc actif (voir .bloc-actif plus bas) se
+     retrouverait troué entre chaque ligne — les marges verticales de deux
+     frères se fondent en une seule, et rien ne peint cet intervalle. */
+  margin: 0 calc(var(--marge-bloc, 0px) * -1);
+  padding: .22rem var(--marge-bloc, 0px);
+}
+
+/* Débord horizontal du fond du bloc : il commence à MI-DISTANCE entre le bord
+   de la notask et la case à cocher, et s'arrête à la même distance à droite.
+   D'où la moitié de la marge intérieure de chaque carte — 1.5rem pour la
+   boîte d'édition, 1.25rem pour le composeur.
+
+   Le débord est obtenu par marge négative compensée par un padding égal : la
+   position du texte ne bouge pas d'un pixel, seul le fond s'étend. Et comme
+   il vaut 0 par défaut, l'affichage sur la carte d'accueil n'est pas touché —
+   là, une case doit rester alignée sur le reste du contenu. */
+.dns-content-editable { --marge-bloc: .75rem; }
+.nc-content-editable { --marge-bloc: .625rem; }
+
+/* Bloc de cases sous le curseur. Un « bloc » est une suite de cases qui se
+   suivent, ne serait-ce qu'une seule ; il n'a pas d'existence dans le DOM
+   (les cases sont des frères à plat dans la zone de saisie), il est dessiné
+   en peignant le fond de chaque case de la suite et en n'arrondissant que la
+   première et la dernière. Pas d'enveloppe ajoutée : en zone contenteditable,
+   déplacer des nœuds sous le curseur au moment où l'utilisateur écrit est le
+   plus sûr moyen de lui faire perdre sa saisie.
+
+   Aucun contour, juste un fond à peine plus sombre : il s'agit de délimiter,
+   pas d'encadrer. Et rien de tout ça ne change la mise en page — seule la
+   couleur de fond apparaît, donc le texte ne bouge jamais. */
+.note-ligne.bloc-actif { background: rgba(0, 0, 0, .12); }
+.note-ligne.bloc-debut {
+  border-top-left-radius: var(--shape-xs);
+  border-top-right-radius: var(--shape-xs);
+}
+.note-ligne.bloc-fin {
+  border-bottom-left-radius: var(--shape-xs);
+  border-bottom-right-radius: var(--shape-xs);
 }
 .note-ligne-case {
   flex: none;
