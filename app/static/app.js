@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9010';
+const APP_VERSION = '0.9011';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4331,6 +4331,11 @@ brancherBarreFormat('#nc-fmt-group', '#nc-content', '#nc-text-colors', '#nc-colo
 activerClicDansLeVide($('#nc-content'));
 activerClicDansLeVide($('#dns-content'));
 
+/* Même geste en mode liste à cocher, où la zone de texte est masquée : le
+   clic dans le vide renvoie vers la ligne vierge en attente. */
+activerClicVersDerniereLigne('.nc-card', '#nc-items');
+activerClicVersDerniereLigne('.dns-card', '#dns-items');
+
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
 // local seulement — pas de chiffrement/upload avant que la notask existe.
@@ -5707,6 +5712,46 @@ function assurerLigneApresBloc(el) {
   if (!estBloc) return;
 
   el.appendChild(document.createElement('br'));
+}
+
+/* Pendant de activerClicDansLeVide() pour le mode LISTE À COCHER.
+
+   Dans ce mode, la zone de texte libre est masquée : la notask n'est faite
+   que de lignes. Cliquer sous la dernière ne faisait donc rien du tout — il
+   n'y a aucun texte à cet endroit, seulement le fond de la carte. Or c'est
+   exactement le geste qu'on fait pour continuer une liste.
+
+   On renvoie le curseur vers la ligne vierge qui attend déjà en permanence
+   sous la dernière (voir assurerLigneVierge). Rien n'est créé : elle est
+   toujours là, il suffisait d'y aller.
+
+   Le clic n'est intercepté que s'il tombe sur la carte elle-même ou sur le
+   conteneur des lignes, jamais sur un de leurs enfants — sans quoi cliquer
+   sur une case à cocher, un libellé ou une pièce jointe déplacerait le
+   curseur au lieu d'agir. */
+function activerClicVersDerniereLigne(carteSel, itemsSel) {
+  const carte = $(carteSel);
+  const box = $(itemsSel);
+  if (!carte || !box || carte.dataset.clicListeActif) return;
+  carte.dataset.clicListeActif = '1';
+
+  carte.addEventListener('mousedown', (e) => {
+    if (e.target !== carte && e.target !== box) return;
+    // offsetParent plutôt que l'attribut `hidden` : côté édition rapide,
+    // c'est le PARENT (#dns-items-field) qui porte `hidden`, pas le
+    // conteneur des lignes lui-même. offsetParent vaut null dès qu'un
+    // ancêtre masque l'élément, quel que soit le niveau.
+    if (box.offsetParent === null) return; // notask de texte libre
+    const champs = box.querySelectorAll('input[type=text]');
+    const dernier = champs[champs.length - 1];
+    if (!dernier) return;
+    e.preventDefault();
+    dernier.focus();
+    // Curseur en fin de ligne plutôt qu'au début : on vient continuer, pas
+    // corriger le début.
+    const n = dernier.value.length;
+    dernier.setSelectionRange(n, n);
+  });
 }
 
 /* Cliquer dans le vide SOUS le texte place le curseur à la fin, comme dans
