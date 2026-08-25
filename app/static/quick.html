@@ -156,11 +156,6 @@
               <div id="nc-content" class="nc-content-editable" contenteditable="true" data-placeholder="Nouvelle notask…"></div>
               <span class="ta-resize-handle" id="nc-content-resize" aria-hidden="true"></span>
             </div>
-            <!-- Plus de bouton "+ Élément" : une ligne vierge attend en
-                 permanence sous la dernière, et devient une vraie ligne dès
-                 qu'on y tape quelque chose (voir assurerLigneVierge dans
-                 app.js). Idem en édition rapide. -->
-            <div id="nc-items" hidden></div>
             <!-- Aperçu des pièces jointes en attente : la notask n'existe pas
                  encore côté serveur tant qu'on n'a pas cliqué "Ajouter", donc
                  rien n'est envoyé avant ce moment-là (voir
@@ -203,11 +198,10 @@
                      NOTE_LINE_MARK et insererLigneACocher() dans app.js. Le bouton
                      vit dans le groupe de mise en forme, masqué en mode liste pure
                      où il n'aurait rien à faire. -->
-                <button type="button" data-fmt="ligne" title="Insérer une ligne à cocher ici"
-                        aria-label="Insérer une ligne à cocher ici"></button>
+                <button type="button" data-fmt="ligne" title="Ajouter une case à cocher"
+                        aria-label="Ajouter une case à cocher"></button>
                 <span class="fmt-sep"></span>
               </span>
-              <button type="button" id="nc-toggle-checklist" title="Transformer toute la notask en liste à cocher" aria-label="Transformer toute la notask en liste à cocher"></button>
               <!-- Masquage du contenu sur la page d'accueil uniquement. -->
               <button type="button" id="nc-toggle-mask" title="Masquer le contenu sur l'accueil" aria-label="Masquer le contenu sur l'accueil"></button>
             </div>
@@ -325,11 +319,6 @@
     <div class="field" id="dns-content-field">
       <div id="dns-content" class="dns-content-editable" contenteditable="true"></div>
     </div>
-    <div class="field" id="dns-items-field" hidden>
-      <div id="dns-items"></div>
-    </div>
-    <!-- Plus de bouton "+ Élément" : une ligne vierge attend en permanence
-         sous la dernière (voir assurerLigneVierge dans app.js). -->
     <!-- Pièces jointes : par presse-papier (screenshot), glisser-déposer sur
          la carte, ou bouton trombone ci-dessous. Chiffrées côté client avant
          l'envoi (voir uploadAttachment() dans app.js). -->
@@ -355,11 +344,10 @@
              NOTE_LINE_MARK et insererLigneACocher() dans app.js. Le bouton
              vit dans le groupe de mise en forme, masqué en mode liste pure
              où il n'aurait rien à faire. -->
-        <button type="button" data-fmt="ligne" title="Insérer une ligne à cocher ici"
-                aria-label="Insérer une ligne à cocher ici"></button>
+        <button type="button" data-fmt="ligne" title="Ajouter une case à cocher"
+                aria-label="Ajouter une case à cocher"></button>
         <span class="fmt-sep"></span>
       </span>
-      <button type="button" id="dns-toggle-checklist" title="Transformer toute la notask en liste à cocher" aria-label="Transformer toute la notask en liste à cocher"></button>
       <button type="button" id="dns-toggle-mask" title="Masquer le contenu sur l'accueil" aria-label="Masquer le contenu sur l'accueil"></button>
     </div>
     <!-- Même base d'outils que le composeur (voir #nc-tools-row) :

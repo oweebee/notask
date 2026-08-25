@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9015';
+const APP_VERSION = '0.9017';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -598,16 +598,6 @@ const ICONS = {
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
 
   tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l2 2 3.5-3.5"/><path d="M4 17l2 2 3.5-3.5"/><path d="M13 7h7"/><path d="M13 17h7"/></svg>',
-  /* Les deux icônes de la BASCULE de forme (#nc-toggle-checklist /
-     #dns-toggle-checklist). Le cadre de page est délibéré : c'est lui qui dit
-     « toute la notask change de forme », par opposition au bouton voisin
-     (data-fmt="ligne", icône `tasks`) qui n'insère qu'UNE ligne à l'endroit
-     du curseur. Les deux boutons portaient la même icône, on ne pouvait pas
-     les distinguer — c'est ce que l'utilisateur a signalé.
-     Les deux variantes ne diffèrent que par leur contenu, jamais par le
-     cadre : la destination change, le geste reste le même. */
-  noteEnListe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M7 8.6l1.3 1.3L10.8 7.4"/><path d="M13 9h4"/><path d="M7 15.6l1.3 1.3 2.5-2.5"/><path d="M13 16h4"/></svg>',
-  noteEnTexte: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M7.5 8h9"/><path d="M7.5 12h9"/><path d="M7.5 16h5"/></svg>',
   late: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><circle cx="12" cy="14.5" r="1.6" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg>',
@@ -2107,7 +2097,13 @@ function appliquerModeRapide() {
   history.replaceState(null, '', location.pathname);
 
   const boutons = {
-    liste: '#nc-toggle-checklist',
+    // `liste` visait la bascule de forme, qui n'existe plus : une notask n'a
+    // plus de « mode », elle contient des cases là où on en pose (voir
+    // NOTE_LINE_MARK). Le raccourci du widget Android pose donc simplement
+    // une première case, prête à être remplie — le geste que l'utilisateur
+    // attend quand il tape sur « liste ». Rien à changer côté Kotlin, c'est
+    // toujours la même URL /quick?mode=liste.
+    liste: '#nc-fmt-toolbar [data-fmt=ligne]',
     dictee: '#nc-dictee-btn',
     tableau: '#nc-board-btn',
     audio: '#nc-mic-btn',
@@ -3064,11 +3060,33 @@ function noteLines(n) {
   const lignes = [];
   if (n.title) lignes.push(n.title);
   if (n.description) lignes.push(n.description);
-  if (n.is_checklist) {
-    for (const it of (n.items || [])) lignes.push(it.text || '');
-  } else if (n.content) {
-    lignes.push(...n.content.split('\n'));
+  /* Le contenu porte les cases à cocher sous forme de marqueurs `[ligne:12]`
+     (voir NOTE_LINE_MARK) : leur TEXTE est dans n.items, pas là. On remplace
+     donc chaque marqueur par le texte de sa ligne — sans quoi la recherche ne
+     retrouverait plus une notask par le libellé d'une de ses cases, et le
+     découpage en contexte afficherait des marqueurs bruts à l'écran.
+
+     Les lignes qui n'ont pas (ou plus) de marqueur sont ajoutées à la suite :
+     c'est le cas des notasks créées avant la disparition des modes, dont le
+     contenu est vide et les lignes uniquement dans n.items. */
+  /* Une ligne mise de côté SEULE (NoteItem.archived) ne compte pour aucun des
+     deux chemins : elle a quitté la notask et s'affiche désormais dans les
+     Archives, comme une ligne à part. La faire ressortir ici rendrait sa
+     notask d'origine trouvable par un texte qui n'y figure plus — et le
+     découpage en contexte afficherait une ligne absente de l'écran. */
+  const items = (n.items || []).filter((i) => !i.archived);
+  const vues = new Set();
+  if (n.content) {
+    lignes.push(...n.content.replace(NOTE_LINE_MARK, (m, id) => {
+      const it = items.find((i) => String(i.id) === id);
+      if (!it) return '';
+      vues.add(it.id);
+      return '\n' + (it.text || '');
+    }).split('\n'));
   }
+  // Lignes qu'aucun marqueur ne cite : notask créée avant la disparition des
+  // modes, dont le contenu est vide et les lignes seulement dans n.items.
+  for (const it of items) if (!vues.has(it.id)) lignes.push(it.text || '');
   return lignes;
 }
 
@@ -4012,10 +4030,11 @@ async function commitNoteOrder() {
   loadNotes();
 }
 
-/* Composeur — bascule entre texte libre et liste à cocher en direct : dès
-   qu'on coche l'option, chaque ligne devient une case, comme dans Keep. */
-let composerChecklist = false;
-let composerItems = [{ text: '', checked: false }];
+/* Plus de `composerChecklist` ni de `composerItems` : une notask n'a plus de
+   forme. Elle a un contenu, dans lequel on pose des cases à cocher là où on
+   veut (voir NOTE_LINE_MARK). Les cases du composeur vivent donc dans
+   #nc-content comme tout le reste, et sont relues à l'enregistrement par
+   lignesDepuisZone(). */
 // Couleur/libellés/échéance : mêmes réglages que sur une notask existante,
 // disponibles dès la création (voir la barre d'outils secondaire ci-dessous).
 let composerColor = 'default';
@@ -4059,8 +4078,6 @@ function resetComposer() {
   $('#nc-title').value = '';
   $('#nc-description').value = '';
   $('#nc-content').innerHTML = '';
-  composerChecklist = false;
-  composerItems = [{ text: '', checked: false }];
   // composerColor n'est VOLONTAIREMENT pas remis à 'default' : la couleur
   // choisie est conservée d'une note à l'autre, qu'on ait ajouté ou annulé
   // (voir appliquerCouleurComposeur, appelée plus bas une fois le composeur
@@ -4112,17 +4129,6 @@ $('#nc-icon-btn').addEventListener('click', () => {
   });
 });
 
-/* Garantit qu'une ligne vierge attend toujours en dernière position, prête à
-   être remplie — elle remplace l'ancien bouton "+ Élément". Les lignes vides
-   sont de toute façon écartées à l'enregistrement (filter sur text.trim()),
-   celle-ci ne risque donc jamais de se retrouver dans la notask. */
-function assurerLigneVierge(liste) {
-  const derniere = liste[liste.length - 1];
-  if (!derniere || derniere.text.trim()) {
-    liste.push({ text: '', checked: false, due_at: null, due_end_at: null });
-  }
-}
-
 function renderComposer() {
   // Déclenchement DIRECT, en plus du ResizeObserver global (voir
   // mosaicResizeObserver/layoutMosaic()) : signalé encore chevauchant les
@@ -4134,13 +4140,7 @@ function renderComposer() {
   // nul si la hauteur n'a pas changé : layoutMosaic() replace alors les
   // cartes exactement où elles étaient déjà.
   scheduleLayoutMosaic(0);
-  $('#nc-content').hidden = composerChecklist;
-  $('#nc-items').hidden = !composerChecklist;
-  // Gras/italique/souligné/code ne s'appliquent qu'au texte libre : groupe
-  // masqué en mode liste à cocher, comme #dns-fmt-group en édition rapide.
-  // La bascule note/liste, elle, reste visible dans les deux sens.
-  $('#nc-fmt-group').hidden = composerChecklist;
-  renderComposerChecklistBtn();
+
   // Le bloc entier (fond arrondi propre, voir .nc-toolbar-block) bascule,
   // pas seulement la rangée de boutons à l'intérieur.
   $('#nc-toolbar-block').hidden = !composerExpanded;
@@ -4149,97 +4149,6 @@ function renderComposer() {
   $('#nc-labels').hidden = !composerExpanded;
   if (!composerExpanded) $('#nc-labels-picker').hidden = true;
   $('#nc-cancel').hidden = !composerExpanded;
-  if (!composerChecklist) return;
-
-  renderComposerItems();
-}
-
-/* Rendu des seules lignes à cocher du composeur. Extrait de renderComposer()
-   pour avoir un pendant à renderNoteItemsSimple() côté édition : dater une
-   ligne doit redessiner les lignes, et rien d'autre. Passer par
-   renderComposer() entier rejouerait aussi l'état déplié, les libellés et la
-   palette — beaucoup de travail pour afficher une pastille de date. */
-function renderComposerItems() {
-  const box = $('#nc-items');
-  box.innerHTML = '';
-  assurerLigneVierge(composerItems);
-  composerItems.forEach((item, idx) => box.appendChild(creerLigneComposeur(item, idx)));
-  majSuppressionLigneVierge('#nc-items', composerItems);
-}
-
-/* `anime` : réservé à la ligne qui vient d'apparaître sous la frappe (voir
-   l'animation gélatine dans style.css). Jamais au rendu complet, où toutes
-   les lignes surgiraient ensemble à chaque redessin. */
-function creerLigneComposeur(item, idx, anime = false) {
-  const row = document.createElement('div');
-  row.className = 'composer-item-row' + (anime ? ' ligne-apparait' : '');
-  // Bouton d'échéance identique à celui de l'édition rapide (voir
-  // creerLigneNoteSimple) : il n'existait qu'à l'édition, si bien qu'une
-  // liste à cocher devait être créée puis rouverte pour dater ses lignes.
-  // Rien ne le justifiait — le format d'envoi transporte déjà due_at par
-  // ligne (voir le gestionnaire #nc-add).
-  row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-    <input type="text" value="${escapeHtml(item.text)}" placeholder="Élément…">
-    <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
-            title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
-    <button class="btn ghost sm" type="button" aria-label="Retirer">✕</button>`;
-  const [cb, txt, cal, del] = row.children;
-  cb.onchange = (e) => { item.checked = e.target.checked; };
-  txt.oninput = (e) => {
-    item.text = e.target.value;
-    // Dès qu'on écrit dans la ligne d'attente, elle devient une vraie ligne
-    // et une nouvelle vient prendre sa place en dessous. La rangée est
-    // ajoutée au DOM à la main plutôt que par un rendu complet : celui-ci
-    // recréerait le champ en cours de frappe et ferait perdre le curseur.
-    if (idx === composerItems.length - 1 && txt.value.trim()) {
-      assurerLigneVierge(composerItems);
-      const nouvelIdx = composerItems.length - 1;
-      $('#nc-items').appendChild(creerLigneComposeur(composerItems[nouvelIdx], nouvelIdx, true));
-      majSuppressionLigneVierge('#nc-items', composerItems);
-    }
-  };
-  txt.onkeydown = (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    // Entrée : on saute à la ligne d'attente, déjà présente en dessous.
-    const suivante = row.nextElementSibling;
-    if (suivante) suivante.querySelector('input[type=text]').focus();
-  };
-  cal.onclick = () => {
-    openCalPopup(cal, composerItems[idx].due_at, (iso, finIso) => {
-      composerItems[idx].due_at = iso;
-      composerItems[idx].due_end_at = (iso && finIso) || null;
-      renderComposerItems();
-    }, composerItems[idx].due_end_at || null);
-  };
-  del.onclick = () => {
-    composerItems.splice(idx, 1);
-    renderComposer();
-  };
-  return row;
-}
-
-/* La ligne d'attente n'a rien à supprimer : son bouton ✕ est masqué tant
-   qu'elle est vide, pour ne pas laisser croire à une ligne réelle. */
-function majSuppressionLigneVierge(boxSelecteur, liste) {
-  const rangees = [...$(boxSelecteur).children];
-  rangees.forEach((row, i) => {
-    const bouton = row.querySelector('button.btn');
-    if (bouton) bouton.hidden = (i === liste.length - 1) && !(liste[i] || {}).text.trim();
-  });
-}
-
-// Même icône dynamique (crayon/liste) que #dns-toggle-checklist dans
-// l'édition simple, pour rester cohérent d'un bout à l'autre de l'app.
-function renderComposerChecklistBtn() {
-  const btn = $('#nc-toggle-checklist');
-  btn.innerHTML = composerChecklist ? ICONS.noteEnTexte : ICONS.noteEnListe;
-  const label = composerChecklist
-    ? 'Transformer toute la notask en texte libre'
-    : 'Transformer toute la notask en liste à cocher';
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-  btn.classList.toggle('active-toggle', composerChecklist);
 }
 
 $('#nc-toggle-mask').addEventListener('click', () => {
@@ -4248,23 +4157,6 @@ $('#nc-toggle-mask').addEventListener('click', () => {
   renderBoutonMasque('#nc-toggle-mask', composerMasked);
 });
 renderBoutonMasque('#nc-toggle-mask', false);
-
-$('#nc-toggle-checklist').addEventListener('click', () => {
-  composerExpand();
-  // Mêmes deux conversions qu'en édition rapide, et pour les mêmes raisons —
-  // voir poserLignesDansTexte() / listeDepuisTexte() : rien ne doit se perdre
-  // en chemin, ni une échéance de ligne, ni une case cochée.
-  if (!composerChecklist) {
-    const items = listeDepuisTexte($('#nc-content'));
-    composerItems = items.length ? items : [{ text: '', checked: false }];
-    $('#nc-content').innerHTML = '';
-  } else {
-    $('#nc-content').innerHTML = '';
-    poserLignesDansTexte(composerItems, $('#nc-content'));
-  }
-  composerChecklist = !composerChecklist;
-  renderComposer();
-});
 
 // Couleur : mêmes swatches .c-* que partout ailleurs, reconstruites à
 // chaque ouverture (liste courte, pas besoin de mise en cache — évite
@@ -4357,8 +4249,6 @@ activerClicDansLeVide($('#dns-content'));
 
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
-activerClicVersDerniereLigne('.nc-card', '#nc-items', '#nc-toggle-checklist', '#nc-content');
-activerClicVersDerniereLigne('.dns-card', '#dns-items', '#dns-toggle-checklist', '#dns-content');
 
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
@@ -4719,10 +4609,9 @@ $('#dns-mic-btn').addEventListener('click', () => {
   });
 });
 $('#dns-dictee-btn').addEventListener('click', () => {
-  // En mode liste à cocher, #dns-content est masqué : on dicte alors dans la
-  // description, seul champ texte libre restant.
-  basculerDictee('#dns-dictee-btn', () =>
-    (state.editingIsChecklist ? $('#dns-description') : $('#dns-content')));
+  // Plus de mode liste : #dns-content est toujours affiché, on y dicte
+  // toujours. Le repli sur la description n'a plus lieu d'être.
+  basculerDictee('#dns-dictee-btn', () => $('#dns-content'));
 });
 
 $('#nc-attach-btn').addEventListener('click', () => $('#nc-attach-input').click());
@@ -4774,44 +4663,35 @@ async function creerNotaskDepuisComposeur() {
   if (creationEnCours) return;
   const title = $('#nc-title').value.trim();
   const content = richToText($('#nc-content')).trim();
-  const items = composerItems.filter((i) => i.text.trim());
-  // Lignes à cocher posées DANS le texte (notask mixte, voir
-  // NOTE_LINE_MARK) : elles n'existent que dans la zone de saisie, pas dans
-  // composerItems, qui reste la liste du mode "liste à cocher" pur.
-  const lignesMixtes = composerChecklist ? [] : lignesDepuisZone($('#nc-content'));
+  // Cases à cocher posées dans le texte : c'est le SEUL endroit où elles
+  // existent désormais (voir NOTE_LINE_MARK). Une notask sans aucune case
+  // renvoie simplement un tableau vide.
+  const lignesMixtes = lignesDepuisZone($('#nc-content'));
 
-  if (!title && !content && !(composerChecklist && items.length) && !composerPendingFiles.length) return;
+  if (!title && !content && !composerPendingFiles.length) return;
 
   creationEnCours = true;
   try {
     const body = {
       title: await encryptField(title),
       description: await encryptField($('#nc-description').value.trim()),
-      content: composerChecklist ? '' : await encryptField(content),
-      is_checklist: composerChecklist,
-      // calendar_title par ligne, comme à l'édition (voir
-      // saveNoteSimpleDialog) : c'est le seul texte en clair que le serveur
-      // reçoit d'une ligne, et uniquement quand elle porte une échéance —
-      // il lui sert à nommer l'événement Google Calendar correspondant.
-      // Il manquait ici, si bien qu'une ligne datée dès la création
-      // n'arrivait jamais dans l'agenda. Calculé AVANT le chiffrement, qui
-      // écrase i.text sur le même objet.
-      items: composerChecklist
-        ? await Promise.all(items.map(async (i) => ({
-          ...i,
-          calendar_title: i.due_at ? i.text : null,
-          text: await encryptField(i.text),
-        })))
-        // Hors mode liste : les lignes éventuellement posées dans le texte.
-        // Vide dans le cas courant (texte libre sans aucune case), donc rien
-        // ne change pour les notasks ordinaires.
-        : await Promise.all(lignesMixtes.map(async (l) => ({
-          checked: l.checked,
-          due_at: l.due_at,
-          due_end_at: l.due_end_at,
-          calendar_title: l.due_at ? l.text : null,
-          text: await encryptField(l.text),
-        }))),
+      content: await encryptField(content),
+      // Toujours faux : une notask n'a plus de forme, elle a un contenu. Le
+      // champ reste dans le modèle pour les notasks créées AVANT ce
+      // changement, qui l'ont à vrai jusqu'à leur prochain enregistrement
+      // (voir la migration dans openNoteSimpleDialog).
+      is_checklist: false,
+      // calendar_title par ligne : c'est le seul texte en clair que le
+      // serveur reçoit d'une ligne, et uniquement quand elle porte une
+      // échéance — il lui sert à nommer l'événement Google Calendar
+      // correspondant. Logique inchangée.
+      items: await Promise.all(lignesMixtes.map(async (l) => ({
+        checked: l.checked,
+        due_at: l.due_at,
+        due_end_at: l.due_end_at,
+        calendar_title: l.due_at ? l.text : null,
+        text: await encryptField(l.text),
+      }))),
       icon: state.composerIcon,
       color: composerColor,
       due_at: $('#nc-due').value || null,
@@ -4880,7 +4760,7 @@ async function creerNotaskDepuisComposeur() {
       if (corrige !== null) { contenuFinal = corrige; remplace = true; }
     }
 
-    if (remplace && !composerChecklist) {
+    if (remplace) {
       await api('/notes/' + created.id, {
         method: 'PATCH',
         body: { content: await encryptField(contenuFinal) },
@@ -5336,41 +5216,27 @@ function initSousMenuArchive(wrapSelecteur, zoneSelecteur) {
 initSousMenuArchive('#dns-fmt-toolbar .fmt-archive-wrap', '#dns-content');
 initSousMenuArchive('#nc-fmt-toolbar .fmt-archive-wrap', '#nc-content');
 
-function renderDnsMode() {
-  $('#dns-content-field').hidden = state.editingIsChecklist;
-  $('#dns-fmt-group').hidden = state.editingIsChecklist;
-  $('#dns-items-field').hidden = !state.editingIsChecklist;
-  const btn = $('#dns-toggle-checklist');
-  btn.innerHTML = state.editingIsChecklist ? ICONS.noteEnTexte : ICONS.noteEnListe;
-  const label = state.editingIsChecklist
-    ? 'Transformer toute la notask en texte libre'
-    : 'Transformer toute la notask en liste à cocher';
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-}
+/* Reprise d'une notask créée AVANT la disparition des modes : elle a
+   `is_checklist` à vrai, un `content` vide et ses lignes dans `note.items`,
+   sans aucun marqueur pour dire où elles se trouvent dans le texte. On les
+   repose donc en tête du contenu, dans leur ordre d'origine.
 
-/* ================== Bascule entre les deux formes d'une notask ============
-   Liste à cocher PURE (les lignes vivent dans #dns-items / composerItems) et
-   texte libre, éventuellement MIXTE (les lignes vivent dans le texte, sous
-   forme de blocs — voir NOTE_LINE_MARK).
+   La migration n'écrit rien toute seule : elle ne devient définitive qu'au
+   prochain enregistrement de la notask, qui produira les marqueurs. Une
+   notask qu'on ouvre puis referme sans y toucher passe malgré tout par
+   saveNoteSimpleDialog() — c'est voulu, c'est ce qui fait que le parc se
+   convertit au fil de la consultation, sans opération de bascule en base.
 
-   Les deux conversions ci-dessous ne perdent rien : ni l'identifiant d'une
-   ligne, ni son échéance, ni son état coché. C'était le cas AVANT pour le
-   passage liste -> texte, qui aplatissait tout en simples paragraphes : les
-   échéances par ligne et leurs événements Google disparaissaient sans un
-   mot. */
-
-/* Liste -> texte : chaque ligne devient un bloc à cocher posé dans le texte.
-   Les blocs sont construits à la main (et non par renderFormatted +
-   hydratation) parce qu'une ligne encore jamais enregistrée n'existe pas
-   dans note.items : ses valeurs ne sont disponibles qu'ici. */
+   Les blocs sont construits à la main plutôt que par renderFormatted +
+   hydratation : une ligne jamais enregistrée n'a pas d'identifiant, ses
+   valeurs ne sont disponibles qu'ici. */
 function poserLignesDansTexte(items, zone) {
   const fragment = document.createDocumentFragment();
   items.filter((i) => (i.text || '').trim()).forEach((i) => {
     const bloc = creerBlocLigne();
     // Ligne déjà en base : on garde son identifiant, donc son lien vers son
-    // échéance et son événement Google. Sinon on laisse l'identifiant
-    // provisoire posé par creerBlocLigne(), résolu à l'enregistrement.
+    // échéance et son événement Google Calendar — rien de la logique
+    // d'échéance ne change dans cette conversion.
     if (i.id != null) bloc.dataset.ligne = String(i.id);
     bloc.querySelector('.note-ligne-txt').textContent = i.text;
     bloc.querySelector('.note-ligne-case').checked = !!i.checked;
@@ -5381,65 +5247,12 @@ function poserLignesDansTexte(items, zone) {
   // Point d'accueil pour la suite de la saisie : sans lui, impossible de
   // poser le curseur sous le dernier bloc (cf. assurerLigneApresBloc).
   fragment.appendChild(document.createElement('br'));
-  // Ajouté APRÈS le contenu existant plutôt qu'à sa place : en mode liste il
-  // est vide, mais rien ne doit dépendre de cette supposition.
   zone.appendChild(fragment);
 }
-
-/* Texte -> liste : l'inverse exact. Les blocs à cocher redeviennent des
-   lignes de liste (identifiant et échéance compris), les paragraphes de
-   texte deviennent des lignes neuves. L'ordre du document est conservé. */
-function listeDepuisTexte(zone) {
-  const parBloc = new Map();
-  lignesDepuisZone(zone).forEach((l) => parBloc.set(l.marqueur, l));
-  const items = [];
-  richToText(zone).split('\n').forEach((ligne) => {
-    const m = ligne.trim().match(/^\[ligne:(\w+)\]$/);
-    if (m) {
-      const l = parBloc.get(m[1]);
-      if (l) items.push({
-        id: l.id, text: l.text, checked: l.checked,
-        due_at: l.due_at, due_end_at: l.due_end_at,
-      });
-      return;
-    }
-    // Déséchappement des délimiteurs, comme le fait renderFormatted à la fin
-    // de son rendu : sans lui, un texte contenant « fichier_important »
-    // arrivait dans la liste avec ses antislashs visibles.
-    const texte = ligne.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\').trim();
-    if (texte) items.push({ text: texte, checked: false, due_at: null });
-  });
-  return items;
-}
-
-$('#dns-toggle-checklist').addEventListener('click', () => {
-  if (!state.editingIsChecklist) {
-    const items = listeDepuisTexte($('#dns-content'));
-    state.editingNoteItems = items.length ? items : [{ text: '', checked: false, due_at: null }];
-    $('#dns-content').innerHTML = '';
-    renderNoteItemsSimple();
-  } else {
-    $('#dns-content').innerHTML = '';
-    poserLignesDansTexte(state.editingNoteItems, $('#dns-content'));
-  }
-  state.editingIsChecklist = !state.editingIsChecklist;
-  renderDnsMode();
-});
 
 function openNoteSimpleDialog(note) {
   state.editingNote = note;
   state.editingNoteOriginal = noteSnapshotFromNote(note);
-  state.editingIsChecklist = note.is_checklist;
-  // `id` conservé : c'est lui qui permet au serveur de METTRE À JOUR la ligne
-  // au lieu de la détruire et d'en recréer une (voir _replace_items dans
-  // app/routers/notes.py). Sans lui, chaque enregistrement changeait
-  // l'identifiant de toutes les lignes, ce qui faisait perdre leur lien vers
-  // l'événement Google Calendar — et donc en créait un doublon à chaque fois.
-  // Une ligne ajoutée dans l'éditeur n'a pas d'id : elle vaudra undefined,
-  // que le serveur interprète comme « à créer ».
-  state.editingNoteItems = note.items.map((i) => ({
-    id: i.id, text: i.text, checked: i.checked, due_at: i.due_at, due_end_at: i.due_end_at || null,
-  }));
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
   pendingAttachmentUploads = [];
   state.editingLabelIds = [...(note.label_ids || [])];
@@ -5460,16 +5273,25 @@ function openNoteSimpleDialog(note) {
   // Notask mixte : les `[ligne:…]` du contenu ont donné des blocs vides,
   // remplis ici depuis note.items — cf. NOTE_LINE_MARK.
   hydrateLignesACocher($('#dns-content'), note, { editable: true });
+
+  /* Notask d'avant la disparition des modes : ses lignes sont dans
+     `note.items` mais aucun marqueur ne les place dans le texte. On les
+     repose en tête, une fois — voir poserLignesDansTexte(). La condition
+     porte sur l'ABSENCE de marqueur et non sur `is_checklist` : c'est la
+     seule qui décrive vraiment le problème, et elle reste juste si une
+     notask arrive un jour avec `is_checklist` à vrai ET des marqueurs. */
+  if (note.items.length && !$('#dns-content').querySelector('.note-ligne')) {
+    poserLignesDansTexte(note.items, $('#dns-content'));
+  }
+
   ajouterBoutonsCopieCode($('#dns-content'));
   // Une notask déjà enregistrée peut elle aussi se terminer par un bloc :
   // sans cette ligne d'accueil, impossible de reprendre la saisie en
   // dessous (voir assurerLigneApresBloc).
   assurerLigneApresBloc($('#dns-content'));
-  renderDnsMode();
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
   renderNoteDueBtnSimple();
-  renderNoteItemsSimple();
   renderAttachmentsSimple();
   renderNoteLabelChipsSimple();
   applyDialogColor($('#dlg-note-simple'), state.editingColor);
@@ -5843,79 +5665,6 @@ function assurerLigneApresBloc(el) {
   if (!estBloc) return;
 
   el.appendChild(document.createElement('br'));
-}
-
-/* Pendant de activerClicDansLeVide() pour le mode LISTE À COCHER.
-
-   Dans ce mode, la zone de texte libre est masquée : la notask n'est faite
-   que de lignes. Cliquer sous la dernière ne faisait donc rien du tout — il
-   n'y a aucun texte à cet endroit, seulement le fond de la carte. Or c'est
-   exactement le geste qu'on fait pour continuer une liste.
-
-   On renvoie le curseur vers la ligne vierge qui attend déjà en permanence
-   sous la dernière (voir assurerLigneVierge). Rien n'est créé : elle est
-   toujours là, il suffisait d'y aller.
-
-   On ne se fie PAS à une égalité stricte avec tel ou tel conteneur : une
-   première version ne réagissait qu'aux clics tombant exactement sur la
-   carte ou sur la liste des lignes, et ne marchait donc jamais — le vide
-   sous la dernière ligne appartient en réalité à un conteneur intermédiaire
-   (`.field` autour des lignes, rangée de libellés étirée…). On raisonne
-   donc à l'envers : tout clic est bon SAUF s'il vise quelque chose
-   d'interactif ou une autre zone de la carte. */
-const ZONES_A_NE_PAS_DETOURNER = [
-  'input', 'button', 'a', 'select', 'textarea', 'label',
-  '[contenteditable]',
-  '.label-chips', '.label-add-picker',
-  '.dns-attachments', '.dns-dropzone-hint',
-  '.title-row', '.composer-head',
-  '.fmt-toolbar', '.field-actions-row', '.palette',
-].join(',');
-
-function activerClicVersDerniereLigne(carteSel, itemsSel, basculeSel, contenuSel) {
-  const carte = $(carteSel);
-  const box = $(itemsSel);
-  if (!carte || !box || carte.dataset.clicListeActif) return;
-  carte.dataset.clicListeActif = '1';
-
-  carte.addEventListener('mousedown', (e) => {
-    if (e.target.closest(ZONES_A_NE_PAS_DETOURNER)) return;
-
-    // offsetParent plutôt que l'attribut `hidden` : côté édition rapide,
-    // c'est le PARENT (#dns-items-field) qui porte `hidden`, pas le
-    // conteneur des lignes lui-même. offsetParent vaut null dès qu'un
-    // ancêtre masque l'élément, quel que soit le niveau.
-    if (box.offsetParent === null) return; // notask de texte libre
-
-    const champs = box.querySelectorAll('input[type=text]');
-    const dernier = champs[champs.length - 1];
-    if (!dernier) return;
-
-    // Uniquement SOUS la dernière ligne : un clic à hauteur du titre ou
-    // entre deux lignes n'a rien à faire ici.
-    if (e.clientY <= dernier.getBoundingClientRect().bottom) return;
-
-    e.preventDefault();
-
-    /* Cliquer SOUS la dernière case veut dire « je veux écrire ici », pas
-       « ajoute une case de plus » — pour ajouter une case, il y a la ligne
-       d'attente juste au-dessus, à portée de clic.
-
-       La notask passe donc en forme MIXTE : les cases restent des cases (et
-       gardent leur identifiant, leur échéance, leur état), mais elles vivent
-       désormais dans le texte, où l'on peut écrire au-dessus, au-dessous et
-       entre elles. Voir poserLignesDansTexte().
-
-       Rien n'est perdu et le geste est réversible : le bouton de la barre
-       d'outils (bascule) ramène à une liste pure. On passe d'ailleurs par ce
-       bouton plutôt que de refaire la conversion ici — un seul chemin, donc
-       un seul endroit où elle peut être fausse. */
-    const bascule = $(basculeSel);
-    const contenu = $(contenuSel);
-    if (!bascule || !contenu) { dernier.focus(); return; }
-    bascule.click();
-    placerCurseurEnFin(contenu);
-  });
 }
 
 /* Cliquer dans le vide SOUS le texte place le curseur à la fin, comme dans
@@ -6643,14 +6392,40 @@ function brancherLigneEditable(bloc) {
     del.addEventListener('click', () => { bloc.remove(); });
   }
 
+  /* Ligne d'attente : dès qu'on écrit dans la dernière case d'un groupe, une
+     case vide vient prendre sa place en dessous, prête à être remplie. C'est
+     le comportement de l'ancien éditeur de liste, transposé ici — il évite
+     d'avoir à redemander une case à chaque élément quand on énumère.
+
+     « Dernière d'un groupe » et non « dernière de la notask » : dans une
+     notask qui mêle cases et texte, écrire dans une case du milieu ne doit
+     rien ajouter, la case suivante est déjà là.
+
+     La case d'attente ne coûte rien si on n'en veut pas : vide, elle ne
+     produit ni marqueur ni ligne à l'enregistrement (voir richToText et
+     lignesDepuisZone), elle disparaît donc d'elle-même à la fermeture. */
+  txt.addEventListener('input', () => {
+    if (!txt.textContent.trim()) return;
+    const suivant = bloc.nextElementSibling;
+    if (suivant && suivant.classList.contains('note-ligne')) return;
+    const nouveau = creerBlocLigne();
+    bloc.parentNode.insertBefore(nouveau, bloc.nextSibling);
+  });
+
   txt.addEventListener('keydown', (e) => {
-    /* Entrée : une nouvelle ligne à cocher juste en dessous — le geste
-       attendu quand on est en train d'énumérer. Maj+Entrée en sort au
-       contraire, pour reprendre du texte libre sous la liste. */
+    /* Entrée : on descend dans la case suivante. Elle existe déjà — la ligne
+       d'attente ci-dessus l'a créée dès la première frappe — donc on s'y
+       rend au lieu d'en fabriquer une seconde. Maj+Entrée sort au contraire
+       de la liste, pour reprendre du texte libre en dessous. */
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) sortirDeLaLigne(bloc);
-      else insererLigneApres(bloc);
+      if (e.shiftKey) { sortirDeLaLigne(bloc); return; }
+      const suivant = bloc.nextElementSibling;
+      if (suivant && suivant.classList.contains('note-ligne')) {
+        placerCurseurEnFin(suivant.querySelector('.note-ligne-txt'));
+      } else {
+        insererLigneApres(bloc);
+      }
       return;
     }
     /* Retour arrière sur une ligne déjà vide : elle disparaît, et le curseur
@@ -6659,10 +6434,17 @@ function brancherLigneEditable(bloc) {
        réflexe, dans un texte, est d'effacer. */
     if (e.key === 'Backspace' && !txt.textContent.trim()) {
       e.preventDefault();
+      const zone = bloc.closest('[contenteditable=true]');
       const precedent = bloc.previousElementSibling;
       bloc.remove();
       if (precedent && precedent.classList.contains('note-ligne')) {
         placerCurseurEnFin(precedent.querySelector('.note-ligne-txt'));
+      } else if (zone) {
+        /* Repli indispensable : le bloc effacé était le premier, ou n'avait
+           qu'un saut de ligne avant lui. Sans ça, le curseur disparaissait
+           avec le bloc et la zone de saisie devenait muette — plus rien ne
+           répondait au clavier tant qu'on n'avait pas recliqué dedans. */
+        placerCurseurEnFin(zone);
       }
     }
   });
@@ -7049,55 +6831,6 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   return html;
 }
 
-function renderNoteItemsSimple() {
-  const box = $('#dns-items');
-  box.innerHTML = '';
-  assurerLigneVierge(state.editingNoteItems);
-  state.editingNoteItems.forEach((item, idx) => box.appendChild(creerLigneNoteSimple(item, idx)));
-  majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
-}
-
-/* `anime` : cf. creerLigneComposeur — uniquement la ligne qui vient
-   d'apparaître sous la frappe. */
-function creerLigneNoteSimple(item, idx, anime = false) {
-  const row = document.createElement('div');
-  row.className = 'dn-item-row' + (anime ? ' ligne-apparait' : '');
-  row.innerHTML = `<input type="checkbox" ${item.checked ? 'checked' : ''}>
-    <input type="text" value="${escapeHtml(item.text)}" placeholder="Texte de la ligne">
-    <button type="button" class="cal-btn${item.due_at ? ' has-due' : ''}"
-            title="${item.due_at ? formatDueRange(item.due_at, item.due_end_at) : 'Dater cette ligne en fait une tâche'}">${ICONS.calendar}</button>
-    <button class="btn ghost sm" type="button" title="Retirer la ligne">✕</button>`;
-  const [cb, txt, cal, del] = row.children;
-  cb.onchange = (e) => { state.editingNoteItems[idx].checked = e.target.checked; };
-  txt.oninput = (e) => {
-    state.editingNoteItems[idx].text = e.target.value;
-    // Cf. creerLigneComposeur : la ligne d'attente devient réelle et une
-    // nouvelle apparaît en dessous, sans rendu complet (qui ferait perdre
-    // le curseur en pleine frappe).
-    if (idx === state.editingNoteItems.length - 1 && txt.value.trim()) {
-      assurerLigneVierge(state.editingNoteItems);
-      const nouvelIdx = state.editingNoteItems.length - 1;
-      $('#dns-items').appendChild(creerLigneNoteSimple(state.editingNoteItems[nouvelIdx], nouvelIdx, true));
-      majSuppressionLigneVierge('#dns-items', state.editingNoteItems);
-    }
-  };
-  txt.onkeydown = (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const suivante = row.nextElementSibling;
-    if (suivante) suivante.querySelector('input[type=text]').focus();
-  };
-  cal.onclick = () => {
-    openCalPopup(cal, state.editingNoteItems[idx].due_at, (iso, finIso) => {
-      state.editingNoteItems[idx].due_at = iso;
-      state.editingNoteItems[idx].due_end_at = (iso && finIso) || null;
-      renderNoteItemsSimple();
-    }, state.editingNoteItems[idx].due_end_at || null);
-  };
-  del.onclick = () => { state.editingNoteItems.splice(idx, 1); renderNoteItemsSimple(); };
-  return row;
-}
-
 /* Couleur en édition rapide : elle n'y était pas (réservée à la boîte
    "Modifier" complète), ajoutée pour que les trois barres d'outils —
    création, édition rapide d'une note, édition rapide d'une liste à
@@ -7151,24 +6884,21 @@ async function saveNoteSimpleDialog() {
     // l'ancienne boîte "Modifier" complète qui portait ce réglage jusque-là,
     // donc state.editingIcon (et non plus l'icône figée de l'état chargé)
     // entre bien dans la comparaison.
-    // Notask mixte : les lignes ne vivent pas dans state.editingNoteItems
-    // mais directement dans la zone de texte, sous forme de blocs (voir
-    // NOTE_LINE_MARK). Elles doivent entrer dans la comparaison au même
-    // titre — sans ça, cocher une case ou dater une ligne d'une notask mixte
-    // ne créerait aucun point d'historique.
-    const lignesMixtes = state.editingIsChecklist ? [] : lignesDepuisZone($('#dns-content'));
-    const contenuClair = state.editingIsChecklist ? '' : richToText($('#dns-content'));
-    const currentItemsForDiff = (state.editingIsChecklist
-      ? state.editingNoteItems.filter((i) => i.text.trim())
-      : lignesMixtes
-    ).map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }));
+    // Les cases à cocher ne vivent que dans la zone de texte, sous forme de
+    // blocs (voir NOTE_LINE_MARK). Elles entrent dans la comparaison au même
+    // titre que le reste — sans ça, cocher une case ou dater une ligne ne
+    // créerait aucun point d'historique.
+    const lignesMixtes = lignesDepuisZone($('#dns-content'));
+    const contenuClair = richToText($('#dns-content'));
+    const currentItemsForDiff = lignesMixtes
+      .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }));
     const currentForDiff = {
       title: $('#dns-title').value,
       description: $('#dns-description').value,
       content: contenuClair,
       color: state.editingColor || n.color,
       due_at: $('#dns-due').value || null,
-      is_checklist: state.editingIsChecklist,
+      is_checklist: false,
       icon: state.editingIcon,
       label_ids: state.editingLabelIds,
       items: currentItemsForDiff,
@@ -7185,51 +6915,33 @@ async function saveNoteSimpleDialog() {
       // Cf. #nc-add : miroir en clair du titre pour Google Calendar, vidé
       // dès que la notask n'a plus d'échéance.
       calendar_title: $('#dns-due').value ? $('#dns-title').value : null,
-      // Sans ce champ, basculer le mode avec #dns-toggle-checklist ne
-      // survivait pas à la fermeture : is_checklist n'était jamais envoyé,
-      // la note rouvrait dans son ancien mode au prochain clic.
-      is_checklist: state.editingIsChecklist,
+      // Toujours faux : une notask n'a plus de forme. Envoyé quand même, et
+      // pas seulement omis, parce que c'est CE champ qui migre définitivement
+      // une notask d'avant (voir poserLignesDansTexte) : elle ressort d'ici
+      // avec ses lignes devenues des marqueurs dans le contenu.
+      is_checklist: false,
       label_ids: state.editingLabelIds,
       color: state.editingColor || n.color,
       masked: state.editingMasked,
       icon: state.editingIcon,
       pinned: state.editingPinned,
     };
-    // Les deux champs sont toujours envoyés (l'un vidé) plutôt que seulement
-    // celui du mode courant : sinon, après une bascule, l'ancien contenu
-    // (lignes de checklist ou texte libre) restait en base sans être
-    // affiché nulle part.
-    if (state.editingIsChecklist) {
-      const items = state.editingNoteItems.filter((i) => i.text.trim());
-      // Cf. plus haut : calculé avant l'écrasement de i.text par sa version
-      // chiffrée juste en dessous (même objet, la clé calendar_title est
-      // évaluée à partir de la valeur d'origine, l'ordre des clés dans le
-      // littéral n'a pas d'importance ici).
-      body.items = await Promise.all(items.map(async (i) => ({
-        ...i,
-        calendar_title: i.due_at ? i.text : null,
-        text: await encryptField(i.text),
-      })));
-      body.content = '';
-    } else {
-      /* Texte libre — et, s'il y en a, les lignes à cocher posées DANS ce
-         texte (notask mixte). `body.items = []` inconditionnel, comme
-         auparavant, effacerait ces lignes à chaque enregistrement : le
-         contenu garderait ses marqueurs `[ligne:…]`, mais plus aucune ligne
-         derrière. Une notask de texte libre sans aucune ligne envoie bien un
-         tableau vide, comme avant. */
-      body.content = await encryptField(contenuClair);
-      body.items = await Promise.all(lignesMixtes.map(async (l) => ({
-        id: l.id,
-        checked: l.checked,
-        due_at: l.due_at,
-        due_end_at: l.due_end_at,
-        // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
-        // quand la ligne porte une échéance à mettre dans l'agenda Google.
-        calendar_title: l.due_at ? l.text : null,
-        text: await encryptField(l.text),
-      })));
-    }
+    /* Contenu et lignes partent ensemble, toujours : le contenu porte les
+       marqueurs `[ligne:…]`, les lignes portent le texte, l'état coché et
+       l'échéance. Envoyer l'un sans l'autre laisserait soit des marqueurs
+       sans ligne, soit des lignes sans place dans le texte. */
+    body.content = await encryptField(contenuClair);
+    body.items = await Promise.all(lignesMixtes.map(async (l) => ({
+      id: l.id,
+      checked: l.checked,
+      due_at: l.due_at,
+      due_end_at: l.due_end_at,
+      // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
+      // quand la ligne porte une échéance à mettre dans l'agenda Google.
+      calendar_title: l.due_at ? l.text : null,
+      text: await encryptField(l.text),
+    })));
+
     const maj = await api('/notes/' + n.id, { method: 'PATCH', body });
 
     /* Lignes créées à l'instant : leur marqueur portait un identifiant
@@ -8291,12 +8003,26 @@ async function openHistoryDetail(versionId) {
 
   let html = `<h3>${escapeHtml(v.title || 'Sans titre')}</h3>`;
   if (v.description) html += `<p class="history-detail-desc">${escapeHtml(v.description)}</p>`;
-  if (v.is_checklist) {
+  /* Une version enregistrée garde le contenu tel quel, marqueurs compris.
+     Les `[ligne:…]` sont donc remplacés ici par le libellé de leur case,
+     précédé de ☐/☑ — sinon l'historique afficherait « [ligne:12] » en clair.
+     Le rapprochement se fait par RANG et non par identifiant : une version
+     est une photographie, ses NoteVersionItem ont leurs propres identifiants
+     (voir NoteVersionItemOut), sans rapport avec ceux des NoteItem cités par
+     les marqueurs. Elles sont stockées dans l'ordre du contenu. */
+  if (v.content) {
+    let rang = 0;
+    const texte = v.content.replace(NOTE_LINE_MARK, () => {
+      const it = (v.items || [])[rang++];
+      return it ? `\n${it.checked ? '☑' : '☐'} ${it.text || ''}` : '';
+    });
+    html += `<div class="history-detail-body">${escapeHtml(texte)}</div>`;
+  } else if (v.items && v.items.length) {
+    // Version d'une notask d'avant la disparition des modes : ses lignes ne
+    // sont citées nulle part dans le contenu, on les liste telles quelles.
     html += '<ul class="history-detail-items">' + v.items.map((it) =>
       `<li class="${it.checked ? 'done' : ''}">${escapeHtml(it.text || '')}</li>`
     ).join('') + '</ul>';
-  } else if (v.content) {
-    html += `<div class="history-detail-body">${escapeHtml(v.content)}</div>`;
   }
   if (v.due_at) html += `<div class="history-detail-due">${ICONS.clock}${formatDue(v.due_at)}</div>`;
   $('#history-detail-content').innerHTML = html;

@@ -251,24 +251,33 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
     case cochée par erreur laisserait la notask coincée dans les archives
     sans que rien ne l'explique.
 
-    Ne fait rien pour une notask de texte libre, ni pour une liste vide (une
-    liste sans aucune ligne n'est pas « terminée », elle n'a pas commencé),
+    Ne fait rien pour une notask sans aucune case (elle n'a rien à terminer),
     ni pour une notask en corbeille. Aucun commit : à la charge de l'appelant.
+
+    Rien ici ne touche aux ÉCHÉANCES : une ligne datée garde son `due_at` et
+    son `google_event_id`, et continue de remonter dans « Notasks prévues » et
+    dans le widget Android exactement comme avant. Archiver la notask qui la
+    porte ne la retire pas de l'agenda.
 
     Renvoie True si l'état d'archivage a changé.
     """
-    if not note.is_checklist or note.trashed_at is not None:
+    if note.trashed_at is not None:
         return False
 
-    # Notask MIXTE (des cases ET du texte) : jamais d'archivage automatique.
-    # Cocher la dernière case d'une liste pure signifie « c'est fini », et
-    # ranger la notask est le bon geste. Dans une notask qui contient aussi du
-    # texte, des images ou d'autres blocs, les cases ne sont qu'une partie du
-    # propos : la faire disparaître parce qu'on vient de cocher trois cases
-    # ferait perdre de vue tout le reste, qui, lui, n'est pas terminé.
-    if (note.content or "").strip():
-        return False
-
+    # Aucune condition sur `is_checklist` ni sur le contenu : la règle vaut
+    # pour TOUTE notask qui porte au moins une case, texte et images compris.
+    #
+    # Ce point a changé en cours de route, décision de l'utilisateur. La
+    # version précédente refusait d'archiver une notask « mixte », au motif
+    # que les cases n'y sont qu'une partie du propos. Il a tranché l'inverse,
+    # et c'est plus simple à expliquer : des cases toutes cochées veulent dire
+    # « c'est fini », quoi qu'il y ait autour. Le mouvement reste réversible
+    # (décocher une case ressort la notask des archives), donc l'erreur, si
+    # c'en est une, ne coûte qu'un clic.
+    #
+    # Une notask SANS aucune case n'est pas concernée : `if not lignes` plus
+    # bas s'en charge. Sans quoi toute notask de texte libre s'archiverait
+    # toute seule, « toutes ses cases » étant cochées par vacuité.
     lignes = session.exec(
         select(NoteItem).where(
             NoteItem.note_id == note.id,
@@ -470,6 +479,10 @@ def update_note(
     for key, value in data.items():
         setattr(note, key, value)
 
+    # État des cases AVANT remplacement : sert plus bas à ne déclencher
+    # l'archivage automatique que si une case a réellement bougé.
+    coches_avant = {ligne.id: ligne.checked for ligne in note.items}
+
     new_items = None
     orphelins: List[str] = []
     if items is not None:
@@ -487,15 +500,32 @@ def update_note(
     session.add(note)
     session.commit()
 
-    # Voir archiver_si_tout_coche. Uniquement quand les lignes ont été
-    # remplacées : sans ça, un simple changement de couleur suffirait à
-    # désarchiver une notask que l'utilisateur avait rangée à la main, alors
-    # même qu'aucune case n'a bougé.
+    # Archivage automatique — voir archiver_si_tout_coche. Trois conditions,
+    # chacune pour une raison différente :
     #
-    # Et uniquement si `archived` n'était PAS fourni explicitement : quand
-    # l'utilisateur archive ou désarchive lui-même, sa décision prime sur la
-    # règle automatique.
-    if new_items is not None and "archived" not in data:
+    # - `new_items is not None` : les lignes ont été envoyées. Sans ça, un
+    #   simple changement de couleur suffirait à ranger ou ressortir une
+    #   notask.
+    # - `"archived" not in data` : l'utilisateur n'a pas archivé ou désarchivé
+    #   lui-même dans la même requête. Sa décision prime sur la règle.
+    # - `coches_changees` : une case a RÉELLEMENT bougé.
+    #
+    # La troisième a été ajoutée après coup, et c'est la plus importante des
+    # trois. Sans elle, la règle n'est pas un déclenchement mais un invariant
+    # que le serveur rétablit à chaque écriture : une notask dont toutes les
+    # cases sont cochées, qu'on ressort des archives à la main, s'y retrouve
+    # renvoyée au premier enregistrement suivant — il suffit de l'ouvrir et de
+    # la refermer. Impossible à contourner, et incompréhensible vu de l'écran.
+    # Le défaut existait déjà pour les listes à cocher ; il serait devenu
+    # criant maintenant que la règle vaut pour toute notask portant des cases.
+    #
+    # Une case ajoutée ou retirée compte comme un changement : passer de « deux
+    # cochées sur trois » à « deux sur deux » en supprimant la dernière, c'est
+    # bien terminer la liste.
+    coches_apres = {ligne.id: ligne.checked for ligne in (new_items or [])}
+    coches_changees = coches_avant != coches_apres
+
+    if new_items is not None and "archived" not in data and coches_changees:
         if archiver_si_tout_coche(note, session):
             session.commit()
 
