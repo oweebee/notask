@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9014';
+const APP_VERSION = '0.9015';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -598,6 +598,16 @@ const ICONS = {
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
 
   tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l2 2 3.5-3.5"/><path d="M4 17l2 2 3.5-3.5"/><path d="M13 7h7"/><path d="M13 17h7"/></svg>',
+  /* Les deux icônes de la BASCULE de forme (#nc-toggle-checklist /
+     #dns-toggle-checklist). Le cadre de page est délibéré : c'est lui qui dit
+     « toute la notask change de forme », par opposition au bouton voisin
+     (data-fmt="ligne", icône `tasks`) qui n'insère qu'UNE ligne à l'endroit
+     du curseur. Les deux boutons portaient la même icône, on ne pouvait pas
+     les distinguer — c'est ce que l'utilisateur a signalé.
+     Les deux variantes ne diffèrent que par leur contenu, jamais par le
+     cadre : la destination change, le geste reste le même. */
+  noteEnListe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M7 8.6l1.3 1.3L10.8 7.4"/><path d="M13 9h4"/><path d="M7 15.6l1.3 1.3 2.5-2.5"/><path d="M13 16h4"/></svg>',
+  noteEnTexte: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M7.5 8h9"/><path d="M7.5 12h9"/><path d="M7.5 16h5"/></svg>',
   late: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><circle cx="12" cy="14.5" r="1.6" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg>',
@@ -4223,8 +4233,10 @@ function majSuppressionLigneVierge(boxSelecteur, liste) {
 // l'édition simple, pour rester cohérent d'un bout à l'autre de l'app.
 function renderComposerChecklistBtn() {
   const btn = $('#nc-toggle-checklist');
-  btn.innerHTML = composerChecklist ? ICONS.pencil : ICONS.tasks;
-  const label = composerChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
+  btn.innerHTML = composerChecklist ? ICONS.noteEnTexte : ICONS.noteEnListe;
+  const label = composerChecklist
+    ? 'Transformer toute la notask en texte libre'
+    : 'Transformer toute la notask en liste à cocher';
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.classList.toggle('active-toggle', composerChecklist);
@@ -5329,8 +5341,10 @@ function renderDnsMode() {
   $('#dns-fmt-group').hidden = state.editingIsChecklist;
   $('#dns-items-field').hidden = !state.editingIsChecklist;
   const btn = $('#dns-toggle-checklist');
-  btn.innerHTML = state.editingIsChecklist ? ICONS.pencil : ICONS.tasks;
-  const label = state.editingIsChecklist ? 'Passer en texte libre' : 'Passer en liste à cocher';
+  btn.innerHTML = state.editingIsChecklist ? ICONS.noteEnTexte : ICONS.noteEnListe;
+  const label = state.editingIsChecklist
+    ? 'Transformer toute la notask en texte libre'
+    : 'Transformer toute la notask en liste à cocher';
   btn.title = label;
   btn.setAttribute('aria-label', label);
 }
