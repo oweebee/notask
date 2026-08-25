@@ -497,6 +497,26 @@ def _account_for(user_id: int, session: Session) -> Optional[GoogleAccount]:
     return session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user_id)).first()
 
 
+def supprimer_evenement_orphelin(user_id: int, event_id: str, session: Session) -> None:
+    """Retire de l'agenda un événement dont la ligne à cocher a été supprimée.
+
+    sync_item() ne peut pas s'en charger : il travaille à partir d'une ligne,
+    or celle-ci n'existe plus. Sans ce nettoyage, chaque ligne datée effacée
+    laisserait son événement en place, définitivement — l'application n'ayant
+    plus aucune trace de son existence.
+
+    Silencieux par construction, comme le reste de la synchro : un agenda
+    injoignable ne doit jamais faire échouer l'enregistrement d'une notask.
+    """
+    try:
+        account = _account_for(user_id, session)
+        if account is None:
+            return
+        delete_event(account, session, event_id)
+    except Exception:
+        log.exception("Échec suppression d'un événement orphelin (%s)", event_id)
+
+
 def sync_note(note: Note, session: Session) -> None:
     """À appeler après toute mutation d'une notask (création, mise à jour,
     suppression, restauration). N'échoue jamais bruyamment : un souci Google

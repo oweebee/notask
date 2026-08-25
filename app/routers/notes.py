@@ -5,7 +5,7 @@ une tâche visible dans la vue Tâches. Voir app/routers/tasks.py.
 """
 
 from datetime import timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlmodel import Session, select
@@ -138,28 +138,87 @@ def _check_labels(label_ids: Optional[List[int]], user: User, session: Session) 
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Libellé(s) inconnu(s) : {sorted(unknown)}")
 
 
-def _replace_items(note: Note, items: List[NoteItemIn], session: Session) -> List[NoteItem]:
-    """Remplace les lignes en conservant les échéances des lignes réutilisées.
-    Renvoie les nouvelles lignes (avec leur id, après flush) pour permettre à
-    l'appelant de déclencher leur synchro Google Calendar si besoin."""
-    for existing in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all():
-        session.delete(existing)
-    session.flush()
-    created = []
+def _replace_items(
+    note: Note, items: List[NoteItemIn], session: Session
+) -> Tuple[List[NoteItem], List[str]]:
+    """Met à jour les lignes d'une notask EN CONSERVANT leur identifiant.
+
+    Une ligne envoyée avec un `id` déjà connu est modifiée sur place ; une
+    ligne sans `id` est créée ; celles qui ne figurent plus dans l'envoi sont
+    supprimées.
+
+    Renvoie deux choses : la liste finale des lignes, dans l'ordre, pour que
+    l'appelant déclenche leur synchro Google Calendar ; et les identifiants
+    des événements Google devenus orphelins, à retirer de l'agenda puisque
+    leur ligne, elle, n'existe plus.
+
+    ---
+
+    La version précédente supprimait TOUTES les lignes puis les recréait à
+    chaque enregistrement. Deux conséquences, dont une franchement mauvaise :
+
+    1. **Elle dupliquait les événements Google Calendar.** Une ligne recréée
+       repart sans `google_event_id` ; `sync_item` en conclut qu'elle n'a pas
+       encore d'événement et en crée un NOUVEAU, sans supprimer l'ancien, qui
+       reste orphelin dans l'agenda. Chaque enregistrement d'une notask
+       contenant une ligne datée ajoutait donc un doublon.
+    2. **Les identifiants de lignes changeaient à chaque sauvegarde**, ce qui
+       interdisait d'y faire référence ailleurs — notamment depuis le contenu
+       d'une notask, condition des notasks mixtes (texte et cases mêlés).
+
+    Le champ `id` de NoteItemIn existait déjà dans le schéma, il n'était
+    simplement jamais exploité.
+    """
+    existantes = {
+        row.id: row
+        for row in session.exec(select(NoteItem).where(NoteItem.note_id == note.id)).all()
+    }
+
+    finales: List[NoteItem] = []
+    vues: set = set()
+
     for position, item in enumerate(items):
-        row = NoteItem(
-            note_id=note.id,
-            text=item.text,
-            checked=item.checked,
-            due_at=item.due_at,
-            due_end_at=item.due_end_at if item.due_at else None,
-            calendar_title=item.calendar_title,
-            position=position,
-        )
+        row = existantes.get(item.id) if item.id is not None else None
+
+        if row is not None:
+            # Mise à jour sur place : `google_event_id`, `archived` et
+            # `trashed_at` ne sont pas touchés — ils appartiennent à la ligne,
+            # pas à ce que le client vient d'envoyer.
+            row.text = item.text
+            row.checked = item.checked
+            row.due_at = item.due_at
+            row.due_end_at = item.due_end_at if item.due_at else None
+            row.calendar_title = item.calendar_title
+            row.position = position
+            vues.add(row.id)
+        else:
+            row = NoteItem(
+                note_id=note.id,
+                text=item.text,
+                checked=item.checked,
+                due_at=item.due_at,
+                due_end_at=item.due_end_at if item.due_at else None,
+                calendar_title=item.calendar_title,
+                position=position,
+            )
         session.add(row)
-        created.append(row)
+        finales.append(row)
+
+    # Lignes absentes de l'envoi : réellement supprimées par l'utilisateur.
+    # On relève leur événement Google AVANT de les détruire — la ligne
+    # disparaissant, plus rien ensuite ne saurait qu'un événement lui
+    # correspondait, et il resterait orphelin dans l'agenda. C'était déjà le
+    # cas avec l'ancienne implémentation, pour TOUTES les lignes.
+    orphelins: List[str] = []
+    for ancien_id, row in existantes.items():
+        if ancien_id in vues:
+            continue
+        if row.google_event_id:
+            orphelins.append(row.google_event_id)
+        session.delete(row)
+
     session.flush()
-    return created
+    return finales, orphelins
 
 
 def _purge_note(note: Note, session: Session) -> None:
@@ -199,6 +258,15 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
     Renvoie True si l'état d'archivage a changé.
     """
     if not note.is_checklist or note.trashed_at is not None:
+        return False
+
+    # Notask MIXTE (des cases ET du texte) : jamais d'archivage automatique.
+    # Cocher la dernière case d'une liste pure signifie « c'est fini », et
+    # ranger la notask est le bon geste. Dans une notask qui contient aussi du
+    # texte, des images ou d'autres blocs, les cases ne sont qu'une partie du
+    # propos : la faire disparaître parce qu'on vient de cocher trois cases
+    # ferait perdre de vue tout le reste, qui, lui, n'est pas terminé.
+    if (note.content or "").strip():
         return False
 
     lignes = session.exec(
@@ -339,7 +407,9 @@ def create_note(
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
     session.add(note)
     session.flush()
-    items = _replace_items(note, payload.items, session)
+    # Pas d'orphelins possibles à la création : la notask vient de naître, il
+    # n'existait aucune ligne avant, donc aucun événement Google à nettoyer.
+    items, _ = _replace_items(note, payload.items, session)
     session.commit()
     session.refresh(note)
 
@@ -401,8 +471,9 @@ def update_note(
         setattr(note, key, value)
 
     new_items = None
+    orphelins: List[str] = []
     if items is not None:
-        new_items = _replace_items(note, [NoteItemIn(**i) for i in items], session)
+        new_items, orphelins = _replace_items(note, [NoteItemIn(**i) for i in items], session)
 
     # Le titre en clair (calendar_title) n'a de sens que tant que la notask
     # est effectivement synchronisable — le vider dès qu'elle ne l'est plus
@@ -434,6 +505,10 @@ def update_note(
     if new_items is not None:
         for item in new_items:
             gcal.sync_item(item, note, session)
+    # Événements des lignes réellement supprimées. Après le commit : leur
+    # ligne n'existe plus en base, il ne reste qu'à nettoyer l'agenda.
+    for event_id in orphelins:
+        gcal.supprimer_evenement_orphelin(note.user_id, event_id, session)
     return note
 
 

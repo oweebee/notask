@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9012';
+const APP_VERSION = '0.9013';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5316,8 +5316,15 @@ function openNoteSimpleDialog(note) {
   state.editingNote = note;
   state.editingNoteOriginal = noteSnapshotFromNote(note);
   state.editingIsChecklist = note.is_checklist;
+  // `id` conservé : c'est lui qui permet au serveur de METTRE À JOUR la ligne
+  // au lieu de la détruire et d'en recréer une (voir _replace_items dans
+  // app/routers/notes.py). Sans lui, chaque enregistrement changeait
+  // l'identifiant de toutes les lignes, ce qui faisait perdre leur lien vers
+  // l'événement Google Calendar — et donc en créait un doublon à chaque fois.
+  // Une ligne ajoutée dans l'éditeur n'a pas d'id : elle vaudra undefined,
+  // que le serveur interprète comme « à créer ».
   state.editingNoteItems = note.items.map((i) => ({
-    text: i.text, checked: i.checked, due_at: i.due_at, due_end_at: i.due_end_at || null,
+    id: i.id, text: i.text, checked: i.checked, due_at: i.due_at, due_end_at: i.due_end_at || null,
   }));
   if (!state.editingNote.attachments) state.editingNote.attachments = [];
   pendingAttachmentUploads = [];
