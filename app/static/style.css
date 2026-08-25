@@ -3163,9 +3163,29 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    (data-due est vidé, pas retiré, quand l'échéance est effacée — voir
    majEcheanceLigne dans app.js, d'où le :not([data-due=""])). Sans cette
    réserve, la pastille se superposerait au texte d'une case d'une seule
-   ligne. Avec, la case datée est un peu plus haute que ses voisines : c'est
-   le prix de la place, et ça reste discret dans un bloc. */
+   ligne. Cas d'une case datée AU MILIEU d'un bloc : elle se loge à
+   l'intérieur du cadre, faute de pouvoir chevaucher un bord qui n'existe pas
+   là (le fond est continu d'une case à l'autre). */
 .note-ligne[data-due]:not([data-due=""]) { padding-top: 1.5rem; }
+
+/* Case datée en TÊTE de bloc : la pastille chevauche le bord haut du cadre,
+   moitié dehors moitié dedans. La moitié qui sort a besoin de place EN
+   DEHORS du cadre — d'où la marge haute, qui écarte le cadre de ce qui le
+   précède sans être peinte par le fond du bloc (une marge n'est jamais
+   peinte). C'est cette réserve qui manquait aux essais précédents : sans
+   elle, la moitié haute sortait de la boîte de la notask et se faisait
+   rogner (0.9024), ou disparaissait tout à fait (0.9026).
+
+   Réservé au début d'un bloc exprès : au milieu, une marge trouerait le fond
+   continu du bloc — d'où la règle ci-dessus, qui garde la pastille dedans. */
+.note-ligne.bloc-debut[data-due]:not([data-due=""]) {
+  margin-top: .8rem;
+  padding-top: .45rem;
+}
+.note-ligne.bloc-debut[data-due]:not([data-due=""]) .note-ligne-due-wrap {
+  top: 0;
+  transform: translateY(-50%);
+}
 .note-ligne-due {
   flex: none;
   margin: 0;
