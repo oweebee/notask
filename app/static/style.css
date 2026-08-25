@@ -3104,7 +3104,11 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   flex: 1 1 auto;
   min-width: 0;
   user-select: text;
-  padding: .3rem 0;
+  /* .12rem et non .3rem : ce padding s'AJOUTE à celui de .note-ligne, les
+     deux se cumulaient et les lignes d'un bloc se retrouvaient très aérées.
+     Pas ramené à 0 : il garde le trait de soulignement de la case en attente
+     à distance du texte (voir .est-vide plus bas). */
+  padding: .12rem 0;
   color: var(--md-on-surface);
   white-space: pre-wrap;
   word-break: break-word;
@@ -3209,11 +3213,27 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   color: var(--md-on-surface-variant);
 }
 /* Bouton calendrier : discret au repos, révélé au survol de la ligne — il ne
-   doit pas encombrer la lecture d'une notask qui en compte dix. */
+   doit pas encombrer la lecture d'une notask qui en compte dix.
+
+   Plus petit que le .cal-btn générique (32px, dimensionné pour les barres
+   d'outils) : posé sur une ligne de texte, il y paraissait énorme. Ne change
+   RIEN à la hauteur des lignes — il est en position absolue (voir
+   .note-ligne-due-wrap), donc hors du flux. */
 .note-ligne-cal {
   flex: none;
+  width: 22px;
+  height: 22px;
   opacity: 0;
   transition: opacity .15s ease;
+}
+.note-ligne-cal svg { width: 14px; height: 14px; }
+/* Jaune cuillère dès qu'une date est posée. `.cal-btn.has-due` le fait déjà,
+   mais avec un fond qui n'apparaît qu'au survol : ici le bouton EST le seul
+   repère d'une ligne datée quand la pastille est masquée, il doit se voir au
+   repos. */
+.note-ligne-cal.has-due {
+  color: #ffd54f;
+  background: rgba(255, 213, 79, .18);
 }
 .note-ligne:hover .note-ligne-cal,
 .note-ligne-cal.has-due { opacity: 1; }
