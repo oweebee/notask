@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9018';
+const APP_VERSION = '0.9019';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -6376,6 +6376,40 @@ function majCaseVide(bloc) {
   bloc.classList.toggle('est-vide', !(txt && txt.textContent.trim()));
 }
 
+function caseEstVide(bloc) {
+  const txt = bloc.querySelector('.note-ligne-txt');
+  return !(txt && txt.textContent.trim());
+}
+
+/* La case en attente n'existe QUE pendant qu'on travaille sur la dernière
+   case d'un bloc — elle est une proposition, pas une ligne de la notask.
+
+   Avant, elle apparaissait dès la première frappe et ne repartait plus : une
+   notask ouverte pour la lire montrait une case vide en trop sous chaque
+   bloc, et cliquer dans un autre bloc en laissait une deuxième derrière soi.
+
+   Deux règles, tenues ici :
+   - au plus UNE case vide à la fois dans toute la zone, celle du bloc où l'on
+     se trouve ; toutes les autres sont retirées ;
+   - elle ne s'ajoute que sous la DERNIÈRE case d'un bloc. Cliquer au milieu
+     d'une liste ne propose rien : la case suivante est déjà là.
+
+   L'insertion est un simple insertBefore dans le flux : le reste de la notask
+   descend tout seul, il n'y a aucune position à calculer. */
+function majLigneAttente(zone, blocActif) {
+  if (!zone) return;
+  zone.querySelectorAll('.note-ligne').forEach((b) => {
+    if (b === blocActif || !caseEstVide(b)) return;
+    // Ne jamais retirer la case sous les doigts de l'utilisateur.
+    if (b.contains(document.activeElement)) return;
+    b.remove();
+  });
+  if (!blocActif || caseEstVide(blocActif)) return;
+  const suivant = blocActif.nextElementSibling;
+  if (suivant && suivant.classList.contains('note-ligne')) return;  // pas la dernière
+  blocActif.parentNode.insertBefore(creerBlocLigne(), blocActif.nextSibling);
+}
+
 /* Rend une ligne interactive dans une zone de saisie. Idempotent : appelé
    aussi bien à l'hydratation qu'à l'insertion d'une ligne toute neuve. */
 function brancherLigneEditable(bloc) {
@@ -6406,25 +6440,23 @@ function brancherLigneEditable(bloc) {
     del.addEventListener('click', () => { bloc.remove(); });
   }
 
-  /* Ligne d'attente : dès qu'on écrit dans la dernière case d'un groupe, une
-     case vide vient prendre sa place en dessous, prête à être remplie. C'est
-     le comportement de l'ancien éditeur de liste, transposé ici — il évite
-     d'avoir à redemander une case à chaque élément quand on énumère.
+  /* Deux moments font apparaître la case en attente, et c'est la MÊME règle
+     (voir majLigneAttente) :
 
-     « Dernière d'un groupe » et non « dernière de la notask » : dans une
-     notask qui mêle cases et texte, écrire dans une case du milieu ne doit
-     rien ajouter, la case suivante est déjà là.
+     - au clic dans la dernière case remplie d'un bloc : « tu veux sans doute
+       en ajouter une, la voilà » ;
+     - dès qu'on écrit dans la case en attente : elle devient réelle, une
+       nouvelle prend sa place en dessous, et on peut énumérer sans jamais
+       redemander de case.
 
-     La case d'attente ne coûte rien si on n'en veut pas : vide, elle ne
-     produit ni marqueur ni ligne à l'enregistrement (voir richToText et
-     lignesDepuisZone), elle disparaît donc d'elle-même à la fermeture. */
+     Elle ne coûte rien si on n'en veut pas : vide, elle ne produit ni marqueur
+     ni ligne à l'enregistrement (voir richToText et lignesDepuisZone), et elle
+     disparaît dès qu'on va travailler ailleurs. */
+  const zone = () => bloc.closest('[contenteditable=true]');
+  txt.addEventListener('focus', () => majLigneAttente(zone(), bloc));
   txt.addEventListener('input', () => {
     majCaseVide(bloc);
-    if (!txt.textContent.trim()) return;
-    const suivant = bloc.nextElementSibling;
-    if (suivant && suivant.classList.contains('note-ligne')) return;
-    const nouveau = creerBlocLigne();
-    bloc.parentNode.insertBefore(nouveau, bloc.nextSibling);
+    majLigneAttente(zone(), bloc);
   });
 
   txt.addEventListener('keydown', (e) => {
@@ -6524,18 +6556,50 @@ function insererLigneACocher(editableSel) {
   if (!el) return;
   el.focus();
   const sel = window.getSelection();
-  let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
-  // Curseur perdu (zone jamais cliquée, sélection dans une autre zone) : on
-  // pose la ligne à la fin plutôt que de ne rien faire.
-  if (!range || !el.contains(range.commonAncestorContainer)) {
-    range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false);
-  }
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   const bloc = creerBlocLigne();
-  range.deleteContents();
-  range.insertNode(bloc);
+
+  // Curseur perdu (zone jamais cliquée, sélection dans une autre zone) : on
+  // pose la case à la fin plutôt que de ne rien faire.
+  if (!range || !el.contains(range.commonAncestorContainer)) {
+    el.appendChild(bloc);
+    placerCurseurEnFin(bloc.querySelector('.note-ligne-txt'));
+    return;
+  }
+
+  /* La case se pose TOUJOURS au début de la ligne courante, et toujours comme
+     enfant direct de la zone de saisie — jamais à l'endroit exact du curseur.
+
+     `range.insertNode()` faisait l'inverse : il coupait le nœud de texte en
+     deux et glissait le bloc entre les morceaux, à l'intérieur de ce qui
+     l'entourait. Une case posée depuis le milieu d'une phrase se retrouvait
+     alors décalée vers la droite, avec le début de la phrase resté devant
+     elle — et, si le curseur était dans un passage en gras ou coloré, carrément
+     imbriquée dedans.
+
+     On remonte donc de deux façons : on coupe le nœud de texte au dernier
+     saut de ligne qui précède le curseur (les zones sont en white-space:
+     pre-wrap, un `\\n` y est une vraie fin de ligne), puis on remonte jusqu'à
+     l'enfant direct de la zone. Le bloc s'insère devant : il prend la place de
+     la ligne courante et pousse naturellement le reste de la notask vers le
+     bas, sans qu'aucun calcul de position ne soit nécessaire. */
+  let noeud = range.startContainer;
+  if (noeud.nodeType === Node.TEXT_NODE) {
+    const avant = noeud.textContent.slice(0, range.startOffset);
+    const debutLigne = avant.lastIndexOf('\n') + 1;  // 0 si on est déjà au début
+    if (debutLigne > 0) noeud = noeud.splitText(debutLigne);
+  }
+  while (noeud && noeud.parentNode && noeud.parentNode !== el) noeud = noeud.parentNode;
+
+  if (noeud && noeud.parentNode === el) el.insertBefore(bloc, noeud);
+  else el.appendChild(bloc);
   placerCurseurEnFin(bloc.querySelector('.note-ligne-txt'));
+  /* Ménage explicite, en plus de celui que déclenche la prise de focus juste
+     au-dessus : une case en attente laissée ailleurs dans la notask doit
+     partir. On ne s'en remet pas au seul événement `focus`, qui ne se
+     déclenche pas quand la fenêtre elle-même n'a pas la main — constaté au
+     banc d'essai, où deux cases vides restaient côte à côte. */
+  majLigneAttente(el, bloc);
 }
 
 /* Relit les lignes à cocher d'une zone de saisie, dans l'ordre du document,

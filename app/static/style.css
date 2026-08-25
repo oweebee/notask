@@ -3029,13 +3029,17 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   min-width: 0;
   user-select: text;
   padding: .3rem 0;
-  border-bottom: 1px solid var(--md-outline-variant);
   color: var(--md-on-surface);
   white-space: pre-wrap;
   word-break: break-word;
   outline: none;
+  /* Trait réservé à la case en attente — voir juste en dessous. Une case déjà
+     remplie est du contenu, pas un champ à remplir : la souligner alignait
+     des traits sous toute la notask pour rien. */
+  border-bottom: 1px solid transparent;
 }
-.note-ligne-txt:focus { border-bottom-color: var(--md-primary); }
+.note-ligne.est-vide .note-ligne-txt { border-bottom-color: var(--md-outline-variant); }
+.note-ligne.est-vide .note-ligne-txt:focus { border-bottom-color: var(--md-primary); }
 /* Invite de la case en attente, reprise de l'ancien `placeholder`. Posée sur
    une classe et non sur :empty : dans une zone contenteditable, effacer le
    dernier caractère laisse souvent un <br> derrière, et :empty ne s'applique
