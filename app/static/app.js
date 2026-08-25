@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9029';
+const APP_VERSION = '0.9030';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5265,6 +5265,27 @@ function openNoteSimpleDialog(note) {
   state.editingIcon = note.icon || null;
   renderIconBtn($('#dns-icon-btn'), state.editingIcon);
 
+  /* Brouillon laissé par un enregistrement qui a échoué (voir
+     garderBrouillon) : on propose de reprendre la saisie perdue plutôt que de
+     réafficher silencieusement l'état d'avant, plus ancien. La question est
+     posée parce que le brouillon peut dater d'une autre session, et que la
+     notask a pu changer entre-temps depuis un autre appareil — reprendre
+     d'autorité écraserait ces changements-là sans prévenir. */
+  const brouillon = lireBrouillon(note.id);
+  if (brouillon) {
+    const quand = new Date(brouillon.at).toLocaleString('fr-FR');
+    if (confirm(
+      `Un enregistrement de cette notask a échoué le ${quand}.\n\n`
+      + 'Reprendre les modifications gardées de côté ?\n'
+      + '(Annuler = repartir de la version enregistrée sur le serveur)'
+    )) {
+      note = { ...note, title: brouillon.title, description: brouillon.description, content: brouillon.content };
+      state.editingNote = note;
+    } else {
+      oublierBrouillon(note.id);
+    }
+  }
+
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
   $('#dns-content').innerHTML = renderFormatted(note.content || '', false, true);
@@ -7106,10 +7127,73 @@ async function saveNoteSimpleDialog() {
         });
       }
     }
+    // Enregistrement réussi : le filet de sécurité éventuel n'a plus lieu
+    // d'être (voir oublierBrouillon).
+    oublierBrouillon(n.id);
   } catch (err) {
-    alert(err.message);
+    /* La boîte est DÉJÀ fermée quand on arrive ici (l'enregistrement est
+       branché sur l'événement `close`, voir plus bas) : sans ce filet, une
+       erreur serveur faisait purement et simplement disparaître la saisie,
+       sans aucun moyen de la récupérer. C'est arrivé en vrai, sur une erreur
+       500, et c'est inacceptable — une panne côté serveur ne doit jamais
+       coûter le travail de l'utilisateur.
+
+       Le brouillon est conservé EN CLAIR dans le navigateur, comme le reste
+       de ce que l'application y garde le temps d'une session : le
+       déchiffrement a de toute façon lieu ici, et l'alternative — perdre le
+       texte — est bien pire. Il est relu à la prochaine ouverture de cette
+       notask (voir openNoteSimpleDialog) puis effacé dès qu'un
+       enregistrement aboutit.
+
+       Pas de réouverture automatique de la boîte : rouvrir déclencherait un
+       nouvel enregistrement à la fermeture suivante, donc la même erreur, en
+       boucle sans échappatoire. */
+    garderBrouillon(n.id, {
+      title: $('#dns-title').value,
+      description: $('#dns-description').value,
+      content: contenuClair,
+    });
+    alert(
+      `${err.message}\n\n`
+      + "Tes modifications n'ont PAS été perdues : elles sont gardées de côté "
+      + 'et te seront proposées à la réouverture de cette notask.'
+    );
   }
   loadNotes();
+}
+
+/* Filet de sécurité en cas d'échec d'enregistrement — voir le catch
+   ci-dessus. Volontairement minimal : un seul brouillon par notask, écrasé
+   par le suivant, et jamais de nettoyage automatique par ancienneté (un
+   brouillon qui traîne veut dire qu'un enregistrement a échoué et n'a jamais
+   réussi depuis — ce n'est pas à une date de péremption d'en décider). */
+const CLE_BROUILLON = 'notask-brouillon-';
+
+function garderBrouillon(noteId, valeurs) {
+  try {
+    localStorage.setItem(CLE_BROUILLON + noteId, JSON.stringify({
+      ...valeurs, at: new Date().toISOString(),
+    }));
+  } catch (e) {
+    // Stockage plein ou refusé (navigation privée) : rien à faire de plus,
+    // mais on le dit — c'est le seul filet, son échec compte.
+    log.error('brouillon', "Impossible de garder le brouillon d'une notask", String(e));
+  }
+}
+
+function lireBrouillon(noteId) {
+  try {
+    const brut = localStorage.getItem(CLE_BROUILLON + noteId);
+    return brut ? JSON.parse(brut) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function oublierBrouillon(noteId) {
+  try {
+    localStorage.removeItem(CLE_BROUILLON + noteId);
+  } catch (e) { /* sans conséquence : au pire il resservira une fois de trop */ }
 }
 
 // Pas de bouton Enregistrer/Annuler ici : toute fermeture (clic à côté,

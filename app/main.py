@@ -1,9 +1,11 @@
+import logging
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
@@ -24,7 +26,7 @@ app = FastAPI(
     # Palier 0.9 jusqu'à l'annonce de la V1 (cf. fichier VERSION à la
     # racine et APP_VERSION dans app/static/app.js) : la 1.0.0 affichée ici
     # était une valeur d'amorçage jamais mise à jour, trompeuse.
-    version="0.9029",
+    version="0.9030",
     lifespan=lifespan,
 )
 
@@ -72,6 +74,43 @@ async def no_cache(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+log = logging.getLogger("notask")
+
+
+@app.exception_handler(Exception)
+async def erreur_inattendue(request: Request, exc: Exception):
+    """Renvoie la CAUSE d'une erreur 500 au client, au lieu du « Internal
+    Server Error » opaque de FastAPI.
+
+    Motif : le journal de l'application est purement côté navigateur, et rien
+    côté serveur ne conserve les traces. Quand un enregistrement échouait, la
+    seule information disponible était une boîte « Erreur 500 » — impossible
+    de savoir ce qui s'était passé sans aller lire les logs du conteneur dans
+    Coolify, ce qui n'est pas un chemin acceptable pour diagnostiquer un
+    incident courant.
+
+    Le `detail` renvoyé se limite au TYPE et au MESSAGE de l'exception (ex.
+    « IntegrityError: UNIQUE constraint failed… »), jamais à la trace
+    complète : celle-ci part dans les logs du serveur, où elle a sa place. Le
+    type et le message suffisent presque toujours à identifier la cause, et
+    ne révèlent pas l'arborescence du code.
+
+    Application auto-hébergée, mono-utilisateur : le compromis
+    diagnosticabilité / discrétion penche clairement du premier côté. Sur un
+    service multi-locataires, cette remontée n'aurait rien à faire ici.
+    """
+    log.error(
+        "Erreur non rattrapée sur %s %s\n%s",
+        request.method,
+        request.url.path,
+        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
 
 
 app.include_router(auth.router)
