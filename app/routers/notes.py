@@ -177,6 +177,52 @@ def _purge_note(note: Note, session: Session) -> None:
     session.delete(note)
 
 
+def archiver_si_tout_coche(note: Note, session: Session) -> bool:
+    """Archive une liste à cocher dont TOUTES les lignes sont cochées, et la
+    désarchive dès qu'une ligne est décochée.
+
+    Placé côté SERVEUR et non dans le client : une case peut être cochée
+    depuis la mosaïque, depuis l'édition rapide, depuis la vue des échéances,
+    ou depuis un widget d'écran d'accueil Android. Le faire côté client
+    obligerait à répéter la même règle dans chacun de ces chemins, avec la
+    certitude d'en oublier un.
+
+    Le mouvement est RÉVERSIBLE, volontairement : décocher une ligne d'une
+    notask archivée la fait ressortir des archives. Sans cela, corriger une
+    case cochée par erreur laisserait la notask coincée dans les archives
+    sans que rien ne l'explique.
+
+    Ne fait rien pour une notask de texte libre, ni pour une liste vide (une
+    liste sans aucune ligne n'est pas « terminée », elle n'a pas commencé),
+    ni pour une notask en corbeille. Aucun commit : à la charge de l'appelant.
+
+    Renvoie True si l'état d'archivage a changé.
+    """
+    if not note.is_checklist or note.trashed_at is not None:
+        return False
+
+    lignes = session.exec(
+        select(NoteItem).where(
+            NoteItem.note_id == note.id,
+            # Une ligne mise de côté seule ne compte pas : elle a justement
+            # quitté la liste (voir NoteItem.archived / trashed_at).
+            NoteItem.archived == False,  # noqa: E712 — SQLAlchemy, pas un `is`
+            NoteItem.trashed_at.is_(None),
+        )
+    ).all()
+    if not lignes:
+        return False
+
+    tout_coche = all(ligne.checked for ligne in lignes)
+    if tout_coche == note.archived:
+        return False
+
+    note.archived = tout_coche
+    note.updated_at = utcnow()
+    session.add(note)
+    return True
+
+
 def _purge_expired_trash(user: User, session: Session) -> None:
     """Purge silencieusement les notes en corbeille depuis plus de
     TRASH_RETENTION_DAYS. Pas de tâche planifiée dans cette appli : ce
@@ -369,6 +415,19 @@ def update_note(
     note.updated_at = utcnow()
     session.add(note)
     session.commit()
+
+    # Voir archiver_si_tout_coche. Uniquement quand les lignes ont été
+    # remplacées : sans ça, un simple changement de couleur suffirait à
+    # désarchiver une notask que l'utilisateur avait rangée à la main, alors
+    # même qu'aucune case n'a bougé.
+    #
+    # Et uniquement si `archived` n'était PAS fourni explicitement : quand
+    # l'utilisateur archive ou désarchive lui-même, sa décision prime sur la
+    # règle automatique.
+    if new_items is not None and "archived" not in data:
+        if archiver_si_tout_coche(note, session):
+            session.commit()
+
     session.refresh(note)
 
     gcal.sync_note(note, session)
@@ -446,6 +505,13 @@ def update_item(
 
     session.add(item)
     session.commit()
+
+    # Après le commit de la ligne, sinon le comptage porterait sur l'état
+    # d'avant. Voir archiver_si_tout_coche : cocher la dernière case archive
+    # la notask, en décocher une la fait ressortir.
+    if archiver_si_tout_coche(note, session):
+        session.commit()
+
     session.refresh(item)
     gcal.sync_item(item, note, session)
     return item

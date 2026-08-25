@@ -15,6 +15,7 @@ from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import Note, NoteItem, TaskDone, TaskOut, User, utcnow
+from app.routers.notes import archiver_si_tout_coche
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -170,6 +171,14 @@ def set_done(
         item.checked = payload.done
         session.add(item)
         session.commit()
+
+        # Troisième et dernier chemin par lequel une case peut être cochée :
+        # depuis la vue des échéances ou depuis un widget d'écran d'accueil.
+        # Même règle qu'ailleurs, appliquée au même endroit — voir
+        # archiver_si_tout_coche dans routers/notes.py.
+        if archiver_si_tout_coche(parent, session):
+            session.commit()
+
         session.refresh(item)
         gcal.sync_item(item, parent, session)  # cf. sync_note ci-dessus
 

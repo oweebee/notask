@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9009';
+const APP_VERSION = '0.9010';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4324,6 +4324,13 @@ renderNcDueBtn();
 // fonction, donc "remontées" (hoisted) avant l'exécution de ce script).
 brancherBarreFormat('#nc-fmt-group', '#nc-content', '#nc-text-colors', '#nc-colors');
 
+/* Les deux zones d'écriture reçoivent le même traitement : cliquer sous le
+   texte y place le curseur (voir activerClicDansLeVide). Branché une fois
+   pour toutes au chargement — les deux éléments existent dès le départ dans
+   index.html comme dans quick.html, seule leur visibilité change. */
+activerClicDansLeVide($('#nc-content'));
+activerClicDansLeVide($('#dns-content'));
+
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
 // local seulement — pas de chiffrement/upload avant que la notask existe.
@@ -5325,6 +5332,10 @@ function openNoteSimpleDialog(note) {
   hydrateInlineImages($('#dns-content'), note);
   hydrateInlineAudio($('#dns-content'), note);
   ajouterBoutonsCopieCode($('#dns-content'));
+  // Une notask déjà enregistrée peut elle aussi se terminer par un bloc :
+  // sans cette ligne d'accueil, impossible de reprendre la saisie en
+  // dessous (voir assurerLigneApresBloc).
+  assurerLigneApresBloc($('#dns-content'));
   renderDnsMode();
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
@@ -5657,9 +5668,82 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
   }
   sel.removeAllRanges();
   sel.addRange(newRange);
+
+  // Bouton « copier » posé TOUT DE SUITE sur un bloc de code fraîchement
+  // créé. Il n'apparaissait qu'après enregistrement puis réouverture de la
+  // notask, parce que ajouterBoutonsCopieCode() n'était appelée qu'au rendu
+  // — donc jamais pendant qu'on écrit, le seul moment où l'on vient
+  // justement de coller le code qu'on voudrait recopier.
+  ajouterBoutonsCopieCode(el);
+
+  // Ligne libre après un bloc : voir assurerLigneApresBloc().
+  assurerLigneApresBloc(el);
+
   // En tout dernier : le focus et le repositionnement du curseur ci-dessus
   // ont pu faire défiler le conteneur.
   retablirDefilement();
+}
+
+/* Garantit qu'un bloc (code, zone d'archive) n'est jamais le DERNIER élément
+   de la zone d'édition, en laissant une ligne vide derrière lui.
+
+   Sans cette ligne, une notask qui se termine par un bloc devient un
+   cul-de-sac : cliquer sous le bloc ne place le curseur nulle part — il n'y
+   a rien à cet endroit — et il faut ruser (fin du bloc puis flèches, ou
+   sélection à la souris) pour reprendre la saisie. C'est un travers connu
+   des zones éditables : le navigateur ne crée pas de ligne d'accueil de
+   lui-même après un élément de type bloc.
+
+   Un <br> plutôt qu'un paragraphe vide : richToText() le traduit en simple
+   saut de ligne, donc rien ne s'ajoute au contenu enregistré si l'on n'écrit
+   pas dedans. */
+function assurerLigneApresBloc(el) {
+  if (!el) return;
+  const dernier = el.lastChild;
+  if (!dernier) return;
+
+  const estBloc = dernier.nodeType === 1
+    && (dernier.tagName === 'PRE' || dernier.classList?.contains('note-archive-block'));
+  if (!estBloc) return;
+
+  el.appendChild(document.createElement('br'));
+}
+
+/* Cliquer dans le vide SOUS le texte place le curseur à la fin, comme dans
+   n'importe quel traitement de texte.
+
+   Une zone éditable ne le fait pas d'elle-même : elle ne réagit qu'aux
+   clics tombant sur du contenu. Une notask courte laisse pourtant une grande
+   surface vide en dessous (la zone occupe toute la hauteur restante, voir
+   .ta-wrap dans style.css) — viser cette surface est le geste naturel pour
+   reprendre la saisie, et il ne se passait rien.
+
+   On ne réagit qu'aux clics tombant SOUS le dernier élément : ailleurs, le
+   navigateur sait très bien placer le curseur, et intervenir casserait la
+   sélection à la souris. */
+function activerClicDansLeVide(el) {
+  if (!el || el.dataset.clicVideActif) return;
+  el.dataset.clicVideActif = '1';
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.target !== el) return; // clic sur du contenu : rien à faire
+    const dernier = el.lastElementChild || el.lastChild;
+    if (!dernier) return;
+    const bas = dernier.nodeType === 1
+      ? dernier.getBoundingClientRect().bottom
+      : el.getBoundingClientRect().bottom;
+    if (e.clientY <= bas) return;
+
+    e.preventDefault();
+    assurerLigneApresBloc(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false); // repliée sur la toute fin
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    el.focus();
+  });
 }
 
 /* Couleur du texte : MÊME nuancier et MÊME code que la couleur de note
