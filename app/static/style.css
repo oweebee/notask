@@ -2992,47 +2992,70 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    la largeur, bouton lecture à gauche, forme d'onde au centre, durée à
    droite. Le bloc est contenteditable="false" côté HTML — il se sélectionne
    d'un bloc et ne peut pas être disloqué caractère par caractère. */
-/* ============ Ligne à cocher posée dans le texte (notask mixte) ==========
+/* ============ Case à cocher posée dans le texte (notask mixte) ===========
    Voir NOTE_LINE_MARK dans app.js. Le bloc est display:flex, donc il apporte
    sa propre rupture de ligne dans un texte en white-space: pre-wrap — c'est
    pour ça que le rendu avale le saut de ligne qui précède le marqueur.
 
-   user-select: none sur l'enveloppe et non sur toute la ligne : sans lui, une
-   sélection à la souris qui traverse la case ou les boutons embarquerait leur
-   « contenu » dans le presse-papier. Le texte, lui, reste sélectionnable —
-   il redevient explicitement sélectionnable juste en dessous. */
+   L'apparence reprend celle de l'ancien éditeur de liste (.dn-item-row) :
+   même trait sous le texte, même place pour la case. C'est volontaire — le
+   geste a changé, pas la lecture.
+
+   align-items: baseline, et non center : sur une ligne qui déborde sur deux
+   ou trois lignes, `center` calait la case au MILIEU du paragraphe, loin de
+   son texte. `baseline` la garde en face de la PREMIÈRE ligne, quelle que
+   soit la longueur. Vérifié côte à côte dans un navigateur avant de choisir.
+
+   user-select: none sur l'enveloppe seulement : une sélection à la souris
+   qui traverse la case ou les boutons n'emporte pas leur « contenu ». Le
+   texte redevient explicitement sélectionnable juste en dessous. */
 .note-ligne {
   display: flex;
-  align-items: flex-start;
-  gap: .45rem;
-  margin: .12rem 0;
+  align-items: baseline;
+  gap: .4rem;
+  margin: .3rem 0;
   user-select: none;
 }
 .note-ligne-case {
   flex: none;
-  margin: .2rem 0 0;
+  margin: 0;
+  /* La ligne de base d'une case à cocher est son bord bas : ce demi-pixel la
+     recale optiquement sur le texte. */
+  transform: translateY(1px);
   accent-color: #ffd54f;
 }
 .note-ligne-txt {
   flex: 1 1 auto;
   min-width: 0;
   user-select: text;
-  /* Le texte d'une ligne à cocher est une ligne : il ne doit pas hériter du
-     pre-wrap de la zone de saisie, sinon un espace de fin tapé par mégarde
-     décalerait visiblement les boutons. */
+  padding: .3rem 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+  color: var(--md-on-surface);
   white-space: pre-wrap;
   word-break: break-word;
   outline: none;
+}
+.note-ligne-txt:focus { border-bottom-color: var(--md-primary); }
+/* Invite de la case en attente, reprise de l'ancien `placeholder`. Posée sur
+   une classe et non sur :empty : dans une zone contenteditable, effacer le
+   dernier caractère laisse souvent un <br> derrière, et :empty ne s'applique
+   alors plus. La classe est tenue par le JS (voir majCaseVide). */
+.note-ligne.est-vide .note-ligne-txt::before {
+  content: 'Ajouter une case à cocher';
+  color: var(--md-on-surface-variant);
+  opacity: .55;
+  pointer-events: none;
 }
 .note-ligne.done .note-ligne-txt {
   text-decoration: line-through;
   color: var(--md-on-surface-variant);
 }
-/* Ligne mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour
-   ne pas perdre sa place dans le texte, mais visiblement en retrait. */
+/* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
+   pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
 .note-ligne-due {
   flex: none;
+  align-self: center;
   margin-left: .4rem;
   padding: .05rem .4rem;
   border-radius: var(--shape-full);
@@ -3041,11 +3064,13 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   font-style: normal;
   color: var(--md-on-surface-variant);
 }
-/* Boutons de la ligne : discrets au repos, révélés au survol de la ligne —
-   ils ne doivent pas encombrer la lecture d'une notask qui en compte dix. */
+/* Boutons : discrets au repos, révélés au survol de la ligne — ils ne doivent
+   pas encombrer la lecture d'une notask qui en compte dix. align-self: center
+   les sort de l'alignement sur la ligne de base, qui les ferait flotter. */
 .note-ligne-cal,
 .note-ligne-del {
   flex: none;
+  align-self: center;
   opacity: 0;
   transition: opacity .15s ease;
 }

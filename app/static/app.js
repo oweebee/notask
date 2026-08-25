@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9017';
+const APP_VERSION = '0.9018';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5242,6 +5242,7 @@ function poserLignesDansTexte(items, zone) {
     bloc.querySelector('.note-ligne-case').checked = !!i.checked;
     bloc.classList.toggle('done', !!i.checked);
     majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null);
+    majCaseVide(bloc);
     fragment.appendChild(bloc);
   });
   // Point d'accueil pour la suite de la saisie : sans lui, impossible de
@@ -6332,6 +6333,9 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
 
     if (editable) {
       brancherLigneEditable(bloc);
+      // L'invite ne concerne que la saisie : sur la carte, une case sans
+      // texte ne doit pas afficher « Ajouter une case à cocher ».
+      majCaseVide(bloc);
     } else {
       case_.addEventListener('change', (e) => {
         e.stopPropagation();  // sans ça, le clic ouvrirait aussi la notask
@@ -6360,6 +6364,16 @@ function majEcheanceLigne(bloc, iso, finIso) {
     cal.classList.toggle('has-due', !!iso);
     cal.title = iso ? formatDueRange(iso, finIso) : 'Dater cette ligne en fait une tâche';
   }
+}
+
+/* Une case sans texte affiche son invite (« Ajouter une case à cocher »),
+   posée en CSS sur .est-vide. Passer par une classe et non par :empty est
+   délibéré : dans une zone contenteditable, effacer le dernier caractère
+   laisse le plus souvent un <br> derrière lui, et :empty cesse alors de
+   s'appliquer — l'invite ne revenait plus. */
+function majCaseVide(bloc) {
+  const txt = bloc.querySelector('.note-ligne-txt');
+  bloc.classList.toggle('est-vide', !(txt && txt.textContent.trim()));
 }
 
 /* Rend une ligne interactive dans une zone de saisie. Idempotent : appelé
@@ -6405,6 +6419,7 @@ function brancherLigneEditable(bloc) {
      produit ni marqueur ni ligne à l'enregistrement (voir richToText et
      lignesDepuisZone), elle disparaît donc d'elle-même à la fermeture. */
   txt.addEventListener('input', () => {
+    majCaseVide(bloc);
     if (!txt.textContent.trim()) return;
     const suivant = bloc.nextElementSibling;
     if (suivant && suivant.classList.contains('note-ligne')) return;
@@ -6463,6 +6478,7 @@ function creerBlocLigne() {
   const bloc = gabarit.firstElementChild;
   bloc.dataset.pret = '1';
   brancherLigneEditable(bloc);
+  majCaseVide(bloc);
   return bloc;
 }
 
