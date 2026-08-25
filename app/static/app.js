@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9011';
+const APP_VERSION = '0.9012';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5725,10 +5725,22 @@ function assurerLigneApresBloc(el) {
    sous la dernière (voir assurerLigneVierge). Rien n'est créé : elle est
    toujours là, il suffisait d'y aller.
 
-   Le clic n'est intercepté que s'il tombe sur la carte elle-même ou sur le
-   conteneur des lignes, jamais sur un de leurs enfants — sans quoi cliquer
-   sur une case à cocher, un libellé ou une pièce jointe déplacerait le
-   curseur au lieu d'agir. */
+   On ne se fie PAS à une égalité stricte avec tel ou tel conteneur : une
+   première version ne réagissait qu'aux clics tombant exactement sur la
+   carte ou sur la liste des lignes, et ne marchait donc jamais — le vide
+   sous la dernière ligne appartient en réalité à un conteneur intermédiaire
+   (`.field` autour des lignes, rangée de libellés étirée…). On raisonne
+   donc à l'envers : tout clic est bon SAUF s'il vise quelque chose
+   d'interactif ou une autre zone de la carte. */
+const ZONES_A_NE_PAS_DETOURNER = [
+  'input', 'button', 'a', 'select', 'textarea', 'label',
+  '[contenteditable]',
+  '.label-chips', '.label-add-picker',
+  '.dns-attachments', '.dns-dropzone-hint',
+  '.title-row', '.composer-head',
+  '.fmt-toolbar', '.field-actions-row', '.palette',
+].join(',');
+
 function activerClicVersDerniereLigne(carteSel, itemsSel) {
   const carte = $(carteSel);
   const box = $(itemsSel);
@@ -5736,15 +5748,22 @@ function activerClicVersDerniereLigne(carteSel, itemsSel) {
   carte.dataset.clicListeActif = '1';
 
   carte.addEventListener('mousedown', (e) => {
-    if (e.target !== carte && e.target !== box) return;
+    if (e.target.closest(ZONES_A_NE_PAS_DETOURNER)) return;
+
     // offsetParent plutôt que l'attribut `hidden` : côté édition rapide,
     // c'est le PARENT (#dns-items-field) qui porte `hidden`, pas le
     // conteneur des lignes lui-même. offsetParent vaut null dès qu'un
     // ancêtre masque l'élément, quel que soit le niveau.
     if (box.offsetParent === null) return; // notask de texte libre
+
     const champs = box.querySelectorAll('input[type=text]');
     const dernier = champs[champs.length - 1];
     if (!dernier) return;
+
+    // Uniquement SOUS la dernière ligne : un clic à hauteur du titre ou
+    // entre deux lignes n'a rien à faire ici.
+    if (e.clientY <= dernier.getBoundingClientRect().bottom) return;
+
     e.preventDefault();
     dernier.focus();
     // Curseur en fin de ligne plutôt qu'au début : on vient continuer, pas
