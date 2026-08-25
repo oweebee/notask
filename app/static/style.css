@@ -3179,8 +3179,16 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    Réservé au début d'un bloc exprès : au milieu, une marge trouerait le fond
    continu du bloc — d'où la règle ci-dessus, qui garde la pastille dedans. */
 .note-ligne.bloc-debut[data-due]:not([data-due=""]) {
-  margin-top: .8rem;
+  /* Doit valoir AU MOINS la moitié de la hauteur de la pastille, sinon la
+     part qui dépasse sort de la boîte de la notask et se fait rogner en
+     haut — c'était encore le cas à .8rem. */
+  margin-top: 1.15rem;
+  /* Les deux paddings ensemble, et non padding-top seul : le rythme de base
+     (.22rem, voir .note-ligne) restait en bas, la case était donc plus
+     épaisse au-dessus qu'en dessous. Le fond du cadre suit ce padding, d'où
+     l'asymétrie visible autour de la case à cocher. */
   padding-top: .45rem;
+  padding-bottom: .45rem;
 }
 .note-ligne.bloc-debut[data-due]:not([data-due=""]) .note-ligne-due-wrap {
   top: 0;
