@@ -3133,20 +3133,23 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
-/* Échéance (+ bouton calendrier) : posées en haut à droite de LA LIGNE, à
-   cheval sur son bord supérieur, plutôt que dans le fil du texte — demande
-   explicite après capture d'écran, où la pastille de date grignotait la
-   largeur dispo pour le texte d'une case cochée jusqu'à la faire déborder
-   sur 3-4 lignes très étroites. `position: absolute` les sort entièrement du
-   flux, donc .note-ligne-txt (flex: 1 1 auto) récupère toute la largeur.
-   translateY(-50%) est ce qui les met « à cheval » : la moitié de la
-   pastille déborde au-dessus du bord de la case (ou de l'arrondi du bloc,
-   si c'est la première case). */
+/* Échéance (+ bouton calendrier) : posées en haut à droite de LA LIGNE,
+   plutôt que dans le fil du texte — demande explicite après capture d'écran,
+   où la pastille de date grignotait la largeur dispo pour le texte d'une
+   case cochée jusqu'à la faire déborder sur 3-4 lignes très étroites.
+   `position: absolute` les sort entièrement du flux, donc .note-ligne-txt
+   (flex: 1 1 auto) récupère toute la largeur.
+
+   PAS de translateY négatif pour les faire déborder au-dessus du bord : sur
+   la première case d'un bloc, ce débord sort aussi de la boîte qui contient
+   toute la notask (overflow: hidden du troncage à N lignes sur la carte,
+   overflow-y: auto de la boîte d'édition) et se fait rogner en haut — bug
+   remonté par capture d'écran. Elles restent donc strictement DANS la boîte
+   de la case, juste calées en haut à droite plutôt qu'au centre. */
 .note-ligne-due-wrap {
   position: absolute;
-  top: 0;
+  top: .1rem;
   right: .5rem;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: .2rem;
