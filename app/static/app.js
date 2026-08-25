@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9013';
+const APP_VERSION = '0.9014';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2647,6 +2647,10 @@ function renderTrash() {
     // hydrater après coup.
     hydrateInlineImages(el, n);
     hydrateInlineAudio(el, n);
+    // Lignes à cocher d'une notask mixte : affichées, mais inertes — une
+    // notask en corbeille ne se modifie pas, on la restaure d'abord.
+    hydrateLignesACocher(el, n, { editable: false });
+    el.querySelectorAll('.note-ligne-case').forEach((c) => { c.disabled = true; });
     ajouterBoutonsCopieCode(el);
 
     el.querySelector('[data-act=restore]').onclick = async () => {
@@ -3477,6 +3481,16 @@ function renderNotes() {
     if (emplacement) emplacement.replaceWith(creerTerminalMasque());
     hydrateInlineImages(el, n);
     hydrateInlineAudio(el, n);
+    // Notask mixte : cases à cocher posées dans le corps du texte. Cocher
+    // depuis la mosaïque part tout de suite en PATCH, comme pour une liste
+    // à cocher classique (voir la boucle ul.check li plus bas).
+    hydrateLignesACocher(el, n, {
+      editable: false,
+      onCheck: async (itemId, coche) => {
+        await api(`/notes/${n.id}/items/${itemId}`, { method: 'PATCH', body: { checked: coche } });
+        loadNotes();
+      },
+    });
     ajouterBoutonsCopieCode(el);
 
     // (Plus de miniatures de pièces jointes à hydrater ici : la carte
@@ -4225,18 +4239,16 @@ renderBoutonMasque('#nc-toggle-mask', false);
 
 $('#nc-toggle-checklist').addEventListener('click', () => {
   composerExpand();
+  // Mêmes deux conversions qu'en édition rapide, et pour les mêmes raisons —
+  // voir poserLignesDansTexte() / listeDepuisTexte() : rien ne doit se perdre
+  // en chemin, ni une échéance de ligne, ni une case cochée.
   if (!composerChecklist) {
-    // Bascule depuis le texte libre : chaque ligne déjà tapée devient un élément.
-    const lignes = richToText($('#nc-content')).split('\n').filter((l) => l.trim());
-    composerItems = lignes.length
-      ? lignes.map((l) => ({ text: l.trim(), checked: false }))
-      : [{ text: '', checked: false }];
+    const items = listeDepuisTexte($('#nc-content'));
+    composerItems = items.length ? items : [{ text: '', checked: false }];
+    $('#nc-content').innerHTML = '';
   } else {
-    // Bascule inverse : les éléments redeviennent des paragraphes (même
-    // logique que #dns-toggle-checklist en édition rapide).
-    $('#nc-content').innerHTML = renderFormatted(
-      composerItems.map((i) => i.text).filter(Boolean).join('\n')
-    );
+    $('#nc-content').innerHTML = '';
+    poserLignesDansTexte(composerItems, $('#nc-content'));
   }
   composerChecklist = !composerChecklist;
   renderComposer();
@@ -4333,8 +4345,8 @@ activerClicDansLeVide($('#dns-content'));
 
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
-activerClicVersDerniereLigne('.nc-card', '#nc-items');
-activerClicVersDerniereLigne('.dns-card', '#dns-items');
+activerClicVersDerniereLigne('.nc-card', '#nc-items', '#nc-toggle-checklist', '#nc-content');
+activerClicVersDerniereLigne('.dns-card', '#dns-items', '#dns-toggle-checklist', '#dns-content');
 
 // Pièces jointes : la notask n'existe pas encore, les fichiers restent en
 // mémoire (composerPendingFiles) jusqu'à l'envoi (voir #nc-add). Aperçu
@@ -4751,6 +4763,10 @@ async function creerNotaskDepuisComposeur() {
   const title = $('#nc-title').value.trim();
   const content = richToText($('#nc-content')).trim();
   const items = composerItems.filter((i) => i.text.trim());
+  // Lignes à cocher posées DANS le texte (notask mixte, voir
+  // NOTE_LINE_MARK) : elles n'existent que dans la zone de saisie, pas dans
+  // composerItems, qui reste la liste du mode "liste à cocher" pur.
+  const lignesMixtes = composerChecklist ? [] : lignesDepuisZone($('#nc-content'));
 
   if (!title && !content && !(composerChecklist && items.length) && !composerPendingFiles.length) return;
 
@@ -4774,7 +4790,16 @@ async function creerNotaskDepuisComposeur() {
           calendar_title: i.due_at ? i.text : null,
           text: await encryptField(i.text),
         })))
-        : [],
+        // Hors mode liste : les lignes éventuellement posées dans le texte.
+        // Vide dans le cas courant (texte libre sans aucune case), donc rien
+        // ne change pour les notasks ordinaires.
+        : await Promise.all(lignesMixtes.map(async (l) => ({
+          checked: l.checked,
+          due_at: l.due_at,
+          due_end_at: l.due_end_at,
+          calendar_title: l.due_at ? l.text : null,
+          text: await encryptField(l.text),
+        }))),
       icon: state.composerIcon,
       color: composerColor,
       due_at: $('#nc-due').value || null,
@@ -4790,6 +4815,14 @@ async function creerNotaskDepuisComposeur() {
       masked: composerMasked,
     };
     const created = await api('/notes', { method: 'POST', body });
+
+    /* Contenu à corriger après coup : plusieurs familles de marqueurs
+       provisoires cohabitent (dessins, notes vocales, lignes à cocher), et
+       aucune ne peut connaître son identifiant définitif avant que la notask
+       n'existe. On les résout toutes, puis on n'envoie QU'UN seul PATCH
+       correctif à la fin — au lieu d'un par famille. */
+    let contenuFinal = content;
+    let remplace = false;
 
     // Pièces jointes : la notask vient tout juste d'obtenir un id, on peut
     // enfin les envoyer (voir le commentaire sur composerPendingFiles).
@@ -4810,8 +4843,6 @@ async function creerNotaskDepuisComposeur() {
       // contenu avec les vrais ids. Second appel assumé : impossible de
       // connaître ces ids avant d'avoir créé la notask ET envoyé les
       // fichiers.
-      let contenuFinal = content;
-      let remplace = false;
       results.forEach((r, i) => {
         if (r.status !== 'fulfilled') return;
         // Deux familles de marqueurs provisoires à réécrire : les dessins
@@ -4826,12 +4857,22 @@ async function creerNotaskDepuisComposeur() {
           remplace = true;
         }
       });
-      if (remplace && !composerChecklist) {
-        await api('/notes/' + created.id, {
-          method: 'PATCH',
-          body: { content: await encryptField(contenuFinal) },
-        });
-      }
+    }
+
+    /* Lignes à cocher du texte : mêmes identifiants provisoires, même
+       résolution. Le rapprochement se fait par rang — les lignes ont été
+       envoyées dans l'ordre du document et reviennent triées par position
+       (voir resoudreLignesTmp). */
+    if (lignesMixtes.length) {
+      const corrige = resoudreLignesTmp(contenuFinal, lignesMixtes, created.items || []);
+      if (corrige !== null) { contenuFinal = corrige; remplace = true; }
+    }
+
+    if (remplace && !composerChecklist) {
+      await api('/notes/' + created.id, {
+        method: 'PATCH',
+        body: { content: await encryptField(contenuFinal) },
+      });
     }
 
     // Page fantôme (voir NOTASK_QUICK_CAPTURE, /quick) : un rechargement
@@ -5294,19 +5335,78 @@ function renderDnsMode() {
   btn.setAttribute('aria-label', label);
 }
 
+/* ================== Bascule entre les deux formes d'une notask ============
+   Liste à cocher PURE (les lignes vivent dans #dns-items / composerItems) et
+   texte libre, éventuellement MIXTE (les lignes vivent dans le texte, sous
+   forme de blocs — voir NOTE_LINE_MARK).
+
+   Les deux conversions ci-dessous ne perdent rien : ni l'identifiant d'une
+   ligne, ni son échéance, ni son état coché. C'était le cas AVANT pour le
+   passage liste -> texte, qui aplatissait tout en simples paragraphes : les
+   échéances par ligne et leurs événements Google disparaissaient sans un
+   mot. */
+
+/* Liste -> texte : chaque ligne devient un bloc à cocher posé dans le texte.
+   Les blocs sont construits à la main (et non par renderFormatted +
+   hydratation) parce qu'une ligne encore jamais enregistrée n'existe pas
+   dans note.items : ses valeurs ne sont disponibles qu'ici. */
+function poserLignesDansTexte(items, zone) {
+  const fragment = document.createDocumentFragment();
+  items.filter((i) => (i.text || '').trim()).forEach((i) => {
+    const bloc = creerBlocLigne();
+    // Ligne déjà en base : on garde son identifiant, donc son lien vers son
+    // échéance et son événement Google. Sinon on laisse l'identifiant
+    // provisoire posé par creerBlocLigne(), résolu à l'enregistrement.
+    if (i.id != null) bloc.dataset.ligne = String(i.id);
+    bloc.querySelector('.note-ligne-txt').textContent = i.text;
+    bloc.querySelector('.note-ligne-case').checked = !!i.checked;
+    bloc.classList.toggle('done', !!i.checked);
+    majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null);
+    fragment.appendChild(bloc);
+  });
+  // Point d'accueil pour la suite de la saisie : sans lui, impossible de
+  // poser le curseur sous le dernier bloc (cf. assurerLigneApresBloc).
+  fragment.appendChild(document.createElement('br'));
+  // Ajouté APRÈS le contenu existant plutôt qu'à sa place : en mode liste il
+  // est vide, mais rien ne doit dépendre de cette supposition.
+  zone.appendChild(fragment);
+}
+
+/* Texte -> liste : l'inverse exact. Les blocs à cocher redeviennent des
+   lignes de liste (identifiant et échéance compris), les paragraphes de
+   texte deviennent des lignes neuves. L'ordre du document est conservé. */
+function listeDepuisTexte(zone) {
+  const parBloc = new Map();
+  lignesDepuisZone(zone).forEach((l) => parBloc.set(l.marqueur, l));
+  const items = [];
+  richToText(zone).split('\n').forEach((ligne) => {
+    const m = ligne.trim().match(/^\[ligne:(\w+)\]$/);
+    if (m) {
+      const l = parBloc.get(m[1]);
+      if (l) items.push({
+        id: l.id, text: l.text, checked: l.checked,
+        due_at: l.due_at, due_end_at: l.due_end_at,
+      });
+      return;
+    }
+    // Déséchappement des délimiteurs, comme le fait renderFormatted à la fin
+    // de son rendu : sans lui, un texte contenant « fichier_important »
+    // arrivait dans la liste avec ses antislashs visibles.
+    const texte = ligne.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\').trim();
+    if (texte) items.push({ text: texte, checked: false, due_at: null });
+  });
+  return items;
+}
+
 $('#dns-toggle-checklist').addEventListener('click', () => {
   if (!state.editingIsChecklist) {
-    // Texte libre -> liste : chaque ligne déjà écrite devient un élément.
-    const lignes = richToText($('#dns-content')).split('\n').filter((l) => l.trim());
-    state.editingNoteItems = lignes.length
-      ? lignes.map((l) => ({ text: l.trim(), checked: false, due_at: null }))
-      : [{ text: '', checked: false, due_at: null }];
+    const items = listeDepuisTexte($('#dns-content'));
+    state.editingNoteItems = items.length ? items : [{ text: '', checked: false, due_at: null }];
+    $('#dns-content').innerHTML = '';
     renderNoteItemsSimple();
   } else {
-    // Liste -> texte libre : les lignes deviennent des paragraphes.
-    $('#dns-content').innerHTML = renderFormatted(
-      state.editingNoteItems.map((i) => i.text).filter(Boolean).join('\n')
-    );
+    $('#dns-content').innerHTML = '';
+    poserLignesDansTexte(state.editingNoteItems, $('#dns-content'));
   }
   state.editingIsChecklist = !state.editingIsChecklist;
   renderDnsMode();
@@ -5340,9 +5440,12 @@ function openNoteSimpleDialog(note) {
 
   $('#dns-title').value = note.title;
   $('#dns-description').value = note.description || '';
-  $('#dns-content').innerHTML = renderFormatted(note.content || '');
+  $('#dns-content').innerHTML = renderFormatted(note.content || '', false, true);
   hydrateInlineImages($('#dns-content'), note);
   hydrateInlineAudio($('#dns-content'), note);
+  // Notask mixte : les `[ligne:…]` du contenu ont donné des blocs vides,
+  // remplis ici depuis note.items — cf. NOTE_LINE_MARK.
+  hydrateLignesACocher($('#dns-content'), note, { editable: true });
   ajouterBoutonsCopieCode($('#dns-content'));
   // Une notask déjà enregistrée peut elle aussi se terminer par un bloc :
   // sans cette ligne d'accueil, impossible de reprendre la saisie en
@@ -5714,8 +5817,15 @@ function assurerLigneApresBloc(el) {
   const dernier = el.lastChild;
   if (!dernier) return;
 
+  // .note-ligne et .note-audio sont aussi des blocs insécables
+  // (contenteditable="false") : sans ligne d'accueil derrière, une notask qui
+  // se termine par une case à cocher ou une note vocale ne se laisse plus
+  // compléter — le curseur n'a nulle part où se poser.
   const estBloc = dernier.nodeType === 1
-    && (dernier.tagName === 'PRE' || dernier.classList?.contains('note-archive-block'));
+    && (dernier.tagName === 'PRE'
+      || dernier.classList?.contains('note-archive-block')
+      || dernier.classList?.contains('note-ligne')
+      || dernier.classList?.contains('note-audio'));
   if (!estBloc) return;
 
   el.appendChild(document.createElement('br'));
@@ -5748,7 +5858,7 @@ const ZONES_A_NE_PAS_DETOURNER = [
   '.fmt-toolbar', '.field-actions-row', '.palette',
 ].join(',');
 
-function activerClicVersDerniereLigne(carteSel, itemsSel) {
+function activerClicVersDerniereLigne(carteSel, itemsSel, basculeSel, contenuSel) {
   const carte = $(carteSel);
   const box = $(itemsSel);
   if (!carte || !box || carte.dataset.clicListeActif) return;
@@ -5772,11 +5882,25 @@ function activerClicVersDerniereLigne(carteSel, itemsSel) {
     if (e.clientY <= dernier.getBoundingClientRect().bottom) return;
 
     e.preventDefault();
-    dernier.focus();
-    // Curseur en fin de ligne plutôt qu'au début : on vient continuer, pas
-    // corriger le début.
-    const n = dernier.value.length;
-    dernier.setSelectionRange(n, n);
+
+    /* Cliquer SOUS la dernière case veut dire « je veux écrire ici », pas
+       « ajoute une case de plus » — pour ajouter une case, il y a la ligne
+       d'attente juste au-dessus, à portée de clic.
+
+       La notask passe donc en forme MIXTE : les cases restent des cases (et
+       gardent leur identifiant, leur échéance, leur état), mais elles vivent
+       désormais dans le texte, où l'on peut écrire au-dessus, au-dessous et
+       entre elles. Voir poserLignesDansTexte().
+
+       Rien n'est perdu et le geste est réversible : le bouton de la barre
+       d'outils (bascule) ramène à une liste pure. On passe d'ailleurs par ce
+       bouton plutôt que de refaire la conversion ici — un seul chemin, donc
+       un seul endroit où elle peut être fausse. */
+    const bascule = $(basculeSel);
+    const contenu = $(contenuSel);
+    if (!bascule || !contenu) { dernier.focus(); return; }
+    bascule.click();
+    placerCurseurEnFin(contenu);
   });
 }
 
@@ -5875,6 +5999,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
     if (btn.dataset.fmt === 'archive') btn.innerHTML = ICONS.archive;
     if (btn.dataset.fmt === 'url') btn.innerHTML = ICONS.lien;
     if (btn.dataset.fmt === 'clear') btn.innerHTML = ICONS.clearFormat;
+    if (btn.dataset.fmt === 'ligne') btn.innerHTML = ICONS.tasks;
     // Sans ce preventDefault, le clic sur le bouton déplace le focus hors de
     // la zone contenteditable au mousedown et efface la sélection avant même
     // que le click ne se déclenche (constaté à la vérification : le texte
@@ -5884,6 +6009,9 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
       if (btn.dataset.fmt === 'color') basculerPaletteTexte(paletteSel, autrePaletteSel, editableSel);
       else if (btn.dataset.fmt === 'clear') effacerMiseEnForme($(editableSel));
       else if (btn.dataset.fmt === 'url') poserLienSurSelection($(editableSel));
+      // Pas une mise en forme, une INSERTION : la ligne à cocher n'enveloppe
+      // pas la sélection, elle s'ajoute à l'endroit du curseur.
+      else if (btn.dataset.fmt === 'ligne') insererLigneACocher(editableSel);
       else wrapSelectionRich($(editableSel), btn.dataset.fmt);
     });
   });
@@ -6031,6 +6159,20 @@ function richToText(root) {
         if (node.classList.contains('note-audio')) {
           return node.dataset.att ? `\n[audio:${node.dataset.att}]\n` : '';
         }
+        /* Ligne à cocher (notask mixte) : seul son identifiant repart dans le
+           contenu, jamais son texte — celui-ci vit dans la NoteItem, envoyée
+           à part (voir lignesDepuisZone / NOTE_LINE_MARK).
+
+           Une ligne restée vide ne produit aucun marqueur : elle sera aussi
+           écartée des items envoyés au serveur, exactement comme la ligne
+           d'attente d'une liste à cocher classique. Écrire le marqueur quand
+           même laisserait un `[ligne:…]` sans ligne derrière — un marqueur
+           orphelin, invisible mais présent dans le texte enregistré. */
+        if (node.classList.contains('note-ligne')) {
+          const zoneTexte = node.querySelector('.note-ligne-txt');
+          const texte = zoneTexte ? zoneTexte.textContent.trim() : '';
+          return node.dataset.ligne && texte ? `\n[ligne:${node.dataset.ligne}]` : '';
+        }
         return '\n' + inner();
       }
       case 'p': return '\n' + inner();
@@ -6055,7 +6197,18 @@ const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
    principe exact que NOTE_IMG_MARK — seul l'identifiant de la pièce jointe
    voyage dans le texte (donc chiffré avec lui), les octets ne sont
    déchiffrés qu'au rendu par hydrateInlineAudio(). */
-const NOTE_AUDIO_MARK = /\[audio:(\w+)\]/g;
+/* Les sauts de ligne qui entourent le marqueur sont AVALÉS au rendu, parce
+   que le bloc produit est un bloc : il apporte déjà sa propre rupture.
+
+   Sans ça, le contenu DÉRIVAIT à chaque enregistrement. richToText écrit
+   `\n[audio:31]\n` (voir case 'div'), le rendu suivant laissait ces deux
+   sauts comme du texte (les zones de saisie sont en white-space: pre-wrap),
+   et la relecture suivante en rajoutait deux autres : une notask contenant
+   une note vocale gagnait deux lignes vides à chaque ouverture-fermeture,
+   indéfiniment. Constaté au banc d'essai des notasks mixtes, sur un test de
+   stabilité du contenu — le défaut est antérieur, il n'avait simplement
+   jamais été mesuré. Même traitement que NOTE_LINE_MARK juste en dessous. */
+const NOTE_AUDIO_MARK = /\n?\[audio:(\w+)\]\n?/g;
 
 /* Squelette d'un lecteur de note vocale. contenteditable="false" : sans
    lui, le bloc serait éditable caractère par caractère dans la zone riche
@@ -6065,6 +6218,58 @@ function audioBlockHtml(attId) {
     + `<button type="button" class="note-audio-play" aria-label="Lire la note vocale">${ICONS.play}</button>`
     + `<canvas class="note-audio-wave"></canvas>`
     + `<span class="note-audio-time">--:--</span>`
+    + `</div>`;
+}
+
+/* ====================== Notasks mixtes : lignes à cocher ==================
+   Marqueur d'une ligne à cocher posée DANS le corps d'une notask :
+   `[ligne:12]`, où 12 est l'id de la NoteItem correspondante.
+
+   Pourquoi un marqueur et pas du texte : une ligne à cocher doit rester un
+   OBJET À PART EN BASE (NoteItem), parce que c'est elle qui porte sa propre
+   échéance, son propre événement Google Calendar, et que c'est elle qu'on
+   retrouve dans « Notasks prévues » et dans le widget Échéances Android. Si
+   les cases devenaient de simples caractères dans le contenu, tout ce
+   mécanisme tomberait. Le marqueur ne transporte donc QUE la position de la
+   ligne dans le texte ; son texte, son état coché et son échéance vivent
+   dans note.items, comme avant.
+
+   C'est exactement le principe déjà utilisé pour les images (NOTE_IMG_MARK)
+   et les notes vocales (NOTE_AUDIO_MARK) : l'identifiant voyage dans le
+   contenu chiffré, l'objet est rejoint au rendu (voir hydrateLignesACocher).
+
+   Une notask est « mixte » quand is_checklist vaut faux ET que son contenu
+   porte au moins un `[ligne:…]`. Conséquence voulue : l'archivage
+   automatique « toutes les cases cochées » ne s'y applique pas — il est
+   réservé aux listes pures (voir archiver_si_tout_coche côté serveur).
+
+   `\n?` en tête : le marqueur est écrit précédé de son saut de ligne (voir
+   richToText, case 'div'), mais il est rendu par un bloc, qui apporte déjà
+   sa propre rupture. Sans avaler ce saut, chaque ligne à cocher s'afficherait
+   précédée d'une ligne vide (les zones de saisie sont en white-space:
+   pre-wrap, un \n y est visible). */
+const NOTE_LINE_MARK = /\n?\[ligne:(\w+)\]/g;
+
+/* Squelette d'une ligne à cocher insérée dans le texte.
+
+   contenteditable="false" sur l'enveloppe, "true" sur le seul texte : la
+   structure (case, boutons) devient insécable au clavier — impossible de la
+   disloquer avec une touche Retour arrière mal placée — tandis que le texte
+   de la ligne reste modifiable directement, sans boîte de dialogue.
+
+   Le contenu est laissé vide ici : texte, état coché et échéance ne sont
+   posés qu'à l'hydratation, depuis note.items. */
+function ligneBlockHtml(ligneId, editable) {
+  return `<div class="note-ligne" data-ligne="${ligneId}" contenteditable="false">`
+    + `<input type="checkbox" class="note-ligne-case">`
+    + `<span class="note-ligne-txt"${editable ? ' contenteditable="true"' : ''}></span>`
+    + `<em class="note-ligne-due" hidden></em>`
+    + (editable
+      ? `<button type="button" class="note-ligne-cal cal-btn" tabindex="-1"
+             title="Dater cette ligne en fait une tâche">${ICONS.calendar}</button>`
+        + `<button type="button" class="note-ligne-del" tabindex="-1"
+             title="Retirer la ligne" aria-label="Retirer la ligne">✕</button>`
+      : '')
     + `</div>`;
 }
 
@@ -6318,6 +6523,261 @@ function hydrateInlineImages(root, note) {
   });
 }
 
+/* ============== Notasks mixtes : hydratation et saisie des lignes =========
+   Voir NOTE_LINE_MARK pour le pourquoi du marqueur. Ici, les trois gestes
+   qui l'accompagnent : remplir les blocs rendus depuis note.items, relire
+   les blocs pour reconstituer les items à l'enregistrement, et en insérer un
+   nouveau à l'endroit du curseur. */
+
+/* Remplit les blocs .note-ligne d'un conteneur déjà rendu à partir des
+   NoteItem de la notask. Même rôle que hydrateInlineImages() pour les images
+   insérées dans le texte, appelé aux mêmes endroits.
+
+   `editable` : dans une zone de saisie, chaque ligne devient modifiable
+   (texte, dater, retirer). Sur la carte d'accueil, seule la case reste
+   cliquable, et cocher part directement en PATCH via `onCheck`. */
+function hydrateLignesACocher(root, note, { editable = false, onCheck = null } = {}) {
+  const items = (note && note.items) || [];
+  root.querySelectorAll('.note-ligne[data-ligne]').forEach((bloc) => {
+    if (bloc.dataset.pret === '1') return;
+    const item = items.find((i) => String(i.id) === bloc.dataset.ligne);
+    /* Marqueur sans ligne derrière : ne devrait pas arriver (richToText
+       n'écrit un marqueur que pour une ligne réellement envoyée), mais un
+       contenu venu d'un historique de version ou d'une notask à moitié
+       enregistrée pourrait en porter un. On retire le bloc plutôt que de
+       laisser une case vide et muette — et le marqueur disparaîtra du texte
+       au prochain enregistrement, faute de bloc à relire. */
+    if (!item) { bloc.remove(); return; }
+
+    /* Ligne mise de côté SEULE (voir NoteItem.archived) : elle ne fait plus
+       partie de la liste courante. Sur la carte on la retire, comme le fait
+       déjà l'affichage d'une liste à cocher classique. Dans l'éditeur on la
+       garde, en retrait : la retirer du DOM ferait disparaître son marqueur
+       au prochain enregistrement, et donc perdre sa place dans le texte le
+       jour où elle est sortie des archives. */
+    if (item.archived) {
+      if (!editable) { bloc.remove(); return; }
+      bloc.classList.add('est-archivee');
+    }
+
+    bloc.dataset.pret = '1';
+    bloc.querySelector('.note-ligne-txt').textContent = item.text || '';
+    const case_ = bloc.querySelector('.note-ligne-case');
+    case_.checked = !!item.checked;
+    bloc.classList.toggle('done', !!item.checked);
+    majEcheanceLigne(bloc, item.due_at || null, item.due_end_at || null);
+
+    if (editable) {
+      brancherLigneEditable(bloc);
+    } else {
+      case_.addEventListener('change', (e) => {
+        e.stopPropagation();  // sans ça, le clic ouvrirait aussi la notask
+        if (onCheck) onCheck(item.id, e.target.checked);
+      });
+      // Le reste de la ligne ne doit pas avaler le clic : il ouvre la notask
+      // comme n'importe quel autre endroit de la carte.
+    }
+  });
+}
+
+/* Étiquette d'échéance d'une ligne, et mise en évidence du bouton calendrier.
+   L'échéance est stockée sur le bloc lui-même (data-due) : c'est de là que
+   lignesDepuisZone() la relit à l'enregistrement, sans avoir à tenir un
+   tableau parallèle synchronisé avec le DOM. */
+function majEcheanceLigne(bloc, iso, finIso) {
+  bloc.dataset.due = iso || '';
+  bloc.dataset.dueEnd = (iso && finIso) || '';
+  const tag = bloc.querySelector('.note-ligne-due');
+  if (tag) {
+    tag.hidden = !iso;
+    tag.textContent = iso ? formatDueRange(iso, finIso) : '';
+  }
+  const cal = bloc.querySelector('.note-ligne-cal');
+  if (cal) {
+    cal.classList.toggle('has-due', !!iso);
+    cal.title = iso ? formatDueRange(iso, finIso) : 'Dater cette ligne en fait une tâche';
+  }
+}
+
+/* Rend une ligne interactive dans une zone de saisie. Idempotent : appelé
+   aussi bien à l'hydratation qu'à l'insertion d'une ligne toute neuve. */
+function brancherLigneEditable(bloc) {
+  if (bloc.dataset.branchee === '1') return;
+  bloc.dataset.branchee = '1';
+  const case_ = bloc.querySelector('.note-ligne-case');
+  const txt = bloc.querySelector('.note-ligne-txt');
+  const cal = bloc.querySelector('.note-ligne-cal');
+  const del = bloc.querySelector('.note-ligne-del');
+
+  case_.addEventListener('change', () => {
+    bloc.classList.toggle('done', case_.checked);
+  });
+
+  if (cal) {
+    // mousedown neutralisé : cf. brancherBarreFormat — sans ça le curseur
+    // quitte la zone de saisie avant même que le clic n'arrive.
+    cal.addEventListener('mousedown', (e) => e.preventDefault());
+    cal.addEventListener('click', () => {
+      openCalPopup(cal, bloc.dataset.due || null, (iso, finIso) => {
+        majEcheanceLigne(bloc, iso, finIso);
+      }, bloc.dataset.dueEnd || null);
+    });
+  }
+
+  if (del) {
+    del.addEventListener('mousedown', (e) => e.preventDefault());
+    del.addEventListener('click', () => { bloc.remove(); });
+  }
+
+  txt.addEventListener('keydown', (e) => {
+    /* Entrée : une nouvelle ligne à cocher juste en dessous — le geste
+       attendu quand on est en train d'énumérer. Maj+Entrée en sort au
+       contraire, pour reprendre du texte libre sous la liste. */
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) sortirDeLaLigne(bloc);
+      else insererLigneApres(bloc);
+      return;
+    }
+    /* Retour arrière sur une ligne déjà vide : elle disparaît, et le curseur
+       revient là où il était avant elle. Sans ça, une ligne insérée par
+       erreur ne pourrait se retirer qu'avec le bouton ✕ — alors que le
+       réflexe, dans un texte, est d'effacer. */
+    if (e.key === 'Backspace' && !txt.textContent.trim()) {
+      e.preventDefault();
+      const precedent = bloc.previousElementSibling;
+      bloc.remove();
+      if (precedent && precedent.classList.contains('note-ligne')) {
+        placerCurseurEnFin(precedent.querySelector('.note-ligne-txt'));
+      }
+    }
+  });
+}
+
+let compteurLigneTmp = 0;
+
+/* Construit un bloc de ligne à cocher tout neuf, prêt à être inséré.
+   L'identifiant est provisoire (`tmp3`) : la NoteItem n'existe pas encore en
+   base. Il est remplacé par le vrai id juste après l'enregistrement (voir
+   resoudreLignesTmp), exactement comme les marqueurs `![att:tmpN]` des
+   dessins insérés avant que la notask n'ait un id. */
+function creerBlocLigne() {
+  const gabarit = document.createElement('div');
+  gabarit.innerHTML = ligneBlockHtml('tmp' + (compteurLigneTmp++), true);
+  const bloc = gabarit.firstElementChild;
+  bloc.dataset.pret = '1';
+  brancherLigneEditable(bloc);
+  return bloc;
+}
+
+function placerCurseurEnFin(el) {
+  if (!el) return;
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function insererLigneApres(bloc) {
+  const nouveau = creerBlocLigne();
+  bloc.parentNode.insertBefore(nouveau, bloc.nextSibling);
+  placerCurseurEnFin(nouveau.querySelector('.note-ligne-txt'));
+}
+
+/* Reprendre du texte libre sous une ligne à cocher (Maj+Entrée, ou clic dans
+   le vide sous la dernière ligne). Un <br> plutôt qu'un nœud texte vide : un
+   nœud texte vide n'est pas une position de curseur stable, le navigateur le
+   supprime au premier rendu. */
+function sortirDeLaLigne(bloc) {
+  const zone = bloc.closest('[contenteditable=true]');
+  const br = document.createElement('br');
+  bloc.parentNode.insertBefore(br, bloc.nextSibling);
+  const range = document.createRange();
+  range.setStartAfter(br);
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  if (zone) zone.focus();
+}
+
+/* Insère une ligne à cocher à l'endroit exact du curseur dans une zone de
+   saisie riche — c'est tout le geste « notask mixte » : on écrit, on pose une
+   case, on écrit encore, on pose une image, on repose des cases. */
+function insererLigneACocher(editableSel) {
+  const el = $(editableSel);
+  if (!el) return;
+  el.focus();
+  const sel = window.getSelection();
+  let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  // Curseur perdu (zone jamais cliquée, sélection dans une autre zone) : on
+  // pose la ligne à la fin plutôt que de ne rien faire.
+  if (!range || !el.contains(range.commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+  }
+  const bloc = creerBlocLigne();
+  range.deleteContents();
+  range.insertNode(bloc);
+  placerCurseurEnFin(bloc.querySelector('.note-ligne-txt'));
+}
+
+/* Relit les lignes à cocher d'une zone de saisie, dans l'ordre du document,
+   pour reconstituer les NoteItem à envoyer.
+
+   L'ordre compte doublement : il devient la `position` des lignes côté
+   serveur, et c'est lui qui permet de rattacher les identifiants provisoires
+   aux vrais identifiants renvoyés (voir resoudreLignesTmp).
+
+   Les lignes vides sont écartées — même règle que richToText, qui n'écrit
+   alors aucun marqueur : les deux doivent rester d'accord, sinon on se
+   retrouve soit avec un marqueur sans ligne, soit avec une ligne sans place
+   dans le texte. */
+function lignesDepuisZone(root) {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll('.note-ligne[data-ligne]'))
+    .map((bloc) => ({
+      bloc,
+      marqueur: bloc.dataset.ligne,
+      // Un id provisoire n'existe pas en base : envoyer `undefined` fait
+      // créer la ligne (voir _replace_items côté serveur).
+      id: bloc.dataset.ligne.startsWith('tmp') ? undefined : Number(bloc.dataset.ligne),
+      text: bloc.querySelector('.note-ligne-txt').textContent.trim(),
+      checked: bloc.querySelector('.note-ligne-case').checked,
+      due_at: bloc.dataset.due || null,
+      due_end_at: (bloc.dataset.due && bloc.dataset.dueEnd) || null,
+    }))
+    .filter((l) => l.text);
+}
+
+/* Après enregistrement : remplace les identifiants provisoires du contenu par
+   ceux que le serveur vient d'attribuer.
+
+   Le rapprochement se fait par RANG, pas par texte : les lignes ont été
+   envoyées dans l'ordre du document, et le serveur les renvoie triées par
+   `position`, qu'il a lui-même numérotée dans cet ordre (voir _replace_items
+   et l'`order_by` de Note.items). Deux lignes au texte identique ne peuvent
+   donc pas être confondues.
+
+   Renvoie le contenu corrigé, ou null si rien n'était à corriger — auquel cas
+   l'appelant s'épargne un second appel réseau. */
+function resoudreLignesTmp(contenu, lignesEnvoyees, itemsRecus) {
+  let corrige = contenu;
+  let change = false;
+  lignesEnvoyees.forEach((ligne, rang) => {
+    if (!ligne.marqueur.startsWith('tmp')) return;
+    const recu = itemsRecus[rang];
+    if (!recu) return;
+    corrige = corrige.split(`[ligne:${ligne.marqueur}]`).join(`[ligne:${recu.id}]`);
+    change = true;
+  });
+  return change ? corrige : null;
+}
+
 /* Contexte audio partagé : un par onglet suffit, et les navigateurs en
    limitent le nombre — en créer un par note vocale finirait par lever une
    erreur sur une notask qui en contient plusieurs. Créé à la demande
@@ -6505,10 +6965,19 @@ function brancherLecteurAudio(bloc, url, blob) {
    Faux par défaut — l'ouverture d'une notask part toujours archives
    repliées, quel que soit l'état où on les avait laissées à la fermeture.
    Seul l'affichage des résultats de recherche le passe à vrai. */
-function renderFormatted(text, archivesDepliees = false) {
+/* `lignesEditables` : vrai uniquement dans les zones de saisie (composeur,
+   édition rapide), où une ligne à cocher reçoit son texte modifiable et ses
+   deux boutons (dater / retirer). Faux sur la carte d'accueil, qui n'est pas
+   un éditeur : la case y reste cliquable — cocher depuis la mosaïque est un
+   geste courant — mais rien d'autre. */
+function renderFormatted(text, archivesDepliees = false, lignesEditables = false) {
   let html = escapeHtml(text);
   html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
   html = html.replace(NOTE_AUDIO_MARK, (m, id) => audioBlockHtml(id));
+  // Avant les marqueurs de mise en forme : le bloc produit ici ne contient
+  // aucun texte de la notask (il est rempli à l'hydratation), donc rien à
+  // l'intérieur ne doit être relu par les regex de gras/italique/code.
+  html = html.replace(NOTE_LINE_MARK, (m, id) => ligneBlockHtml(id, lignesEditables));
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
@@ -6668,14 +7137,21 @@ async function saveNoteSimpleDialog() {
     // l'ancienne boîte "Modifier" complète qui portait ce réglage jusque-là,
     // donc state.editingIcon (et non plus l'icône figée de l'état chargé)
     // entre bien dans la comparaison.
-    const currentItemsForDiff = state.editingIsChecklist
+    // Notask mixte : les lignes ne vivent pas dans state.editingNoteItems
+    // mais directement dans la zone de texte, sous forme de blocs (voir
+    // NOTE_LINE_MARK). Elles doivent entrer dans la comparaison au même
+    // titre — sans ça, cocher une case ou dater une ligne d'une notask mixte
+    // ne créerait aucun point d'historique.
+    const lignesMixtes = state.editingIsChecklist ? [] : lignesDepuisZone($('#dns-content'));
+    const contenuClair = state.editingIsChecklist ? '' : richToText($('#dns-content'));
+    const currentItemsForDiff = (state.editingIsChecklist
       ? state.editingNoteItems.filter((i) => i.text.trim())
-        .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }))
-      : [];
+      : lignesMixtes
+    ).map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }));
     const currentForDiff = {
       title: $('#dns-title').value,
       description: $('#dns-description').value,
-      content: state.editingIsChecklist ? '' : richToText($('#dns-content')),
+      content: contenuClair,
       color: state.editingColor || n.color,
       due_at: $('#dns-due').value || null,
       is_checklist: state.editingIsChecklist,
@@ -6722,10 +7198,39 @@ async function saveNoteSimpleDialog() {
       })));
       body.content = '';
     } else {
-      body.content = await encryptField(richToText($('#dns-content')));
-      body.items = [];
+      /* Texte libre — et, s'il y en a, les lignes à cocher posées DANS ce
+         texte (notask mixte). `body.items = []` inconditionnel, comme
+         auparavant, effacerait ces lignes à chaque enregistrement : le
+         contenu garderait ses marqueurs `[ligne:…]`, mais plus aucune ligne
+         derrière. Une notask de texte libre sans aucune ligne envoie bien un
+         tableau vide, comme avant. */
+      body.content = await encryptField(contenuClair);
+      body.items = await Promise.all(lignesMixtes.map(async (l) => ({
+        id: l.id,
+        checked: l.checked,
+        due_at: l.due_at,
+        due_end_at: l.due_end_at,
+        // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
+        // quand la ligne porte une échéance à mettre dans l'agenda Google.
+        calendar_title: l.due_at ? l.text : null,
+        text: await encryptField(l.text),
+      })));
     }
-    await api('/notes/' + n.id, { method: 'PATCH', body });
+    const maj = await api('/notes/' + n.id, { method: 'PATCH', body });
+
+    /* Lignes créées à l'instant : leur marqueur portait un identifiant
+       provisoire, le serveur vient d'attribuer les vrais. Second appel assumé
+       et sans alternative — impossible de connaître ces identifiants avant
+       d'avoir enregistré. Même schéma que les dessins insérés dans le corps
+       d'une notask qu'on vient de créer (voir `![att:tmpN]` plus haut). */
+    if (lignesMixtes.length) {
+      const corrige = resoudreLignesTmp(contenuClair, lignesMixtes, maj.items || []);
+      if (corrige !== null) {
+        await api('/notes/' + n.id, {
+          method: 'PATCH', body: { content: await encryptField(corrige) },
+        });
+      }
+    }
   } catch (err) {
     alert(err.message);
   }

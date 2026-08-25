@@ -217,6 +217,12 @@
         <span class="fmt-archive-wrap">
           <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
         </span>
+                <!-- Ligne à cocher posée DANS le texte (notask mixte) : voir
+                     NOTE_LINE_MARK et insererLigneACocher() dans app.js. Le bouton
+                     vit dans le groupe de mise en forme, masqué en mode liste pure
+                     où il n'aurait rien à faire. -->
+                <button type="button" data-fmt="ligne" title="Insérer une ligne à cocher ici"
+                        aria-label="Insérer une ligne à cocher ici"></button>
                 <span class="fmt-sep"></span>
               </span>
               <button type="button" id="nc-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
@@ -387,6 +393,12 @@
         <span class="fmt-archive-wrap">
           <button type="button" data-fmt="archive" title="Zone d'archive" aria-label="Zone d'archive"></button>
         </span>
+        <!-- Ligne à cocher posée DANS le texte (notask mixte) : voir
+             NOTE_LINE_MARK et insererLigneACocher() dans app.js. Le bouton
+             vit dans le groupe de mise en forme, masqué en mode liste pure
+             où il n'aurait rien à faire. -->
+        <button type="button" data-fmt="ligne" title="Insérer une ligne à cocher ici"
+                aria-label="Insérer une ligne à cocher ici"></button>
         <span class="fmt-sep"></span>
       </span>
       <button type="button" id="dns-toggle-checklist" title="Passer en liste à cocher" aria-label="Passer en liste à cocher"></button>
