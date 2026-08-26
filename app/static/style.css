@@ -2171,6 +2171,21 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
    c'est la seule marque, en CSS, d'un tag effectivement coloré — même
    mécanique que .drawer-item.label-item[style] pour le menu de gauche. */
 .label-chip[style] { color: var(--md-on-surface); }
+/* Liseré de 1px sur un tag coloré : sans lui, un tag posé sur une notask de
+   la MÊME couleur se fondait dedans et disparaissait — le fond du tag et
+   celui de la carte étant alors identiques (à l'atténuation près, voir
+   ATTENUATION_LIBELLE, qui ne creuse justement plus assez d'écart depuis
+   qu'elle est à 75 %).
+
+   Un blanc translucide, et non une couleur fixe : il éclaircit ce qu'il y a
+   dessous quelle que soit la teinte de la carte, alors qu'un gris choisi une
+   fois pour toutes se verrait trop sur les cartes sombres et pas assez sur
+   les claires.
+
+   Posé en box-shadow INSET plutôt qu'en `border` : une bordure s'ajoute aux
+   dimensions de la pastille et décalerait toute la rangée de tags de 2px,
+   là où l'ombre intérieure se dessine sans rien pousser. */
+.label-chip[style] { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .30); }
 .label-chip.active {
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
