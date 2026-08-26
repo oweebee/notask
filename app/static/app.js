@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9041';
+const APP_VERSION = '0.9042';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -150,12 +150,12 @@ const COLORS = [
 // pouvoir les poser en style inline sur un libellé (voir renderLabelsDrawer)
 // ou comme couleur de texte (voir la palette partagée construirePalette).
 const LABEL_COLOR_HEX = {
-  red: '#7a2e33', coral: '#8a3a2a', orange: '#8a541c', amber: '#856614',
+  red: '#ab4047', coral: '#a84633', orange: '#8f571d', amber: '#856614',
   yellow: '#7a6f12', lime: '#55771c', green: '#2f7a3c', emerald: '#16785b',
-  teal: '#146b6a', cyan: '#12607a', blue: '#1d548f', indigo: '#364196',
-  violet: '#5138a3', purple: '#68318f', magenta: '#7d2c7d', pink: '#8a2c61',
-  rose: '#8a2c44', brown: '#664a37', slate: '#3f4b5a', grey: '#4b4b52',
-  navy: '#1e3a5f', olive: '#5d6b2f', white: '#ffffff',
+  teal: '#15706f', cyan: '#146d8a', blue: '#2366ae', indigo: '#4e5bbf',
+  violet: '#6a4fc3', purple: '#8a41be', magenta: '#a038a0', pink: '#ac3779',
+  rose: '#b13857', brown: '#815d45', slate: '#56667a', grey: '#64646e',
+  navy: '#3465a5', olive: '#5d6b2f', white: '#ffffff',
 };
 
 // Même alpha que le composeur/la recherche (.55), pour une couleur de
