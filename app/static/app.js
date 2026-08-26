@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9043';
+const APP_VERSION = '0.9044';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -158,9 +158,25 @@ const LABEL_COLOR_HEX = {
   navy: '#3465a5', olive: '#5d6b2f', white: '#ffffff',
 };
 
-// (hexToRgba retirée en 0.9043 : elle n'existait que pour atténuer les
-// couleurs de libellé à 55 %, ce que plus rien ne fait — libellés du menu et
-// tags portent désormais la teinte pleine des notasks.)
+/* Atténuation des couleurs de libellé (menu de gauche et tags des notasks).
+
+   Historique, parce que la valeur a bougé trois fois : 55 % à l'origine, puis
+   100 % (0.9043, pour que le code couleur d'un libellé soit exactement celui
+   d'une notask), puis 75 % — le plein était trop vif une fois les couleurs
+   elles-mêmes éclaircies (0.9042).
+
+   L'atténuation est un ALPHA, donc son rendu dépend de ce qu'il y a derrière :
+   sur le fond de page quasi noir du menu, elle assombrit ; sur une carte de
+   notask colorée, elle rapproche le tag de la teinte de sa carte. C'est voulu
+   dans les deux cas — le tag reste identifiable sans jamais rivaliser avec le
+   contenu. */
+const ATTENUATION_LIBELLE = .75;
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 /* ============================ Chiffrement ============================
    Chiffrement de bout en bout du contenu des notes (titre, description,
@@ -2893,14 +2909,12 @@ function renderLabelsDrawer() {
     // spécificité CSS que .drawer-item:hover, qui l'écrasait donc au survol
     // (la couleur ne restait visible qu'en dehors du survol). Un style inline
     // gagne toujours, la couleur reste affichée en toutes circonstances.
-    /* Teinte PLEINE, exactement celle des notasks (voir les classes .c-* de
-       style.css, dont LABEL_COLOR_HEX est le miroir en JS). Auparavant elle
-       était atténuée à 55 % : posée sur le fond quasi noir de la page, cette
-       transparence la ramenait à mi-chemin du noir, et un libellé « rouge »
-       du menu n'avait plus grand-chose à voir avec une notask rouge. Or c'est
-       justement le même code couleur, il doit se reconnaître d'un écran à
-       l'autre. */
-    if (l.color && LABEL_COLOR_HEX[l.color]) btn.style.background = LABEL_COLOR_HEX[l.color];
+    // Même teinte que les notasks (LABEL_COLOR_HEX est le miroir en JS des
+    // classes .c-*), atténuée — voir ATTENUATION_LIBELLE pour le pourquoi de
+    // la valeur.
+    if (l.color && LABEL_COLOR_HEX[l.color]) {
+      btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
+    }
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
       // Voir enablePointerReorder() : un glisser qui vient de réordonner
@@ -3933,11 +3947,10 @@ function renderCardLabels(el, n) {
   for (const l of assigned) {
     const chip = document.createElement('span');
     chip.className = 'label-chip label-chip-card is-readonly';
-    // Teinte pleine, comme l'entrée correspondante du menu de gauche et comme
-    // les notasks : une seule et même palette, reconnaissable partout (voir
-    // renderLabelsDrawer).
+    // Même palette et même atténuation que l'entrée correspondante du menu de
+    // gauche (voir renderLabelsDrawer et ATTENUATION_LIBELLE).
     if (l.color && LABEL_COLOR_HEX[l.color]) {
-      chip.style.background = LABEL_COLOR_HEX[l.color];
+      chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
     }
     chip.textContent = l.name;
     box.appendChild(chip);
@@ -5224,9 +5237,9 @@ function renderLabelChipsInto(boxSelector, pickerSelector, getIds, setIds, reren
   for (const l of assigned) {
     const chip = document.createElement('span');
     chip.className = 'label-chip label-chip-card';
-    // Cf. renderLabelsDrawer : teinte pleine, une seule palette partout.
+    // Cf. renderLabelsDrawer : même palette, même atténuation partout.
     if (l.color && LABEL_COLOR_HEX[l.color]) {
-      chip.style.background = LABEL_COLOR_HEX[l.color];
+      chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
     }
     const name = document.createElement('span');
     name.className = 'label-chip-name';
@@ -5267,9 +5280,9 @@ function renderLabelChipsInto(boxSelector, pickerSelector, getIds, setIds, reren
           const opt = document.createElement('button');
           opt.type = 'button';
           opt.className = 'label-chip';
-          // Cf. renderLabelsDrawer : teinte pleine, une seule palette partout.
+          // Cf. renderLabelsDrawer : même palette, même atténuation partout.
           if (l.color && LABEL_COLOR_HEX[l.color]) {
-            opt.style.background = LABEL_COLOR_HEX[l.color];
+            opt.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
           }
           opt.textContent = l.name;
           opt.onclick = (e2) => {
