@@ -1494,6 +1494,29 @@ body.is-dragging * {
 .note .actions button:hover { background: rgba(0,0,0,.28); color: var(--md-on-surface); }
 .note .actions .sep { flex: 1; }
 
+/* Corbeille ARMÉE : premier clic passé, le second envoie la notask à la
+   corbeille (voir data-act=delete dans renderNotes). Remplace la fenêtre de
+   confirmation, qui bloquait tout l'écran pour une action pourtant
+   réversible — la corbeille garde 30 jours.
+
+   Rouge plein, pas une simple teinte de l'icône : ce bouton doit changer
+   d'état de façon indiscutable, y compris du coin de l'œil. La pulsation
+   signale qu'il est armé et qu'il ne le restera pas (désarmement au bout de
+   3 s, ou dès que la souris quitte la carte). */
+.note .actions button[data-act=delete].arme {
+  background: var(--md-error-container);
+  color: #f9dedc;
+  animation: pouls-suppression 1.1s ease-in-out infinite;
+}
+.note .actions button[data-act=delete].arme:hover {
+  background: var(--md-error-container);
+  color: #fff;
+}
+@keyframes pouls-suppression {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242,184,181,.55); }
+  70%      { box-shadow: 0 0 0 6px rgba(242,184,181,0); }
+}
+
 .note svg { width: 18px; height: 18px; display: block; }
 
 /* Icône associée à la note, au-dessus du titre — 50% plus grande que la

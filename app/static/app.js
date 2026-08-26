@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9039';
+const APP_VERSION = '0.9041';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -3313,6 +3313,25 @@ function findHits(n, terme) {
    (voir cadrerExtrait) : on voit donc par défaut HIT_CONTEXT_LINES lignes
    au-dessus et autant en dessous, mais on peut faire défiler le reste au
    survol sans que la carte ne change de taille. */
+/* Bornes de surlignage posées dans le TEXTE avant sa mise en forme.
+
+   Le texte d'une notask porte ses marqueurs (`[c:…]`, `` ` ``, `**`, `[url:…]`
+   — voir renderFormatted) : l'afficher échappé tel quel, comme le faisait
+   cette fonction, donnait à l'écran un charabia de marqueurs bruts et
+   d'échappements (`\*\*Collify\*\*`, `[c:7d2c7d][/c]`) au lieu de la notask
+   telle qu'elle se lit ailleurs.
+
+   On ne peut pas non plus mettre en forme d'abord et surligner ensuite : les
+   positions des occurrences sont calculées sur le texte, et ne veulent plus
+   rien dire une fois des balises HTML intercalées. D'où ces sentinelles :
+   posées dans le texte (donc aux bonnes positions), elles traversent
+   renderFormatted sans l'affoler — ce sont des caractères de contrôle, ni
+   échappés par escapeHtml, ni reconnus par aucune regex de mise en forme —
+   et deviennent des <mark> à la toute fin. */
+const HIT_DEB = '\u0001';
+const HIT_FIN = '\u0002';
+const HIT_DEB_COURANT = '\u0003';
+
 function renderHitExtract(lignes, hits, courant) {
   const cible = hits[courant];
 
@@ -3325,18 +3344,24 @@ function renderHitExtract(lignes, hits, courant) {
       .map((h, idx) => ({ ...h, idx }))
       .filter((h) => h.ligne === i);
 
-    let morceau = escapeHtml(ligne);
+    let texte = ligne;
     if (surCetteLigne.length) {
-      morceau = '';
+      texte = '';
       let pos = 0;
       for (const h of surCetteLigne.slice().sort((a, b) => a.debut - b.debut)) {
-        morceau += escapeHtml(ligne.slice(pos, h.debut));
-        const classe = h.idx === courant ? 'hit current' : 'hit';
-        morceau += `<mark class="${classe}">${escapeHtml(ligne.slice(h.debut, h.fin))}</mark>`;
+        texte += ligne.slice(pos, h.debut);
+        texte += (h.idx === courant ? HIT_DEB_COURANT : HIT_DEB)
+          + ligne.slice(h.debut, h.fin) + HIT_FIN;
         pos = h.fin;
       }
-      morceau += escapeHtml(ligne.slice(pos));
+      texte += ligne.slice(pos);
     }
+
+    let morceau = renderFormatted(texte)
+      .split(HIT_DEB_COURANT).join('<mark class="hit current">')
+      .split(HIT_DEB).join('<mark class="hit">')
+      .split(HIT_FIN).join('</mark>');
+
     html += `<div class="hit-line${i === cible.ligne ? ' hit-line-current' : ''}">${morceau || '&nbsp;'}</div>`;
   }
   return html;
@@ -3412,6 +3437,16 @@ function renderSearchHits() {
       ${nav}
       <div class="hit-extract">${renderHitExtract(lignes, hits, courant)}</div>`;
 
+    /* Mêmes traitements que sur une carte de la mosaïque : le contenu est
+       désormais mis en forme ici aussi (voir renderHitExtract), il a donc les
+       mêmes besoins — images et notes vocales à déchiffrer, et surtout la
+       pastille de copie sur les blocs de code. C'est précisément dans ces
+       cartes qu'on vient chercher un mot de passe ou une commande pour la
+       recopier : ne pas y mettre le bouton de copie était le plus gênant. */
+    hydrateInlineImages(el, n);
+    hydrateInlineAudio(el, n);
+    ajouterBoutonsCopieCode(el);
+
     const bouger = (delta) => {
       state.deepCursor[n.id] = (courant + delta + hits.length) % hits.length;
       renderSearchHits();
@@ -3428,6 +3463,11 @@ function renderSearchHits() {
       // notask — c'est justement dans ces cartes qu'on vient lire et
       // recopier un extrait.
       if (e.target.closest('.hit-nav')) return;
+      // Depuis que l'extrait est mis en forme, il contient les mêmes éléments
+      // interactifs qu'une carte : pastille de copie, liens, lecteur audio.
+      // Aucun ne doit ouvrir la notask par-dessus au passage — mêmes
+      // exclusions que dans la mosaïque (voir plus bas).
+      if (e.target.closest('.code-copy-btn, a.note-url, .note-audio, .note-archive-zone')) return;
       if (clicTermineUneSelection(el)) return;
       openNoteSimpleDialog(n);
     });
@@ -3769,16 +3809,43 @@ function renderNotes() {
       await api('/notes/' + n.id, { method: 'PATCH', body: { masked: !n.masked } });
       loadNotes();
     };
-    el.querySelector('[data-act=delete]').onclick = async () => {
-      // La confirmation d'abord, l'animation ensuite : voir partir la carte
-      // puis se voir demander « êtes-vous sûr ? » n'aurait aucun sens, et
-      // annuler laisserait une carte invisible derrière soi.
-      if (!confirm('Déplacer cette notask vers la corbeille ? Elle y restera 30 jours avant suppression définitive.')) return;
+    /* Suppression en DEUX temps, sans fenêtre de confirmation : le premier
+       clic arme le bouton (il devient rouge), le second envoie la notask à la
+       corbeille.
+
+       La fenêtre `confirm()` bloquait tout l'écran pour une action déjà
+       réversible — la corbeille garde la notask 30 jours. Deux clics
+       protègent tout aussi bien d'un geste accidentel, sans interrompre.
+
+       L'armement se DÉSARME seul au bout de 3 s, et dès que la souris quitte
+       la carte : un bouton rouge oublié là serait un piège au prochain
+       passage, d'autant que ces boutons n'apparaissent qu'au survol. */
+    const boutonSuppr = el.querySelector('[data-act=delete]');
+    let minuterieSuppr = null;
+
+    const desarmer = () => {
+      clearTimeout(minuterieSuppr);
+      minuterieSuppr = null;
+      boutonSuppr.classList.remove('arme');
+      boutonSuppr.title = 'Mettre à la corbeille';
+      boutonSuppr.setAttribute('aria-label', 'Mettre à la corbeille');
+    };
+
+    boutonSuppr.onclick = async () => {
+      if (!boutonSuppr.classList.contains('arme')) {
+        boutonSuppr.classList.add('arme');
+        boutonSuppr.title = 'Cliquer à nouveau pour envoyer à la corbeille';
+        boutonSuppr.setAttribute('aria-label', 'Confirmer la mise à la corbeille');
+        minuterieSuppr = setTimeout(desarmer, 3000);
+        return;
+      }
+      desarmer();
       const vol = aspirerNotask(el, cibleAspiration('corbeille'));
       const envoi = api('/notes/' + n.id, { method: 'DELETE' });
       await Promise.all([vol, envoi]);
       loadNotes();
     };
+    el.addEventListener('mouseleave', desarmer);
 
     const doneBox = el.querySelector('[data-act=done]');
     if (doneBox) doneBox.onchange = async (e) => {
