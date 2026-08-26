@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9034';
+const APP_VERSION = '0.9035';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2113,6 +2113,17 @@ function appliquerModeRapide() {
 
   const bouton = $(selecteur);
   if (!bouton) return;
+
+  /* Le tableau blanc, la dictée et la note vocale insèrent leur production
+     DANS le contenu, à la position mémorisée par memoriserCurseur() — laquelle
+     est branchée sur `mousedown`. Or `bouton.click()` ci-dessous ne déclenche
+     QUE `click` : aucun mousedown n'est émis pour un clic programmatique.
+
+     Sans cet appel explicite, `inlineDrawTarget` restait donc à null,
+     `insererImageDansContenu()` renvoyait false sans rien dire, et le dessin
+     n'apparaissait nulle part dans la notask créée depuis le widget Android
+     — le geste semblait n'avoir servi à rien. */
+  memoriserCurseur($('#nc-content'));
 
   // Un cran de retard volontaire : le rendu de la mosaïque vient de se
   // terminer, et un clic envoyé avant que le navigateur ait fini de poser le
@@ -7620,7 +7631,13 @@ function memoriserCurseur(editable) {
    n'était pas dans la zone de texte), suivie d'un saut de ligne pour
    pouvoir continuer à écrire dessous. */
 function insererImageDansContenu(attId, apercuUrl) {
-  const editable = inlineDrawTarget;
+  /* Repli : sans zone mémorisée, l'image était purement et simplement
+     abandonnée (return false silencieux), et le dessin disparaissait sans
+     trace ni message. On vise alors la zone de saisie effectivement ouverte —
+     l'édition rapide si son dialogue est affiché, le composeur sinon. Un
+     dessin mal placé se rattrape d'un copier-coller ; un dessin perdu, non. */
+  const editable = inlineDrawTarget
+    || ($('#dlg-note-simple').open ? $('#dns-content') : $('#nc-content'));
   if (!editable) return false;
   const img = document.createElement('img');
   img.className = 'note-inline-img';
