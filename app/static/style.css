@@ -3208,7 +3208,9 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
      bloc actif — un fond quasi transparent s'y lisait mal. */
   background: rgba(45, 42, 51, .55);
   box-shadow: 0 1px 3px rgba(0,0,0,.25);
-  font-size: .6875rem;
+  /* +15 %, comme le bouton calendrier à côté : les deux forment un même
+     groupe, les agrandir séparément les aurait désaccordés. */
+  font-size: .79rem;
   font-style: normal;
   color: var(--md-on-surface-variant);
 }
@@ -3221,12 +3223,25 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    .note-ligne-due-wrap), donc hors du flux. */
 .note-ligne-cal {
   flex: none;
-  width: 22px;
-  height: 22px;
+  /* +15 % sur demande (22px → 25px) : lisible sur écran tactile, où le
+     bouton n'a pas le survol pour se signaler. */
+  width: 25px;
+  height: 25px;
   opacity: 0;
   transition: opacity .15s ease;
+  /* Décentrage constaté en PWA : la feuille de style par défaut d'Android
+     pose un padding propre aux <button>, qui pousse l'icône hors du rond.
+     Le `place-items: center` de .cal-btn centre dans la boîte de CONTENU,
+     pas dans le rond dessiné par border-radius — un padding asymétrique
+     décale donc visiblement l'un par rapport à l'autre. */
+  padding: 0;
+  line-height: 0;
 }
-.note-ligne-cal svg { width: 14px; height: 14px; }
+/* display: block, sinon le SVG reste une boîte EN LIGNE : le navigateur lui
+   réserve la place du jambage sous la ligne de base, et l'icône paraît
+   remontée dans son rond. Invisible sur desktop où le rond est plus grand,
+   net en PWA. */
+.note-ligne-cal svg { width: 16px; height: 16px; display: block; }
 /* Jaune cuillère dès qu'une date est posée. `.cal-btn.has-due` le fait déjà,
    mais avec un fond qui n'apparaît qu'au survol : ici le bouton EST le seul
    repère d'une ligne datée quand la pastille est masquée, il doit se voir au
