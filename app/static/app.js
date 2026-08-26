@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9038';
+const APP_VERSION = '0.9039';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -1835,6 +1835,95 @@ function recentrerDialogueSurMosaique(dlg) {
   dlg.style.translate = Math.round(centreCible - centreActuel) + 'px 0px';
 }
 
+/* ============ Aspiration d'une notask vers Corbeille / Archives ============
+   La carte quitte la mosaïque en étant « avalée » par l'entrée correspondante
+   du menu de gauche, plutôt que de disparaître d'un coup au rechargement.
+
+   Un CLONE est animé, pas la carte elle-même : la carte vit dans une mosaïque
+   en positionnement absolu recalculée en permanence (voir layoutMosaic), et
+   la déplacer reviendrait à lutter contre ce calcul. Le clone est posé en
+   `position: fixed` aux coordonnées écran de l'original, hors de tout ça.
+
+   Le mouvement suit une courbe et non une droite : la carte part légèrement
+   vers le haut avant de plonger vers le menu, comme un objet lancé. C'est
+   `cubic-bezier` sur l'axe vertical, différent de celui de l'axe horizontal
+   — deux temporisations distinctes produisent une trajectoire courbe, là où
+   une seule donnerait une diagonale rigide. */
+function aspirerNotask(carte, cibleSel) {
+  if (!carte || !carte.getBoundingClientRect) return Promise.resolve();
+
+  /* Sous 860px le menu est replié (display: none, voir la media query dans
+     style.css) : l'entrée visée n'a alors aucune dimension et ne peut servir
+     de destination. On vise le bouton hamburger, qui est justement ce qui
+     ouvre ce menu — donc l'endroit où l'utilisateur ira chercher la notask.
+     Sans ce repli, l'animation était purement et simplement sautée sur
+     mobile et en PWA, là où elle sert le plus. */
+  let cible = $(cibleSel);
+  let arrivee = cible ? cible.getBoundingClientRect() : null;
+  if (!arrivee || !arrivee.width) {
+    cible = $('#mobile-menu-btn');
+    arrivee = cible ? cible.getBoundingClientRect() : null;
+  }
+  if (!cible || !arrivee || !arrivee.width) return Promise.resolve();
+
+  const depart = carte.getBoundingClientRect();
+  if (!depart.width) return Promise.resolve();
+
+  const clone = carte.cloneNode(true);
+  clone.style.cssText = `
+    position: fixed;
+    left: ${depart.left}px; top: ${depart.top}px;
+    width: ${depart.width}px; height: ${depart.height}px;
+    margin: 0; z-index: 3000; pointer-events: none;
+    border-radius: var(--shape-sm); overflow: hidden;
+  `;
+  document.body.appendChild(clone);
+  // L'originale s'efface tout de suite : sans ça on verrait la carte en
+  // double le temps du vol.
+  carte.style.visibility = 'hidden';
+
+  const dx = (arrivee.left + arrivee.width / 2) - (depart.left + depart.width / 2);
+  const dy = (arrivee.top + arrivee.height / 2) - (depart.top + depart.height / 2);
+
+  const animation = clone.animate(
+    [
+      { transform: 'translate(0, 0) scale(1) rotate(0deg)', opacity: 1 },
+      // Léger sursaut avant le départ : la carte se ramasse sur elle-même,
+      // comme pour prendre son élan. C'est ce temps mort qui rend le
+      // mouvement organique plutôt que mécanique.
+      { transform: `translate(${dx * 0.06}px, ${dy * 0.06 - 14}px) scale(1.04) rotate(-2deg)`, opacity: 1, offset: 0.18 },
+      { transform: `translate(${dx * 0.55}px, ${dy * 0.42}px) scale(.55) rotate(4deg)`, opacity: .85, offset: 0.6 },
+      { transform: `translate(${dx}px, ${dy}px) scale(.06) rotate(9deg)`, opacity: 0 },
+    ],
+    { duration: 620, easing: 'cubic-bezier(.55, -0.25, .3, 1)', fill: 'forwards' },
+  );
+
+  // L'entrée de menu tressaille à l'arrivée : elle accuse le coup, ce qui
+  // referme la boucle visuelle (quelque chose est bien arrivé QUELQUE PART).
+  setTimeout(() => {
+    cible.animate(
+      [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.14)' },
+        { transform: 'scale(.96)' },
+        { transform: 'scale(1)' },
+      ],
+      { duration: 360, easing: 'ease-out' },
+    );
+  }, 500);
+
+  return animation.finished
+    .catch(() => {})           // animation interrompue : sans conséquence
+    .then(() => clone.remove());
+}
+
+/* Entrée de menu visée selon le sort réservé à la notask. Passer par une
+   fonction plutôt que par un sélecteur écrit sur place : le désarchivage vise
+   les notasks, pas les archives, et cette nuance se perdait facilement. */
+function cibleAspiration(action) {
+  return { corbeille: '#nav-trash', archives: '#nav-archives', notes: '#nav-notes' }[action];
+}
+
 function animerOuvertureDialogue(dlg) {
   const r = dlg.getBoundingClientRect();
   // transform-origin exprimée dans le repère de la boîte : le point cliqué
@@ -3624,6 +3713,22 @@ function renderNotes() {
       editable: false,
       onCheck: async (itemId, coche) => {
         await api(`/notes/${n.id}/items/${itemId}`, { method: 'PATCH', body: { checked: coche } });
+        /* Archivage automatique (toutes les cases cochées) : la décision est
+           prise par le SERVEUR, pas ici (voir archiver_si_tout_coche dans
+           notes.py — la règle doit valoir quel que soit l'endroit d'où la
+           case est cochée : mosaïque, édition, widget Android). Le client ne
+           peut donc pas la deviner ; il relit l'état de la notask et anime si
+           elle vient effectivement de partir aux archives.
+
+           Relecture ciblée d'UNE notask, pas de la liste entière : c'est le
+           coût d'un aller-retour pour savoir s'il faut animer, contre un
+           rechargement complet dont on ne saurait rien tirer. */
+        if (coche && !n.archived) {
+          try {
+            const maj = await api('/notes/' + n.id);
+            if (maj.archived) await aspirerNotask(el, cibleAspiration('archives'));
+          } catch { /* relecture impossible : on recharge sans animer */ }
+        }
         loadNotes();
       },
     });
@@ -3648,7 +3753,14 @@ function renderNotes() {
       });
     };
     el.querySelector('[data-act=archive]').onclick = async () => {
-      await api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
+      /* Aspiration LANCÉE avant l'appel réseau, mais attendue avec lui : la
+         carte part tout de suite (le geste doit répondre à l'instant), et le
+         rechargement n'a lieu qu'une fois les deux terminés — sinon la
+         mosaïque se redessinerait en plein vol et le clone se retrouverait à
+         voler vers une place que plus rien n'occupe. */
+      const vol = aspirerNotask(el, cibleAspiration(n.archived ? 'notes' : 'archives'));
+      const envoi = api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
+      await Promise.all([vol, envoi]);
       loadNotes();
     };
     // Masquer/afficher le contenu sur l'accueil, sans passer par la boîte
@@ -3658,8 +3770,13 @@ function renderNotes() {
       loadNotes();
     };
     el.querySelector('[data-act=delete]').onclick = async () => {
+      // La confirmation d'abord, l'animation ensuite : voir partir la carte
+      // puis se voir demander « êtes-vous sûr ? » n'aurait aucun sens, et
+      // annuler laisserait une carte invisible derrière soi.
       if (!confirm('Déplacer cette notask vers la corbeille ? Elle y restera 30 jours avant suppression définitive.')) return;
-      await api('/notes/' + n.id, { method: 'DELETE' });
+      const vol = aspirerNotask(el, cibleAspiration('corbeille'));
+      const envoi = api('/notes/' + n.id, { method: 'DELETE' });
+      await Promise.all([vol, envoi]);
       loadNotes();
     };
 
