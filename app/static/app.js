@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9036';
+const APP_VERSION = '0.9038';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -440,9 +440,17 @@ window.addEventListener('unhandledrejection', (e) => {
 function token() { return localStorage.getItem(TOKEN_KEY); }
 function setToken(t) { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); }
 
+/* Identifiant de CETTE fenêtre, tiré au sort à chaque chargement. Envoyé à
+   chaque écriture et sur le flux temps réel, pour que le serveur n'annonce
+   pas à un client ses propres modifications (voir app/events.py). Il ne
+   voyage jamais qu'entre cette page et le serveur, ne survit pas au
+   rechargement, et n'identifie ni l'utilisateur ni l'appareil. */
+const CLIENT_ID = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+
 async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  headers['X-Client-Id'] = CLIENT_ID;
   const t = token();
   if (t) headers['Authorization'] = 'Bearer ' + t;
 
@@ -480,7 +488,9 @@ async function apiUpload(path, formData, method = 'POST') {
   const t = token();
   const res = await fetch('/api' + path, {
     method,
-    headers: t ? { Authorization: 'Bearer ' + t } : {},
+    // Cf. api() : X-Client-Id évite qu'un envoi de pièce jointe ne se
+    // renvoie son propre signal de rafraîchissement.
+    headers: { 'X-Client-Id': CLIENT_ID, ...(t ? { Authorization: 'Bearer ' + t } : {}) },
     body: formData,
   });
   if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
@@ -2071,7 +2081,94 @@ function enterApp() {
     $('#nc-title').focus();
     // appliquerModeRapide() n'est PAS appelée ici : voir la fin de
     // loadNotes(), qui s'exécute après et écraserait le changement.
+    return;  // /quick est une page de saisie jetable : rien à tenir à jour.
   }
+
+  brancherFluxTempsReel();
+}
+
+/* ===================== Mise à jour en temps réel =====================
+   Une modification faite ailleurs (autre navigateur, PWA, APK) se répercute
+   ici sans rafraîchissement : le serveur pousse un signal, on recharge.
+
+   Le signal ne porte AUCUN contenu (voir app/events.py) : il dit seulement
+   « quelque chose a changé ». On recharge donc par les routes habituelles,
+   qui déchiffrent comme d'habitude — le chiffrement de bout en bout n'est
+   pas concerné par cette fonctionnalité.
+
+   `fetch()` en lecture de flux plutôt que `EventSource`, qui ne sait pas
+   envoyer d'en-tête `Authorization` : le jeton devrait alors passer dans
+   l'URL, où il finirait dans les journaux du serveur et de Traefik. Le prix
+   à payer est la reconnexion, à écrire à la main — c'est ce que fait la
+   boucle ci-dessous. */
+let fluxTempsReelActif = false;
+
+async function brancherFluxTempsReel() {
+  if (fluxTempsReelActif) return;
+  fluxTempsReelActif = true;
+
+  let attente = 1000;  // délai avant reconnexion, doublé à chaque échec
+  while (fluxTempsReelActif) {
+    try {
+      const res = await fetch('/api/events', {
+        headers: { Authorization: 'Bearer ' + token(), 'X-Client-Id': CLIENT_ID },
+        cache: 'no-store',
+      });
+      if (res.status === 401) { fluxTempsReelActif = false; return; }
+      if (!res.ok || !res.body) throw new Error('flux indisponible (' + res.status + ')');
+
+      log.info('sync', 'Flux temps réel connecté');
+      attente = 1000;  // connexion réussie : on repart du délai le plus court
+
+      const lecteur = res.body.getReader();
+      const decodeur = new TextDecoder();
+      let tampon = '';
+      for (;;) {
+        const { value, done } = await lecteur.read();
+        if (done) break;
+        tampon += decodeur.decode(value, { stream: true });
+        /* Découpage sur la ligne vide : c'est le séparateur d'événements du
+           format SSE. Un `read()` peut livrer un événement coupé en deux ou
+           plusieurs d'un coup — traiter le tampon tel quel manquerait les
+           premiers ou en inventerait. */
+        const morceaux = tampon.split('\n\n');
+        tampon = morceaux.pop();
+        for (const m of morceaux) {
+          // Les lignes commençant par ':' sont des commentaires (battement de
+          // cœur, voir INTERVALLE_BATTEMENT côté serveur) : rien à faire,
+          // elles n'existent que pour garder la connexion ouverte.
+          if (m.startsWith('data:')) rafraichirDepuisLeServeur();
+        }
+      }
+      throw new Error('flux interrompu');
+    } catch (err) {
+      if (!fluxTempsReelActif) return;
+      log.debug('sync', 'Flux temps réel coupé, reconnexion', String(err));
+      await new Promise((r) => setTimeout(r, attente));
+      // Plafond à 30 s : au-delà, un retour de réseau mettrait trop longtemps
+      // à être remarqué.
+      attente = Math.min(attente * 2, 30000);
+    }
+  }
+}
+
+/* Recharge la vue courante. Volontairement complet et sans finesse : c'est le
+   choix explicite de l'utilisateur (« tout rafraîchir »). Une notask ouverte
+   en édition n'est donc PAS protégée — voir la réserve au journal.
+
+   Groupé dans un délai court : une seule action ailleurs peut produire
+   plusieurs écritures d'affilée (enregistrement puis correction des
+   identifiants de lignes, par exemple), donc plusieurs signaux. Sans ce
+   regroupement, la mosaïque se rechargerait deux ou trois fois de suite. */
+let rafraichissementProgramme = null;
+
+function rafraichirDepuisLeServeur() {
+  clearTimeout(rafraichissementProgramme);
+  rafraichissementProgramme = setTimeout(() => {
+    loadLabels();
+    updateTaskBadges();
+    switchView(state.view || 'notes');
+  }, 250);
 }
 
 /* Mode demandé à l'ouverture de /quick, via ?mode=… — utilisé par le widget
@@ -8807,6 +8904,11 @@ $('#du-save').addEventListener('click', async () => {
    relire les archives déjà produites. */
 
 const EXPORT_MAGIC = 'NOTASKX1';
+/* Archive SANS mot de passe. En-tête distinct plutôt qu'un drapeau à
+   l'intérieur : c'est justement l'en-tête qui doit dire, avant toute
+   tentative de lecture, s'il faut demander un mot de passe ou non. Même
+   longueur que EXPORT_MAGIC, les décalages de lecture restent identiques. */
+const EXPORT_MAGIC_CLAIR = 'NOTASKC1';
 const EXPORT_ITERATIONS = 210000;
 
 async function deriveArchiveKey(password, salt) {
@@ -8850,6 +8952,13 @@ async function collecterExport(progres) {
       try {
         const r = await loadAttachment(att);
         pieces.push({
+          // Identifiant D'ORIGINE : le contenu de la notask ne référence ses
+          // images et ses notes vocales que par lui (`![att:12]`,
+          // `[audio:12]`, voir NOTE_IMG_MARK/NOTE_AUDIO_MARK). À l'import,
+          // les pièces jointes reçoivent de NOUVEAUX identifiants ; sans
+          // cette correspondance, tous les marqueurs pointeraient dans le
+          // vide et images comme sons disparaîtraient du corps des notasks.
+          id: att.id,
           name: r.name,
           mime: r.mime,
           data: bytesToBase64(new Uint8Array(await r.blob.arrayBuffer())),
@@ -8866,7 +8975,12 @@ async function collecterExport(progres) {
       label_ids: n.label_ids || [],
       trashed: !!n.trashed_at,
       items: (n.items || []).map((it) => ({
+        // Même raison que pour les pièces jointes : une case à cocher est
+        // référencée dans le contenu par `[ligne:12]` (voir NOTE_LINE_MARK).
+        id: it.id,
         text: it.text, checked: it.checked, due_at: it.due_at,
+        due_end_at: it.due_end_at || null,
+        archived: !!it.archived,
         calendar_title: it.due_at ? it.text : null,
       })),
       attachments: pieces,
@@ -9035,28 +9149,51 @@ $('#dlg-outils').addEventListener('cancel', (e) => {
 });
 
 $('#export-run').addEventListener('click', async () => {
+  /* Mot de passe FACULTATIF : laissé vide, l'archive est écrite en clair.
+     C'est un choix de l'utilisateur, assumé — mais qui mérite d'être compris.
+     Une archive sans mot de passe contient TOUT en clair : le texte des
+     notasks, leurs images, leurs notes vocales. C'est précisément ce que le
+     chiffrement de bout en bout empêche partout ailleurs, y compris au
+     serveur. Le fichier doit donc être traité comme le contenu lui-même. */
   const pw = $('#archive-pw').value;
-  if (pw.length < 8) return msg($('#outil-msg'), 'Mot de passe : 8 caractères minimum.');
+  if (pw && pw.length < 8) {
+    return msg($('#outil-msg'), 'Mot de passe : 8 caractères minimum (ou laissez vide).');
+  }
+  if (!pw && !confirm(
+    "Aucun mot de passe : l'archive contiendra tout EN CLAIR (textes, images, "
+    + 'notes vocales). Quiconque ouvre le fichier lit tout.\n\nContinuer ?'
+  )) return;
 
   const btn = $('#export-run');
   btn.disabled = true;
   try {
     const avancement = (t) => msg($('#outil-msg'), t, 'ok');
     const donnees = await collecterExport(avancement);
-
-    avancement('Chiffrement…');
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveArchiveKey(pw, salt);
     const clair = new TextEncoder().encode(JSON.stringify(donnees));
-    const chiffre = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, clair));
 
-    const entete = new TextEncoder().encode(EXPORT_MAGIC);
-    const fichier = new Uint8Array(entete.length + salt.length + iv.length + chiffre.length);
-    fichier.set(entete, 0);
-    fichier.set(salt, entete.length);
-    fichier.set(iv, entete.length + salt.length);
-    fichier.set(chiffre, entete.length + salt.length + iv.length);
+    let fichier;
+    if (pw) {
+      avancement('Chiffrement…');
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const key = await deriveArchiveKey(pw, salt);
+      const chiffre = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, clair));
+
+      const entete = new TextEncoder().encode(EXPORT_MAGIC);
+      fichier = new Uint8Array(entete.length + salt.length + iv.length + chiffre.length);
+      fichier.set(entete, 0);
+      fichier.set(salt, entete.length);
+      fichier.set(iv, entete.length + salt.length);
+      fichier.set(chiffre, entete.length + salt.length + iv.length);
+    } else {
+      // En-tête seul puis JSON brut : ni sel ni iv, qui n'auraient aucun sens
+      // sans chiffrement. C'est l'en-tête qui distingue les deux formats à la
+      // relecture (voir EXPORT_MAGIC_CLAIR).
+      const entete = new TextEncoder().encode(EXPORT_MAGIC_CLAIR);
+      fichier = new Uint8Array(entete.length + clair.length);
+      fichier.set(entete, 0);
+      fichier.set(clair, entete.length);
+    }
 
     const url = URL.createObjectURL(new Blob([fichier], { type: 'application/octet-stream' }));
     const a = document.createElement('a');
@@ -9076,37 +9213,50 @@ $('#export-run').addEventListener('click', async () => {
 /* "Importer" n'importe pas directement : il ouvre le sélecteur de fichier,
    et c'est le choix du fichier qui déclenche l'opération. Un bouton
    "Parcourir" séparé n'apportait rien. */
+/* Plus de mot de passe exigé AVANT de choisir le fichier : on ne sait pas
+   encore s'il en a un. C'est l'en-tête de l'archive qui le dit, et le mot de
+   passe n'est demandé qu'à ce moment-là (voir le gestionnaire ci-dessous). */
 $('#import-run').addEventListener('click', () => {
-  if (!$('#archive-pw').value) return msg($('#outil-msg'), 'Saisissez le mot de passe de l’archive.');
   $('#import-file').value = '';   // permet de rechoisir le même fichier
   $('#import-file').click();
 });
 
 $('#import-file').addEventListener('change', async () => {
   const fichier = $('#import-file').files[0];
-  const pw = $('#archive-pw').value;
-  if (!fichier || !pw) return;
+  if (!fichier) return;
 
   const btn = $('#import-run');
   btn.disabled = true;
   try {
     const octets = new Uint8Array(await fichier.arrayBuffer());
     const entete = new TextDecoder().decode(octets.slice(0, EXPORT_MAGIC.length));
-    if (entete !== EXPORT_MAGIC) throw new Error("Ce fichier n'est pas une archive notask.");
-
-    const salt = octets.slice(EXPORT_MAGIC.length, EXPORT_MAGIC.length + 16);
-    const iv = octets.slice(EXPORT_MAGIC.length + 16, EXPORT_MAGIC.length + 28);
-    const chiffre = octets.slice(EXPORT_MAGIC.length + 28);
-    const key = await deriveArchiveKey(pw, salt);
 
     let donnees;
-    try {
-      const clair = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, chiffre);
-      donnees = JSON.parse(new TextDecoder().decode(clair));
-    } catch {
-      // AES-GCM échoue à l'authentification : mot de passe faux, ou
-      // fichier abîmé. Impossible de distinguer les deux, on le dit.
-      throw new Error('Mot de passe incorrect, ou archive endommagée.');
+    if (entete === EXPORT_MAGIC_CLAIR) {
+      // Archive sans mot de passe : le JSON suit directement l'en-tête.
+      donnees = JSON.parse(new TextDecoder().decode(octets.slice(EXPORT_MAGIC_CLAIR.length)));
+    } else if (entete === EXPORT_MAGIC) {
+      /* Archive protégée : on ne demande le mot de passe QU'ICI, une fois
+         qu'on sait qu'il en faut un. Le champ de la fenêtre Outils sert de
+         valeur par défaut s'il a été rempli, sinon on le demande. */
+      const pw = $('#archive-pw').value
+        || prompt('Cette sauvegarde est protégée.\nMot de passe de l’archive :');
+      if (!pw) { msg($('#outil-msg'), 'Import annulé.'); return; }
+
+      const salt = octets.slice(EXPORT_MAGIC.length, EXPORT_MAGIC.length + 16);
+      const iv = octets.slice(EXPORT_MAGIC.length + 16, EXPORT_MAGIC.length + 28);
+      const chiffre = octets.slice(EXPORT_MAGIC.length + 28);
+      const key = await deriveArchiveKey(pw, salt);
+      try {
+        const clair = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, chiffre);
+        donnees = JSON.parse(new TextDecoder().decode(clair));
+      } catch {
+        // AES-GCM échoue à l'authentification : mot de passe faux, ou
+        // fichier abîmé. Impossible de distinguer les deux, on le dit.
+        throw new Error('Mot de passe incorrect, ou archive endommagée.');
+      }
+    } else {
+      throw new Error("Ce fichier n'est pas une archive notask.");
     }
 
     msg($('#outil-msg'), 'Création des libellés…', 'ok');
@@ -9138,35 +9288,101 @@ $('#import-file').addEventListener('change', async () => {
     for (const n of notes) {
       msg($('#outil-msg'), `Import des notasks… (${faits + echecs + 1}/${notes.length})`, 'ok');
       try {
+        /* Contenu ET lignes envoyés systématiquement, sans regarder
+           `is_checklist` : une notask n'a plus de forme, elle mêle librement
+           texte, cases et médias (voir NOTE_LINE_MARK). L'ancienne condition
+           jetait le contenu des notasks marquées « liste » et les lignes de
+           toutes les autres — sur une notask mixte, l'un ou l'autre était
+           perdu à chaque import. */
+        const lignesArchive = n.items || [];
         const body = {
           title: await encryptField(n.title || ''),
           description: await encryptField(n.description || ''),
-          content: n.is_checklist ? '' : await encryptField(n.content || ''),
+          content: await encryptField(n.content || ''),
           color: n.color || 'default',
           pinned: !!n.pinned,
           archived: !!n.archived,
-          is_checklist: !!n.is_checklist,
+          is_checklist: false,   // vestige, toujours faux à l'écriture
           due_at: n.due_at || null,
           calendar_title: n.due_at ? (n.title || '') : null,
           icon: n.icon || null,
           label_ids: (n.label_ids || [])
             .map((ancienId) => parNom.get(nomParAncienId.get(ancienId)))
             .filter((v) => v !== undefined),
-          items: n.is_checklist
-            ? await Promise.all((n.items || []).map(async (it) => ({
-              text: await encryptField(it.text || ''),
-              checked: !!it.checked,
-              due_at: it.due_at || null,
-              calendar_title: it.due_at ? (it.text || '') : null,
-            })))
-            : [],
+          items: await Promise.all(lignesArchive.map(async (it) => ({
+            text: await encryptField(it.text || ''),
+            checked: !!it.checked,
+            due_at: it.due_at || null,
+            due_end_at: it.due_at ? (it.due_end_at || null) : null,
+            calendar_title: it.due_at ? (it.text || '') : null,
+          }))),
         };
         const cree = await api('/notes', { method: 'POST', body });
+
+        /* Réécriture des marqueurs — sans quoi tout ce qui n'est pas du texte
+           brut disparaît du corps des notasks importées.
+
+           Le contenu référence ses images, ses notes vocales et ses cases à
+           cocher par IDENTIFIANT (`![att:12]`, `[audio:12]`, `[ligne:12]`).
+           Ces identifiants sont ceux de l'installation d'ORIGINE ; ici, le
+           serveur vient d'en attribuer de nouveaux. Sans correspondance, les
+           marqueurs pointent dans le vide : hydrateInlineImages n'affiche
+           rien, et hydrateLignesACocher retire purement et simplement les
+           cases orphelines.
+
+           Les lignes se rapprochent par RANG (le serveur les renvoie triées
+           par `position`, qu'il numérote dans l'ordre d'envoi), les pièces
+           jointes par l'identifiant d'origine conservé à l'export. */
+        const corresp = new Map();   // 'ligne:7' -> '101', 'att:3' -> '900'…
+
+        const nouvellesLignes = cree.items || [];
+        lignesArchive.forEach((ancienne, rang) => {
+          const nouvelle = nouvellesLignes[rang];
+          if (nouvelle && ancienne.id != null) corresp.set('ligne:' + ancienne.id, String(nouvelle.id));
+        });
 
         for (const p of (n.attachments || [])) {
           const octetsPj = base64ToBytes(p.data);
           const f = new File([octetsPj], p.name || 'fichier', { type: p.mime || 'application/octet-stream' });
-          try { await uploadAttachment(cree.id, f); } catch { /* pièce jointe perdue, notask conservée */ }
+          try {
+            const pj = await uploadAttachment(cree.id, f);
+            if (p.id == null) continue;
+            // Une image et une note vocale ne se distinguent que par la forme
+            // du marqueur, l'identifiant de pièce jointe est le même.
+            corresp.set('att:' + p.id, String(pj.id));
+            corresp.set('audio:' + p.id, String(pj.id));
+          } catch { /* pièce jointe perdue, notask conservée */ }
+        }
+
+        /* UNE SEULE passe sur le contenu, et non un remplacement par
+           identifiant : remplacer les uns après les autres fait se marcher
+           dessus les correspondances. Cas réel attrapé au banc d'essai —
+           anciennes lignes 1 et 2, nouvelles 2 et 3 : le premier remplacement
+           écrit `[ligne:2]`, que le second, cherchant l'ancien `[ligne:2]`,
+           réécrit aussitôt en `[ligne:3]`. Résultat, deux marqueurs
+           identiques et une case perdue. Une passe unique lit chaque marqueur
+           une fois et ne relit jamais ce qu'elle vient d'écrire.
+
+           Un marqueur sans correspondance est laissé TEL QUEL plutôt que
+           supprimé : il sera nettoyé au premier enregistrement (voir
+           hydrateLignesACocher, qui retire les blocs orphelins), et le
+           conserver garde une trace visible si l'archive était incomplète. */
+        let contenu = n.content || '';
+        let aChange = false;
+        contenu = contenu.replace(/\[(ligne|att|audio):(\w+)\]/g, (marqueur, type, id) => {
+          const nouveau = corresp.get(type + ':' + id);
+          if (nouveau === undefined) return marqueur;
+          aChange = true;
+          return `[${type}:${nouveau}]`;
+        });
+
+        // Second appel assumé, comme à la création d'une notask contenant un
+        // dessin : impossible de connaître les nouveaux identifiants avant
+        // d'avoir créé la notask et envoyé ses fichiers.
+        if (aChange) {
+          await api('/notes/' + cree.id, {
+            method: 'PATCH', body: { content: await encryptField(contenu) },
+          });
         }
         faits += 1;
       } catch {

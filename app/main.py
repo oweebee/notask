@@ -8,8 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import events as bus
 from app.db import init_db
-from app.routers import attachments, auth, google, labels, note_versions, notes, settings, tasks, users
+from app.routers import (
+    attachments, auth, events, google, labels, note_versions, notes, settings, tasks, users,
+)
+from app.security import decode_access_token
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -26,7 +30,7 @@ app = FastAPI(
     # Palier 0.9 jusqu'à l'annonce de la V1 (cf. fichier VERSION à la
     # racine et APP_VERSION dans app/static/app.js) : la 1.0.0 affichée ici
     # était une valeur d'amorçage jamais mise à jour, trompeuse.
-    version="0.9036",
+    version="0.9038",
     lifespan=lifespan,
 )
 
@@ -113,7 +117,46 @@ async def erreur_inattendue(request: Request, exc: Exception):
     )
 
 
+@app.middleware("http")
+async def diffuser_changements(request: Request, call_next):
+    """Après toute écriture réussie sur l'API, prévient les autres clients du
+    même utilisateur (voir app/events.py et app/routers/events.py).
+
+    Posé en middleware plutôt que route par route, DÉLIBÉRÉMENT : les écritures
+    sont éparpillées sur huit routeurs (notasks, lignes, libellés, pièces
+    jointes, versions, réglages…) et la liste s'allonge à chaque
+    fonctionnalité. Une notification oubliée sur une route ne se voit pas — le
+    client reste simplement figé sur des données anciennes, sans erreur nulle
+    part. Un point de passage unique ferme cette porte.
+
+    Le jeton est relu ici plutôt que de dépendre de get_current_user : un
+    middleware s'exécute AVANT que FastAPI ne résolve les dépendances de la
+    route, il n'a donc pas accès à son résultat. Seul l'identifiant est
+    décodé, sans aller en base — on ne cherche pas à autoriser quoi que ce
+    soit ici, la route s'en est déjà chargée, on cherche seulement à savoir
+    QUI prévenir.
+    """
+    response = await call_next(request)
+
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return response
+    if not request.url.path.startswith("/api/"):
+        return response
+    # 2xx uniquement : une écriture refusée n'a rien changé à annoncer.
+    if not (200 <= response.status_code < 300):
+        return response
+
+    entete = request.headers.get("authorization") or ""
+    if not entete.lower().startswith("bearer "):
+        return response
+    user_id = decode_access_token(entete.split(" ", 1)[1].strip())
+    if user_id is not None:
+        bus.publier(user_id, request.headers.get("x-client-id"))
+    return response
+
+
 app.include_router(auth.router)
+app.include_router(events.router)
 app.include_router(users.router)
 app.include_router(settings.router)
 app.include_router(notes.router)

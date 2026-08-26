@@ -597,22 +597,26 @@
   </div>
 </dialog>
 
-<!-- Outils. Première fonction : sauvegarde complète, chiffrée par un mot de
+<!-- Outils. Première fonction : sauvegarde complète, chiffrable par un mot de
      passe choisi ici — indépendant de celui du compte, pour que l'archive
-     reste lisible même si le compte est perdu. -->
+     reste lisible même si le compte est perdu. Le mot de passe est
+     FACULTATIF : sans lui l'archive est écrite en clair (voir #export-run
+     dans app.js, qui demande alors confirmation). -->
 <dialog id="dlg-outils">
   <h2>Outils</h2>
 
   <section class="outil-bloc">
     <h3>sauvegarde</h3>
-    <p class="aide">Archive chiffrée de toutes vos notasks. Sans ce mot de passe, elle est irrécupérable.</p>
+    <p class="aide">Archive complète de vos notasks, images et notes vocales comprises. Avec un mot de passe, elle est chiffrée et irrécupérable sans lui ; sans mot de passe, elle est lisible par quiconque ouvre le fichier.</p>
     <div class="field">
-      <label for="archive-pw">Mot de passe de l'archive</label>
+      <label for="archive-pw">Mot de passe de l'archive (facultatif)</label>
       <input id="archive-pw" type="password" autocomplete="off">
     </div>
     <!-- Un seul mot de passe, deux boutons : c'est le bouton choisi qui
          détermine le sens de l'opération. Le sélecteur de fichier reste
-         masqué, "Importer" l'ouvre lui-même. -->
+         masqué, "Importer" l'ouvre lui-même. À l'import le champ n'est pas
+         obligatoire : si l'archive est protégée et le champ vide, le mot de
+         passe est demandé à ce moment-là. -->
     <div class="outil-actions">
       <button class="btn" id="export-run" type="button">Exporter</button>
       <button class="btn" id="import-run" type="button">Importer</button>
