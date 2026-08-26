@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9045';
+const APP_VERSION = '0.9047';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4952,6 +4952,7 @@ $('.note-composer').addEventListener('paste', (e) => {
   if (autres.length) queueComposerFiles(autres);
 });
 brancherCollagePropre($('#nc-content'));
+brancherOuvertureLiens($('#nc-content'));
 
 // Glisser-déposer un fichier sur le composeur.
 const ncComposerEl = $('.note-composer');
@@ -5512,6 +5513,7 @@ $('#dlg-note-simple').addEventListener('paste', (e) => {
   if (autres.length) handleIncomingAttachments(autres);
 });
 brancherCollagePropre($('#dns-content'));
+brancherOuvertureLiens($('#dns-content'));
 
 // Glisser-déposer un fichier sur la carte en édition simple.
 const dnsCard = document.querySelector('#dlg-note-simple .dns-card');
@@ -6599,6 +6601,59 @@ function insererHtmlDansSelection(html) {
   }
 }
 
+/* Ouvre dans un nouvel onglet les liens d'une ZONE DE SAISIE.
+
+   Sur une carte, le `target="_blank"` posé par renderFormatted suffit : le
+   navigateur suit le lien tout seul. Dans une zone `contenteditable`, non —
+   il considère qu'on vient éditer, place le curseur dans le texte du lien et
+   n'ouvre rien. Le lien était donc mort dans une notask ouverte, alors qu'il
+   fonctionnait sur la carte juste avant de l'ouvrir.
+
+   `window.open(..., 'noopener')` plutôt qu'un clic simulé : la page ouverte
+   n'obtient aucune prise sur notask via `window.opener` — même garantie que
+   le `rel="noopener noreferrer"` du rendu sur carte.
+
+   Touche de modification enfoncée : on ne fait rien et on laisse le
+   navigateur suivre son propre chemin (ouvrir en arrière-plan, dans une
+   fenêtre, copier l'adresse…). Ces raccourcis appartiennent à
+   l'utilisateur, pas à l'application. */
+function brancherOuvertureLiens(el) {
+  if (!el) return;
+  el.addEventListener('click', (e) => {
+    const lien = e.target.closest ? e.target.closest('a.note-url') : null;
+    if (!lien || !el.contains(lien)) return;
+
+    /* Alt+clic : ÉDITER au lieu d'ouvrir. Le curseur est posé nous-mêmes à
+       l'endroit exact du clic, plutôt que de compter sur le comportement par
+       défaut du navigateur dans une zone éditable — celui-ci diffère d'un
+       navigateur à l'autre (certains suivent quand même le lien, d'autres
+       posent le curseur), et un geste d'édition ne peut pas être « ça dépend
+       de ton navigateur ». */
+    if (e.altKey) {
+      e.preventDefault();
+      const pos = document.caretRangeFromPoint
+        ? document.caretRangeFromPoint(e.clientX, e.clientY)
+        : null;
+      if (pos) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(pos);
+      }
+      el.focus();
+      return;
+    }
+
+    // Ctrl/⌘/Maj : raccourcis du navigateur (arrière-plan, nouvelle fenêtre,
+    // copier l'adresse). Ils appartiennent à l'utilisateur, on n'y touche pas.
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+    const href = lien.getAttribute('href');
+    if (!href) return;
+    e.preventDefault();
+    window.open(href, '_blank', 'noopener');
+  });
+}
+
 // Branché sur la zone éditable elle-même (pas sur un ancêtre) : reçoit
 // l'événement AVANT les gestionnaires de collage d'image posés sur
 // .note-composer/#dlg-note-simple (ordre de bulle DOM, cible d'abord), donc
@@ -7348,11 +7403,17 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
      nouvel onglet, sans donner à la page ouverte la moindre prise sur
      notask (window.opener). L'adresse est filtrée par urlSure() — un
      `javascript:` glissé dans un marqueur exécuterait sinon du code au
-     simple clic. */
+     simple clic.
+
+     L'infobulle annonce le geste d'édition : dans une notask ouverte, un clic
+     simple OUVRE le lien (voir brancherOuvertureLiens), il faut donc dire
+     comment atteindre le texte pour le corriger — sans quoi le lien
+     deviendrait impossible à modifier sans que rien ne l'explique. */
   html = html.replace(NOTE_URL_MARK, (m, href, texte) => {
     const url = urlSure(href);
     if (!url) return texte;  // adresse refusée : on garde le texte, sans lien
-    return `<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer">${texte}</a>`;
+    return `<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer"`
+      + ` title="${escapeHtml(url)}\n(Alt+clic pour éditer)">${texte}</a>`;
   });
   html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);

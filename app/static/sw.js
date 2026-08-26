@@ -9,7 +9,7 @@
    premier, sinon un redéploiement resterait invisible tant que le cache
    n'expire pas — même philosophie que le Cache-Control: no-cache déjà posé
    côté serveur sur tout le reste (voir main.py). */
-const CACHE_NAME = 'notask-shell-v45';
+const CACHE_NAME = 'notask-shell-v47';
 const SHELL_FILES = [
   '/',
   '/quick',
