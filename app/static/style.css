@@ -2164,6 +2164,13 @@ input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
   transition: background .15s, color .15s;
 }
 .label-chip:hover { background: rgba(230,224,233,.16); }
+/* Tag portant une couleur (fond posé en style inline par renderCardLabels /
+   renderNoteLabelChips) : texte en blanc plein plutôt que le gris atténué
+   ci-dessus, qui manquait de contraste depuis que ces tags portent la teinte
+   PLEINE de la palette et non plus une version à 55 %. Sélecteur [style] :
+   c'est la seule marque, en CSS, d'un tag effectivement coloré — même
+   mécanique que .drawer-item.label-item[style] pour le menu de gauche. */
+.label-chip[style] { color: var(--md-on-surface); }
 .label-chip.active {
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
