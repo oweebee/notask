@@ -68,6 +68,12 @@ DEFAULT_DURATION = timedelta(minutes=30)
 
 # Notification Google Calendar avant l'échéance, en minutes.
 REMINDER_MINUTES = 15
+# Rappel d'une échéance « journée complète » : la veille à 20 h.
+# Google compte les minutes AVANT LE DÉBUT de l'événement ; pour un
+# événement journée entière, ce début est minuit (dans le fuseau de
+# l'agenda). 4 h avant minuit = 20 h la veille. Ne pas convertir en UTC :
+# c'est Google qui applique le fuseau de l'agenda, pas nous.
+REMINDER_MINUTES_ALL_DAY = 4 * 60
 
 HTTP_TIMEOUT = 10.0
 
@@ -334,7 +340,10 @@ def _event_body(title: str, due_at: datetime, kind: str, ref_id: int, note_id: i
         # ligne à cocher datée : c'est la notask qu'on veut ouvrir.
         "reminders": {
             "useDefault": False,
-            "overrides": [{"method": "popup", "minutes": REMINDER_MINUTES}],
+            "overrides": [{
+                "method": "popup",
+                "minutes": REMINDER_MINUTES_ALL_DAY if all_day else REMINDER_MINUTES,
+            }],
         },
     }
 
