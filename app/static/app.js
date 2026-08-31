@@ -8957,9 +8957,8 @@ async function updateTaskBadges() {
    #agenda-col dans index.html et switchView() qui l'active/désactive selon
    la vue) — seul point d'accès aux tâches datées, "Notasks Prévues" dans le
    menu de gauche y renvoie directement (plus de vue à part, voir le
-   gestionnaire de clic de #nav-tasks). Borné à un mois pour "à venir" —
-   sans limite, la colonne finirait par afficher toutes les échéances
-   lointaines, ce qui n'a plus rien d'un coup d'œil rapide. Les tâches
+   gestionnaire de clic de #nav-tasks). Aucune limite de date : toutes les
+   échéances à venir y figurent, par ordre chronologique. Les tâches
    terminées n'y figurent pas. */
 async function loadAgenda() {
   let tasks;
@@ -8972,17 +8971,11 @@ async function loadAgenda() {
     t.text = await decryptField(t.text);
     t.note_title = await decryptField(t.note_title);
   }));
-  const now = new Date();
-  // Fenêtre d'un mois pour "à venir" (7 jours auparavant). setMonth gère
-  // seul les mois de longueurs différentes, contrairement à un simple
-  // "+30 jours" en millisecondes.
-  const limite = new Date(now);
-  limite.setMonth(limite.getMonth() + 1);
-  const items = tasks.filter((t) => {
-    if (t.bucket === 'late' || t.bucket === 'today') return true;
-    if (t.bucket === 'upcoming') return new Date(t.due_at) <= limite;
-    return false; // "done" exclu : la colonne suit les échéances à venir, pas un historique
-  });
+  // Plus aucune fenêtre : "à venir" montre TOUT, du plus proche au plus
+  // lointain (limite d'un mois retirée à la demande — elle masquait
+  // silencieusement les périodes longues). Le tri chronologique vient du
+  // serveur (tasks.sort par due_at croissante dans list_tasks).
+  const items = tasks.filter((t) => t.bucket !== 'done');
   renderAgenda(items);
 }
 
