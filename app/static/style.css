@@ -1978,6 +1978,11 @@ body.is-dragging * {
   font-size: .8125rem;
 }
 .cal-popup-colon { color: var(--md-on-surface-variant); }
+/* Regroupe heure+minutes dans un span (voir champsHeure() dans openCalPopup,
+   app.js) — nécessaire pour pouvoir les masquer d'un bloc en mode « journée
+   complète » sans toucher au champ date, qui reste toujours visible. Même
+   espacement que .cal-popup-row pour ne rien changer visuellement. */
+.cal-popup-heure { display: flex; align-items: center; gap: .375rem; }
 
 /* Mode « période » : une seconde ligne date+heure pour la fin de plage.
    Même gabarit que la première ligne, d'où la réutilisation des classes

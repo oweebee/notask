@@ -5,7 +5,7 @@ datée à l'intérieur d'une note. Rien ne se crée ici : toute tâche naît d'u
 note. On ne peut que la cocher, la décocher, ou la lire.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,10 +27,26 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _bucket(due_at: datetime, done: bool, now: datetime) -> str:
+def _bucket(due_at: datetime, done: bool, now: datetime, all_day: bool = False,
+            due_end_at: Optional[datetime] = None) -> str:
     if done:
         return "done"
     due_at = _aware(due_at)
+    if all_day:
+        # due_at/due_end_at valent minuit UTC du jour concerné, par
+        # convention (voir NoteBase.all_day) — jamais une heure réelle. Le
+        # comparer directement à `now` comme un due_at ordinaire ferait
+        # basculer la tâche en retard dès la première seconde du jour même
+        # (minuit passé => due_at < now), avant même que la journée n'ait eu
+        # lieu. Le retard n'est réel qu'une fois le DERNIER jour de la
+        # période totalement écoulé — d'où la borne exclusive fin+1 jour.
+        fin = _aware(due_end_at) if due_end_at else due_at
+        fin_exclusive = fin + timedelta(days=1)
+        if now >= fin_exclusive:
+            return "late"
+        if now < due_at:
+            return "upcoming"
+        return "today"
     if due_at < now:
         return "late"
     if due_at.date() == now.date():
@@ -81,10 +97,11 @@ def list_tasks(
             text=n.title,
             due_at=n.due_at,
             due_end_at=n.due_end_at,
+            all_day=n.all_day,
             done=n.done,
             color=n.color,
             icon=n.icon,
-            bucket=_bucket(n.due_at, n.done, now),
+            bucket=_bucket(n.due_at, n.done, now, n.all_day, n.due_end_at),
         ))
 
     # 2. Les lignes à cocher qui portent une échéance
@@ -110,10 +127,11 @@ def list_tasks(
                 text=it.text,
                 due_at=it.due_at,
                 due_end_at=it.due_end_at,
+                all_day=it.all_day,
                 done=it.checked,
                 color=parent.color,
                 icon=parent.icon,
-                bucket=_bucket(it.due_at, it.checked, now),
+                bucket=_bucket(it.due_at, it.checked, now, it.all_day, it.due_end_at),
             ))
 
     if bucket:
@@ -154,8 +172,8 @@ def set_done(
 
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
-            text=note.title, due_at=note.due_at, due_end_at=note.due_end_at, done=note.done,
-            color=note.color, icon=note.icon, bucket=_bucket(note.due_at, note.done, now),
+            text=note.title, due_at=note.due_at, due_end_at=note.due_end_at, all_day=note.all_day,
+            done=note.done, color=note.color, icon=note.icon, bucket=_bucket(note.due_at, note.done, now, note.all_day, note.due_end_at),
         )
 
     if kind == "item":
@@ -184,8 +202,8 @@ def set_done(
 
         return TaskOut(
             kind="item", id=item.id, note_id=parent.id, note_title=parent.title,
-            text=item.text, due_at=item.due_at, due_end_at=item.due_end_at, done=item.checked,
-            color=parent.color, icon=parent.icon, bucket=_bucket(item.due_at, item.checked, now),
+            text=item.text, due_at=item.due_at, due_end_at=item.due_end_at, all_day=item.all_day,
+            done=item.checked, color=parent.color, icon=parent.icon, bucket=_bucket(item.due_at, item.checked, now, item.all_day, item.due_end_at),
         )
 
     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Type de tâche inconnu")

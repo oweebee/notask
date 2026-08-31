@@ -984,9 +984,31 @@ const ICON_CHOICES = {
   trombone: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#8d6e63"/><path d="M15.5 9.5v6a3 3 0 0 1-6 0V9a2 2 0 0 1 4 0v5.5a1 1 0 0 1-2 0V10" fill="none" stroke="#efebe9" stroke-width="1.6" stroke-linecap="round"/></svg>',
 };
 
-/* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ». */
-function formatDue(isoString) {
+/* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ».
+   `allDay` (mode journée complète) affiche le jour SANS heure, et le compare
+   au jour UTC (isoToUtcDateStr) plutôt qu'au jour local — cf. dateOnlyToIso :
+   une échéance journée complète est un jour calendaire pur, encodé en
+   minuit UTC, jamais une conversion depuis un fuseau. */
+function formatDue(isoString, allDay = false) {
   if (!isoString) return '';
+  if (allDay) {
+    const jourStr = isoToUtcDateStr(isoString);
+    if (!jourStr) return '';
+    const [y, m, d] = jourStr.split('-').map(Number);
+    const jour = new Date(y, m - 1, d);
+    const now = new Date();
+    const memeJour = (a, b) => a.toDateString() === b.toDateString();
+    const demain = new Date(now); demain.setDate(now.getDate() + 1);
+    const hier = new Date(now); hier.setDate(now.getDate() - 1);
+    if (memeJour(jour, now)) return "aujourd'hui";
+    if (memeJour(jour, demain)) return 'demain';
+    if (memeJour(jour, hier)) return 'hier';
+    return jour.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+      year: jour.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+    });
+  }
   const d = new Date(isoString);
   const now = new Date();
   const heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -1009,11 +1031,17 @@ function formatDue(isoString) {
 
 /* Échéance ponctuelle ou plage (« période » cochée dans le sélecteur). Une
    plage tenant sur la même journée n'affiche que l'heure de fin — répéter
-   la date n'apporte rien et allonge inutilement les étiquettes de carte. */
-function formatDueRange(isoStart, isoEnd) {
+   la date n'apporte rien et allonge inutilement les étiquettes de carte.
+   En mode journée complète (`allDay`), jamais d'heure : une plage devient
+   simplement « jour début → jour fin ». */
+function formatDueRange(isoStart, isoEnd, allDay = false) {
   if (!isoStart) return '';
-  const debut = formatDue(isoStart);
+  const debut = formatDue(isoStart, allDay);
   if (!isoEnd) return debut;
+  if (allDay) {
+    const finStr = formatDue(isoEnd, true);
+    return finStr && finStr !== debut ? `${debut} → ${finStr}` : debut;
+  }
   const d1 = new Date(isoStart);
   const d2 = new Date(isoEnd);
   if (Number.isNaN(d2.getTime()) || d2 <= d1) return debut;
@@ -1021,6 +1049,26 @@ function formatDueRange(isoStart, isoEnd) {
     return `${debut} → ${d2.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   }
   return `${debut} → ${formatDue(isoEnd)}`;
+}
+
+/* Une échéance est-elle en retard ? Même règle que _bucket() côté serveur
+   (app/routers/tasks.py) — dupliquée ici uniquement pour l'affichage
+   immédiat d'une carte fraîchement modifiée, avant tout aller-retour
+   réseau. En mode journée complète, le retard n'est réel qu'une fois le
+   DERNIER jour de la période totalement écoulé (minuit UTC suivant) : le
+   comparer à `due_at` directement (minuit du jour même) marquerait la
+   tâche en retard dès la première seconde du jour. */
+function estEnRetard(dueAt, dueEndAt, allDay) {
+  if (!dueAt) return false;
+  const now = new Date();
+  if (allDay) {
+    const finIso = dueEndAt || dueAt;
+    const fin = new Date(finIso);
+    if (Number.isNaN(fin.getTime())) return false;
+    const finExclusive = new Date(fin.getTime() + 24 * 60 * 60 * 1000);
+    return now >= finExclusive;
+  }
+  return new Date(dueAt) < now;
 }
 
 /* Conversions date/heure <-> ISO 8601 en UTC attendu par l'API.
@@ -1051,6 +1099,30 @@ function partsToIso(dateStr, hour, minute) {
   return new Date(y, m - 1, d, Number(hour), Number(minute), 0, 0).toISOString();
 }
 
+/* Mode « journée complète » (voir NoteBase.all_day côté serveur) : une
+   échéance journée entière n'a AUCUN sens horaire, donc pas de conversion
+   depuis un fuseau local comme partsToIso — on encode directement le jour
+   choisi en minuit UTC. C'est ce qui permet de relire ensuite ce jour sans
+   jamais se soucier du fuseau du navigateur qui rouvre le sélecteur (voir
+   isoToUtcDateStr, son inverse). */
+function dateOnlyToIso(dateStr) {
+  if (!dateStr) return null;
+  return `${dateStr}T00:00:00.000Z`;
+}
+
+/* Inverse de dateOnlyToIso : relit le jour calendaire encodé, en UTC — PAS
+   en heure locale (isoToParts), qui déciderait du mauvais jour dans tout
+   fuseau où minuit UTC ne tombe pas le même jour civil (à l'ouest de
+   l'UTC). Utilisée uniquement pour rouvrir le sélecteur sur une échéance
+   déjà enregistrée en mode journée complète. */
+function isoToUtcDateStr(isoString) {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
 /* Prochain quart d'heure à venir, pour une valeur de départ sensée quand
    aucune échéance n'est encore réglée. */
 function nextQuarterHourParts() {
@@ -1074,12 +1146,15 @@ function closeCalPopup() {
   if (_closeCalPopup) { _closeCalPopup(); _closeCalPopup = null; }
 }
 
-/* `onChange` reçoit (isoDebut, isoFin) — isoFin vaut null tant que la case
-   « période » n'est pas cochée. `currentEndIso` permet de rouvrir le popup
-   sur une plage déjà enregistrée. Une plage se traduit par un événement
-   Google couvrant réellement l'intervalle, au lieu des 30 minutes par
-   défaut (voir DEFAULT_DURATION dans app/google_calendar.py). */
-function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
+/* `onChange` reçoit (isoDebut, isoFin, journeeComplete) — isoFin vaut null
+   tant que la case « période » n'est pas cochée. `currentEndIso` permet de
+   rouvrir le popup sur une plage déjà enregistrée, `currentAllDay` sur une
+   échéance en mode journée complète (voir NoteBase.all_day). Une plage se
+   traduit par un événement Google couvrant réellement l'intervalle, au lieu
+   des 30 minutes par défaut (voir DEFAULT_DURATION dans
+   app/google_calendar.py) — ou par un événement "journée entière" si
+   journeeComplete est vrai. */
+function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, currentAllDay = false) {
   closeCalPopup();
 
   const parts = isoToParts(currentIso) || nextQuarterHourParts();
@@ -1092,18 +1167,31 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
     hour: String((Number(parts.hour) + 1) % 24).padStart(2, '0'),
     minute: parts.minute,
   };
+  // En mode journée complète, la date affichée doit se relire en UTC (voir
+  // isoToUtcDateStr) — parts/endParts (isoToParts, en heure LOCALE) donnerait
+  // le mauvais jour dans tout fuseau à l'ouest de l'UTC. Ne s'applique qu'à
+  // la réouverture d'une échéance déjà enregistrée ainsi ; le reste du temps
+  // (bascule en cours d'édition) le champ date garde la valeur déjà choisie.
+  const startDateStr = (currentAllDay && isoToUtcDateStr(currentIso)) || parts.date;
+  const endDateStr = (currentAllDay && isoToUtcDateStr(currentEndIso)) || endParts.date;
 
   const pop = document.createElement('div');
   pop.className = 'cal-popup';
   const champsHeure = (classe) => `
+    <span class="cal-popup-heure">
       <select class="cal-popup-hour ${classe}-hour">${hourOpts.map((h) => `<option value="${h}">${h}</option>`).join('')}</select>
       <span class="cal-popup-colon">:</span>
-      <select class="cal-popup-min ${classe}-min">${minOpts.map((m) => `<option value="${m}">${m}</option>`).join('')}</select>`;
+      <select class="cal-popup-min ${classe}-min">${minOpts.map((m) => `<option value="${m}">${m}</option>`).join('')}</select>
+    </span>`;
   pop.innerHTML = `
     <div class="cal-popup-row">
       <input type="date" class="cal-popup-date">
       ${champsHeure('cal-popup-start')}
     </div>
+    <label class="cal-popup-periode cal-popup-allday">
+      <input type="checkbox" class="cal-popup-allday-toggle">
+      <span>Journée complète</span>
+    </label>
     <label class="cal-popup-periode">
       <input type="checkbox" class="cal-popup-toggle">
       <span>Période (date de fin)</span>
@@ -1130,7 +1218,7 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   const dateInput = pop.querySelector('.cal-popup-date');
   const hourSelect = pop.querySelector('.cal-popup-start-hour');
   const minSelect = pop.querySelector('.cal-popup-start-min');
-  dateInput.value = parts.date;
+  dateInput.value = startDateStr;
   hourSelect.value = parts.hour;
   minSelect.value = parts.minute;
 
@@ -1140,7 +1228,9 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   const hourEnd = pop.querySelector('.cal-popup-end-hour');
   const minEnd = pop.querySelector('.cal-popup-end-min');
   const erreur = pop.querySelector('.cal-popup-erreur');
-  dateEnd.value = endParts.date;
+  const allDayToggle = pop.querySelector('.cal-popup-allday-toggle');
+  const heureEls = pop.querySelectorAll('.cal-popup-heure');
+  dateEnd.value = endDateStr;
   hourEnd.value = endParts.hour;
   minEnd.value = endParts.minute;
   toggle.checked = !!currentEndIso;
@@ -1149,6 +1239,15 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
     rowEnd.hidden = !toggle.checked;
     if (!toggle.checked) erreur.hidden = true;
   };
+
+  // Journée complète : masque les champs d'heure (début ET fin, qu'elle
+  // soit visible ou non) — le choix ne porte plus que sur des jours.
+  allDayToggle.checked = !!currentAllDay;
+  const appliquerAllDay = () => {
+    heureEls.forEach((el) => { el.hidden = allDayToggle.checked; });
+  };
+  appliquerAllDay();
+  allDayToggle.onchange = appliquerAllDay;
 
   // Largeur mesurée plutôt que codée en dur : les 250/260px d'origine
   // étaient devenus faux en élargissant le popup (champ date tronqué), et
@@ -1191,9 +1290,15 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
     pop.style.left = `${Math.max(marge, left)}px`;
   }
 
-  const currentValue = () => partsToIso(dateInput.value, hourSelect.value, minSelect.value);
-  const currentEndValue = () =>
-    (toggle.checked ? partsToIso(dateEnd.value, hourEnd.value, minEnd.value) : null);
+  const currentValue = () => (allDayToggle.checked
+    ? dateOnlyToIso(dateInput.value)
+    : partsToIso(dateInput.value, hourSelect.value, minSelect.value));
+  const currentEndValue = () => {
+    if (!toggle.checked) return null;
+    return allDayToggle.checked
+      ? dateOnlyToIso(dateEnd.value)
+      : partsToIso(dateEnd.value, hourEnd.value, minEnd.value);
+  };
 
   // Une fin antérieure ou égale au début serait refusée par Google (400) et
   // ferait échouer la synchro en silence : on la bloque ici, à la source.
@@ -1203,14 +1308,14 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
     return !fin || !debut || new Date(fin) > new Date(debut);
   };
 
-  const finish = (iso, endIso) => { onChange(iso, endIso); closeCalPopup(); };
+  const finish = (iso, endIso, allDay) => { onChange(iso, endIso, allDay); closeCalPopup(); };
   const valider = () => {
     if (!finEstValide()) { erreur.hidden = false; return false; }
-    finish(currentValue(), currentEndValue());
+    finish(currentValue(), currentEndValue(), allDayToggle.checked);
     return true;
   };
   pop.querySelector('[data-act=ok]').onclick = valider;
-  pop.querySelector('[data-act=clear]').onclick = () => finish(null, null);
+  pop.querySelector('[data-act=clear]').onclick = () => finish(null, null, false);
 
   // Comme les autres popovers de l'app : toute façon de le quitter applique
   // la valeur en cours (pas seulement le bouton Valider) — sans quoi choisir
@@ -1219,7 +1324,7 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null) {
   // Une plage incohérente ne doit pas non plus être validée par une sortie
   // « douce » (clic ailleurs / Échap) : dans ce cas on ferme en ignorant la
   // fin plutôt qu'en enregistrant une plage que Google refuserait.
-  const sortieDouce = () => finish(currentValue(), finEstValide() ? currentEndValue() : null);
+  const sortieDouce = () => finish(currentValue(), finEstValide() ? currentEndValue() : null, allDayToggle.checked);
   const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) sortieDouce(); };
   const onKey = (e) => { if (e.key === 'Escape') sortieDouce(); };
   setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
@@ -2763,7 +2868,7 @@ async function loadArchivedItems() {
     // une ligne archivée peut ne plus avoir d'échéance du tout.
     const ligne = creerLigneAgenda({
       kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
-      due_at: it.due_at, due_end_at: it.due_end_at, done: it.checked,
+      due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
       color: it.color, icon: it.icon,
     }, () => loadNotes(), true, 'unarchive');
     liste.appendChild(ligne);
@@ -3702,7 +3807,7 @@ function renderNotes() {
       // comme une ligne à part (voir loadArchivedItems()).
       for (const it of n.items.filter((i) => !i.archived)) {
         const due = it.due_at
-          ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at)}</em>` : '';
+          ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at, it.all_day)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
           <input type="checkbox" ${it.checked ? 'checked' : ''}>
           <span>${escapeHtml(it.text)}${due}</span></li>`;
@@ -3748,11 +3853,10 @@ function renderNotes() {
     // même niveau que l'ancien bouton + des libellés, juste au-dessus de
     // la rangée de libellés).
     if (n.due_at) {
-      const now = new Date();
-      const late = !n.done && new Date(n.due_at) < now;
+      const late = !n.done && estEnRetard(n.due_at, n.due_end_at, n.all_day);
       inner += `<div class="note-due ${late ? 'late' : ''} ${n.done ? 'done' : ''}">
         <input type="checkbox" data-act="done" ${n.done ? 'checked' : ''} aria-label="Terminer">
-        ${ICONS.clock}<span>${formatDueRange(n.due_at, n.due_end_at)}</span>
+        ${ICONS.clock}<span>${formatDueRange(n.due_at, n.due_end_at, n.all_day)}</span>
       </div>`;
     }
 
@@ -4404,6 +4508,7 @@ function resetComposer() {
   renderComposerAttachments();
   $('#nc-due').value = '';
   $('#nc-due-end').value = '';
+  $('#nc-all-day').value = '';
   renderNcDueBtn();
   $('#nc-colors').hidden = true;
   renderComposerLabelChips();
@@ -4535,15 +4640,16 @@ function renderComposerLabelChips() {
 // Échéance : même bouton + popover calendrier que sur une notask existante
 // (voir renderDueBtn()/openCalPopup(), partagés avec dn-due-btn/dns-due-btn).
 function renderNcDueBtn() {
-  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null, $('#nc-due-end').value || null);
+  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null, $('#nc-due-end').value || null, $('#nc-all-day').value === '1');
 }
 $('#nc-due-btn').addEventListener('click', () => {
   composerExpand();
-  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso, finIso) => {
+  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso, finIso, allDay) => {
     $('#nc-due').value = iso || '';
     $('#nc-due-end').value = (iso && finIso) || '';
+    $('#nc-all-day').value = (iso && allDay) ? '1' : '';
     renderNcDueBtn();
-  }, $('#nc-due-end').value || null);
+  }, $('#nc-due-end').value || null, $('#nc-all-day').value === '1');
 });
 renderNcDueBtn();
 
@@ -5011,6 +5117,7 @@ async function creerNotaskDepuisComposeur() {
         checked: l.checked,
         due_at: l.due_at,
         due_end_at: l.due_end_at,
+        all_day: l.all_day,
         calendar_title: l.due_at ? l.text : null,
         text: await encryptField(l.text),
       }))),
@@ -5020,6 +5127,8 @@ async function creerNotaskDepuisComposeur() {
       // Fin de plage : n'a de sens qu'avec un début (voir due_end_at dans
       // app/models.py, remis à None côté serveur si due_at est absent).
       due_end_at: ($('#nc-due').value && $('#nc-due-end').value) || null,
+      // Cf. NoteBase.all_day : même garde-fou, pas de journée complète sans échéance.
+      all_day: !!($('#nc-due').value && $('#nc-all-day').value === '1'),
       // Miroir en clair du titre, vu par le serveur UNIQUEMENT quand une
       // échéance est posée — sert à nommer l'événement Google Calendar lié
       // (voir app/google_calendar.py). Reste vide sans échéance : compromis
@@ -5193,23 +5302,24 @@ brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', ()
    toute sa gestion en double ont été retirées sur demande explicite. */
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
-function renderDueBtn(btnSel, labelSel, iso, isoEnd = null) {
+function renderDueBtn(btnSel, labelSel, iso, isoEnd = null, allDay = false) {
   const btn = $(btnSel);
   if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
   btn.classList.toggle('has-due', !!iso);
-  $(labelSel).textContent = iso ? formatDueRange(iso, isoEnd) : 'Aucune échéance';
+  $(labelSel).textContent = iso ? formatDueRange(iso, isoEnd, allDay) : 'Aucune échéance';
 }
 
 function renderNoteDueBtnSimple() {
-  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null, $('#dns-due-end').value || null);
+  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null, $('#dns-due-end').value || null, $('#dns-all-day').value === '1');
 }
 
 $('#dns-due-btn').addEventListener('click', () => {
-  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso, finIso) => {
+  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso, finIso, allDay) => {
     $('#dns-due').value = iso || '';
     $('#dns-due-end').value = (iso && finIso) || '';
+    $('#dns-all-day').value = (iso && allDay) ? '1' : '';
     renderNoteDueBtnSimple();
-  }, $('#dns-due-end').value || null);
+  }, $('#dns-due-end').value || null, $('#dns-all-day').value === '1');
 });
 
 /* Chips de libellés dans la boîte d'édition simple (seule restante — voir
@@ -5650,7 +5760,7 @@ function poserLignesDansTexte(items, zone) {
     bloc.querySelector('.note-ligne-txt').textContent = i.text;
     bloc.querySelector('.note-ligne-case').checked = !!i.checked;
     bloc.classList.toggle('done', !!i.checked);
-    majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null);
+    majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null, !!i.all_day);
     majCaseVide(bloc);
     fragment.appendChild(bloc);
   });
@@ -5726,6 +5836,7 @@ function openNoteSimpleDialog(note) {
   peindreTousLesBlocs($('#dns-content'));
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
+  $('#dns-all-day').value = note.all_day ? '1' : '';
   renderNoteDueBtnSimple();
   renderAttachmentsSimple();
   renderNoteLabelChipsSimple();
@@ -6825,7 +6936,7 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
     const case_ = bloc.querySelector('.note-ligne-case');
     case_.checked = !!item.checked;
     bloc.classList.toggle('done', !!item.checked);
-    majEcheanceLigne(bloc, item.due_at || null, item.due_end_at || null);
+    majEcheanceLigne(bloc, item.due_at || null, item.due_end_at || null, !!item.all_day);
 
     if (editable) {
       brancherLigneEditable(bloc);
@@ -6853,18 +6964,19 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
    L'échéance est stockée sur le bloc lui-même (data-due) : c'est de là que
    lignesDepuisZone() la relit à l'enregistrement, sans avoir à tenir un
    tableau parallèle synchronisé avec le DOM. */
-function majEcheanceLigne(bloc, iso, finIso) {
+function majEcheanceLigne(bloc, iso, finIso, allDay = false) {
   bloc.dataset.due = iso || '';
   bloc.dataset.dueEnd = (iso && finIso) || '';
+  bloc.dataset.allDay = (iso && allDay) ? '1' : '';
   const tag = bloc.querySelector('.note-ligne-due');
   if (tag) {
     tag.hidden = !iso;
-    tag.textContent = iso ? formatDueRange(iso, finIso) : '';
+    tag.textContent = iso ? formatDueRange(iso, finIso, allDay) : '';
   }
   const cal = bloc.querySelector('.note-ligne-cal');
   if (cal) {
     cal.classList.toggle('has-due', !!iso);
-    cal.title = iso ? formatDueRange(iso, finIso) : 'Dater cette ligne en fait une tâche';
+    cal.title = iso ? formatDueRange(iso, finIso, allDay) : 'Dater cette ligne en fait une tâche';
   }
 }
 
@@ -6973,9 +7085,9 @@ function brancherLigneEditable(bloc) {
     // quitte la zone de saisie avant même que le clic n'arrive.
     cal.addEventListener('mousedown', (e) => e.preventDefault());
     cal.addEventListener('click', () => {
-      openCalPopup(cal, bloc.dataset.due || null, (iso, finIso) => {
-        majEcheanceLigne(bloc, iso, finIso);
-      }, bloc.dataset.dueEnd || null);
+      openCalPopup(cal, bloc.dataset.due || null, (iso, finIso, allDay) => {
+        majEcheanceLigne(bloc, iso, finIso, allDay);
+      }, bloc.dataset.dueEnd || null, bloc.dataset.allDay === '1');
     });
   }
 
@@ -7168,6 +7280,7 @@ function lignesDepuisZone(root) {
       checked: bloc.querySelector('.note-ligne-case').checked,
       due_at: bloc.dataset.due || null,
       due_end_at: (bloc.dataset.due && bloc.dataset.dueEnd) || null,
+      all_day: bloc.dataset.due ? bloc.dataset.allDay === '1' : false,
     }))
     .filter((l) => l.text);
 }
@@ -7540,6 +7653,8 @@ async function saveNoteSimpleDialog() {
       description: await encryptField($('#dns-description').value),
       due_at: $('#dns-due').value || null,
       due_end_at: ($('#dns-due').value && $('#dns-due-end').value) || null,
+      // Cf. NoteBase.all_day : même garde-fou, pas de journée complète sans échéance.
+      all_day: !!($('#dns-due').value && $('#dns-all-day').value === '1'),
       // Cf. #nc-add : miroir en clair du titre pour Google Calendar, vidé
       // dès que la notask n'a plus d'échéance.
       calendar_title: $('#dns-due').value ? $('#dns-title').value : null,
@@ -7564,6 +7679,7 @@ async function saveNoteSimpleDialog() {
       checked: l.checked,
       due_at: l.due_at,
       due_end_at: l.due_end_at,
+      all_day: l.all_day,
       // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
       // quand la ligne porte une échéance à mettre dans l'agenda Google.
       calendar_title: l.due_at ? l.text : null,
@@ -8973,7 +9089,7 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
     <span class="agenda-item-icon">${icon}</span>
     <span class="agenda-item-body">
       <span class="agenda-item-text">${escapeHtml(label)}</span>
-      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at)}</span>
+      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at, t.all_day)}</span>
     </span>` + (avecActions ? `<span class="agenda-item-actions">
       <button type="button" data-act="archive"
               title="${modeArchive === 'unarchive' ? 'Désarchiver' : 'Archiver'}"
@@ -9248,6 +9364,7 @@ async function collecterExport(progres) {
         id: it.id,
         text: it.text, checked: it.checked, due_at: it.due_at,
         due_end_at: it.due_end_at || null,
+        all_day: !!it.all_day,
         archived: !!it.archived,
         calendar_title: it.due_at ? it.text : null,
       })),
@@ -9582,6 +9699,7 @@ $('#import-file').addEventListener('change', async () => {
             checked: !!it.checked,
             due_at: it.due_at || null,
             due_end_at: it.due_at ? (it.due_end_at || null) : null,
+            all_day: it.due_at ? !!it.all_day : false,
             calendar_title: it.due_at ? (it.text || '') : null,
           }))),
         };

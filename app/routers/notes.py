@@ -188,6 +188,7 @@ def _replace_items(
             row.checked = item.checked
             row.due_at = item.due_at
             row.due_end_at = item.due_end_at if item.due_at else None
+            row.all_day = item.all_day if item.due_at else False
             row.calendar_title = item.calendar_title
             row.position = position
             vues.add(row.id)
@@ -198,6 +199,7 @@ def _replace_items(
                 checked=item.checked,
                 due_at=item.due_at,
                 due_end_at=item.due_end_at if item.due_at else None,
+                all_day=item.all_day if item.due_at else False,
                 calendar_title=item.calendar_title,
                 position=position,
             )
@@ -397,7 +399,7 @@ def list_archived_items(
     return [
         ArchivedItemOut(
             id=item.id, note_id=note.id, text=item.text, checked=item.checked,
-            due_at=item.due_at, due_end_at=item.due_end_at,
+            due_at=item.due_at, due_end_at=item.due_end_at, all_day=item.all_day,
             color=note.color, icon=note.icon,
         )
         for item, note in rows
@@ -414,6 +416,8 @@ def create_note(
     _check_icon(payload.icon)
     _check_labels(payload.label_ids, user, session)
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
+    if note.due_at is None:
+        note.all_day = False
     session.add(note)
     session.flush()
     # Pas d'orphelins possibles à la création : la notask vient de naître, il
@@ -474,6 +478,7 @@ def update_note(
         # Une fin de plage sans début n'a pas de sens : elle disparaît avec
         # l'échéance, que le client ait pensé à l'envoyer à None ou non.
         data["due_end_at"] = None
+        data["all_day"] = False
 
     items = data.pop("items", None)
     for key, value in data.items():
@@ -495,6 +500,7 @@ def update_note(
         note.calendar_title = None
     if note.due_at is None:
         note.due_end_at = None
+        note.all_day = False
 
     note.updated_at = utcnow()
     session.add(note)
@@ -607,6 +613,7 @@ def update_item(
     if item.due_at is None:
         item.calendar_title = None  # cf. update_note : hygiène, pas de titre en clair sans échéance
         item.due_end_at = None      # une fin de plage sans début n'a pas de sens
+        item.all_day = False
 
     session.add(item)
     session.commit()

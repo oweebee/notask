@@ -263,6 +263,15 @@ class NoteBase(SQLModel):
     # DEFAULT_DURATION dans google_calendar.py). Toujours None quand due_at
     # l'est : une fin sans début n'aurait aucun sens.
     due_end_at: Optional[datetime] = None
+    # Mode « journée complète » : l'échéance (et sa fin de plage éventuelle)
+    # ne porte plus d'heure significative. due_at/due_end_at restent des
+    # datetime (schéma inchangé) mais valent alors minuit UTC du jour choisi
+    # PAR CONVENTION — pas une conversion depuis un fuseau local (voir
+    # partsToIso vs. la construction dédiée côté client, app.js). C'est ce
+    # qui permet de relire la date telle quelle (due_at.date()) sans jamais
+    # se soucier d'un décalage horaire, y compris pour l'événement Google
+    # Calendar correspondant (voir _event_body dans google_calendar.py).
+    all_day: bool = False
     # Icône facultative affichée à gauche de la note (clé parmi un jeu fixe,
     # voir ICON_KEYS dans app/routers/notes.py).
     icon: Optional[str] = Field(default=None, max_length=40)
@@ -362,6 +371,8 @@ class NoteItem(SQLModel, table=True):
     due_at: Optional[datetime] = None
     # Cf. NoteBase.due_end_at — fin de plage facultative, à l'échelle de la ligne.
     due_end_at: Optional[datetime] = None
+    # Cf. NoteBase.all_day — même principe, à l'échelle de la ligne.
+    all_day: bool = False
     # Cf. Note.calendar_title/google_event_id — même principe, à l'échelle
     # de la ligne : une ligne à cocher datée devient elle-même un événement
     # Google Calendar séparé, indépendant de celui de la notask parente.
@@ -386,6 +397,7 @@ class NoteItemIn(SQLModel):
     due_at: Optional[datetime] = None
     calendar_title: Optional[str] = None
     due_end_at: Optional[datetime] = None
+    all_day: bool = False
 
 
 class NoteItemUpdate(SQLModel):
@@ -394,6 +406,7 @@ class NoteItemUpdate(SQLModel):
     due_at: Optional[datetime] = None
     calendar_title: Optional[str] = None
     due_end_at: Optional[datetime] = None
+    all_day: Optional[bool] = None
     archived: Optional[bool] = None
     # True = mettre à la corbeille, False = en sortir. Un booléen côté API
     # plutôt que la date brute : le client n'a pas à fabriquer d'horodatage,
@@ -408,6 +421,7 @@ class NoteItemOut(SQLModel):
     position: int
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
+    all_day: bool = False
     google_event_id: Optional[str] = None
     archived: bool = False
 
@@ -428,6 +442,7 @@ class ArchivedItemOut(SQLModel):
     checked: bool
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
+    all_day: bool = False
     color: str
     icon: Optional[str] = None
 
@@ -455,6 +470,7 @@ class NoteUpdate(SQLModel):
     is_checklist: Optional[bool] = None
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
+    all_day: Optional[bool] = None
     done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
@@ -687,6 +703,7 @@ class TaskOut(SQLModel):
     due_at: datetime
     # Cf. NoteBase.due_end_at — non nulle => la tâche couvre une période.
     due_end_at: Optional[datetime] = None
+    all_day: bool = False
     done: bool
     color: str
     # Icône de la note d'origine (même pour une tâche issue d'une ligne à
