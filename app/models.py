@@ -1,6 +1,7 @@
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from pydantic import field_validator
 from sqlalchemy import JSON, Boolean, Column, String
@@ -9,6 +10,89 @@ from sqlmodel import Field, Relationship, SQLModel
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Valeurs acceptées pour `recur` (Note.recur / NoteItem.recur) : None = pas de
+# récurrence. Synchronisé avec RECUR_LABELS côté client (app.js).
+RECUR_VALUES = {"weekly", "yearly"}
+
+
+def _zone(tz_name: Optional[str]):
+    """Fuseau de l'utilisateur, ou None si inconnu/indisponible.
+
+    Ne lève jamais : un nom de fuseau farfelu (le client l'envoie tel que le
+    navigateur le donne) ou une image sans base tzdata font simplement
+    retomber l'appelant sur le calcul en UTC pur. Une reprogrammation décalée
+    d'une heure vaut toujours mieux qu'une notask qu'on n'arrive plus à
+    cocher."""
+    if not tz_name:
+        return None
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return None
+
+
+def next_recurrence(
+    due_at: datetime,
+    due_end_at: Optional[datetime],
+    recur: str,
+    tz_name: Optional[str] = None,
+    all_day: bool = False,
+) -> Tuple[datetime, Optional[datetime]]:
+    """Calcule la prochaine échéance d'une notask/ligne récurrente, appelée
+    UNIQUEMENT au moment où elle vient d'être cochée terminée (jamais avant :
+    la date affichée reste celle fixée par l'utilisateur tant que la tâche
+    n'est pas accomplie). Conserve l'écart due_at -> due_end_at s'il existe,
+    pour qu'une plage récurrente reste une plage de même durée.
+
+    Le décalage se fait dans le FUSEAU DE L'UTILISATEUR quand il est connu
+    (réglage "timezone", voir fuseau_utilisateur() dans routers/settings.py),
+    et pas en UTC. Sinon « + 7 jours » veut dire « + 7 × 24 h », ce qui n'est
+    pas la même chose qu'« une semaine plus tard à la même heure » de part et
+    d'autre d'un changement d'heure : une notask hebdomadaire de 10h posée en
+    mars réapparaissait à 11h une fois l'heure d'été passée (et à 9h après le
+    retour à l'heure d'hiver). Le jour de la semaine, lui, était déjà correct.
+
+    Deux cas gardent volontairement le calcul en UTC pur :
+      - fuseau inconnu (aucun réglage envoyé, nom refusé par ZoneInfo) ;
+      - échéance « journée complète », qui vaut minuit UTC PAR CONVENTION et
+        non une heure réelle (voir NoteBase.all_day). La convertir en heure
+        locale pour la décaler la ferait justement dériver d'une heure au
+        passage d'un changement d'heure, c'est-à-dire casser la convention
+        que tout le reste du code tient pour acquise.
+    """
+
+    def _decale(dt: datetime) -> datetime:
+        if recur == "weekly":
+            return dt + timedelta(weeks=1)
+        if recur == "yearly":
+            try:
+                return dt.replace(year=dt.year + 1)
+            except ValueError:
+                # 29 février : l'année suivante n'en a pas toujours un, on
+                # ramène au 28 plutôt que de planter.
+                return dt.replace(month=2, day=28, year=dt.year + 1)
+        raise ValueError(f"Récurrence inconnue : {recur}")
+
+    zone = None if all_day else _zone(tz_name)
+
+    def _suivant(dt: Optional[datetime]) -> Optional[datetime]:
+        if dt is None:
+            return None
+        dt = _due_at_utc(dt)
+        if zone is None:
+            return _decale(dt)
+        # Aller-retour par l'heure locale : on décale l'heure au mur (10h
+        # reste 10h), puis on revient en UTC avec le décalage horaire en
+        # vigueur À LA NOUVELLE DATE, qui n'est pas forcément celui de la
+        # date de départ. fold=0 : sur l'heure "en double" du retour à
+        # l'heure d'hiver, on prend la première des deux, comme le font les
+        # agendas usuels.
+        local = dt.astimezone(zone)
+        return _decale(local).replace(fold=0).astimezone(timezone.utc)
+
+    return _suivant(due_at), _suivant(due_end_at)
 
 
 def _due_at_utc(v: Optional[datetime]) -> Optional[datetime]:
@@ -272,6 +356,11 @@ class NoteBase(SQLModel):
     # se soucier d'un décalage horaire, y compris pour l'événement Google
     # Calendar correspondant (voir _event_body dans google_calendar.py).
     all_day: bool = False
+    # Récurrence de l'échéance de la notask entière : "weekly" ou "yearly",
+    # None sinon. Sans effet tant que la notask n'est pas cochée terminée —
+    # voir next_recurrence() : la reprogrammation n'a lieu qu'à ce moment-là,
+    # jamais avant (update_note dans routers/notes.py).
+    recur: Optional[str] = Field(default=None, max_length=10)
     # Icône facultative affichée à gauche de la note (clé parmi un jeu fixe,
     # voir ICON_KEYS dans app/routers/notes.py).
     icon: Optional[str] = Field(default=None, max_length=40)
@@ -373,6 +462,8 @@ class NoteItem(SQLModel, table=True):
     due_end_at: Optional[datetime] = None
     # Cf. NoteBase.all_day — même principe, à l'échelle de la ligne.
     all_day: bool = False
+    # Cf. NoteBase.recur — même principe, à l'échelle de la ligne.
+    recur: Optional[str] = Field(default=None, max_length=10)
     # Cf. Note.calendar_title/google_event_id — même principe, à l'échelle
     # de la ligne : une ligne à cocher datée devient elle-même un événement
     # Google Calendar séparé, indépendant de celui de la notask parente.
@@ -398,6 +489,7 @@ class NoteItemIn(SQLModel):
     calendar_title: Optional[str] = None
     due_end_at: Optional[datetime] = None
     all_day: bool = False
+    recur: Optional[str] = None
 
 
 class NoteItemUpdate(SQLModel):
@@ -407,6 +499,7 @@ class NoteItemUpdate(SQLModel):
     calendar_title: Optional[str] = None
     due_end_at: Optional[datetime] = None
     all_day: Optional[bool] = None
+    recur: Optional[str] = None
     archived: Optional[bool] = None
     # True = mettre à la corbeille, False = en sortir. Un booléen côté API
     # plutôt que la date brute : le client n'a pas à fabriquer d'horodatage,
@@ -422,6 +515,7 @@ class NoteItemOut(SQLModel):
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
     all_day: bool = False
+    recur: Optional[str] = None
     google_event_id: Optional[str] = None
     archived: bool = False
 
@@ -471,6 +565,7 @@ class NoteUpdate(SQLModel):
     due_at: Optional[datetime] = None
     due_end_at: Optional[datetime] = None
     all_day: Optional[bool] = None
+    recur: Optional[str] = None
     done: Optional[bool] = None
     items: Optional[List[NoteItemIn]] = None
     label_ids: Optional[List[int]] = None
@@ -710,7 +805,11 @@ class TaskOut(SQLModel):
     # cocher) — affichée dans la colonne d'échéances (voir renderAgenda()
     # dans app.js), None si la note n'en a pas.
     icon: Optional[str] = None
-    bucket: str          # "late" | "today" | "upcoming" | "done"
+    # Cf. NoteBase.recur — reflète la récurrence de la notask/ligne
+    # d'origine ; utilisé côté client pour afficher l'icône de récurrence
+    # dans la colonne d'échéances.
+    recur: Optional[str] = None
+    bucket: str          # "late" | "today" | "imminent" | "upcoming" | "done"
 
     @field_validator("due_at", "due_end_at", mode="after")
     @classmethod

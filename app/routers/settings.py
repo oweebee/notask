@@ -4,7 +4,7 @@ Le serveur conserve un objet JSON par compte sans en interpréter le contenu.
 Ajouter un réglage côté client ne demande donc aucune modification ici.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlmodel import Session, select
@@ -28,6 +28,28 @@ def _row(user: User, session: Session) -> UserSettings:
         session.commit()
         session.refresh(row)
     return row
+
+
+def fuseau_utilisateur(user_id: int, session: Session) -> Optional[str]:
+    """Fuseau horaire déclaré par le client ("Europe/Paris"), ou None.
+
+    C'est la SEULE notion de fuseau du serveur, qui vit par ailleurs
+    entièrement en UTC (voir _due_at_utc dans models.py). Elle ne sert qu'à
+    reprogrammer une échéance récurrente à la même heure locale d'une fois
+    sur l'autre — voir next_recurrence(). Rangée dans les réglages libres
+    plutôt que dans une colonne dédiée : cette table est faite pour ça (voir
+    l'en-tête de ce fichier), et le client la remplit tout seul au démarrage
+    (voir declarerFuseauHoraire() dans app.js).
+
+    Renvoie None — donc calcul en UTC, exactement le comportement d'avant —
+    si le réglage est absent ou n'est pas une chaîne. Jamais d'exception :
+    personne ne doit échouer à cocher une tâche à cause d'un réglage douteux.
+    """
+    row = session.exec(select(UserSettings).where(UserSettings.user_id == user_id)).first()
+    if row is None:
+        return None
+    valeur = (row.data or {}).get("timezone")
+    return valeur if isinstance(valeur, str) and valeur else None
 
 
 def _validate(data: Dict[str, Any]) -> None:

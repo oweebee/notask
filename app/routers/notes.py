@@ -14,6 +14,7 @@ from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
+    RECUR_VALUES,
     ArchivedItemOut,
     Label,
     Note,
@@ -26,10 +27,12 @@ from app.models import (
     NoteOut,
     NoteUpdate,
     User,
+    next_recurrence,
     utcnow,
 )
 from app.routers.attachments import ATTACH_DIR
 from app.routers.note_versions import delete_all_versions
+from app.routers.settings import fuseau_utilisateur
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
@@ -126,6 +129,11 @@ def _check_icon(icon: Optional[str]) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Icône inconnue : {icon}")
 
 
+def _check_recur(recur: Optional[str]) -> None:
+    if recur is not None and recur not in RECUR_VALUES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Récurrence inconnue : {recur}")
+
+
 def _check_labels(label_ids: Optional[List[int]], user: User, session: Session) -> None:
     """Vérifie que chaque libellé référencé appartient bien à l'utilisateur."""
     if not label_ids:
@@ -178,6 +186,7 @@ def _replace_items(
     vues: set = set()
 
     for position, item in enumerate(items):
+        _check_recur(item.recur)
         row = existantes.get(item.id) if item.id is not None else None
 
         if row is not None:
@@ -189,6 +198,7 @@ def _replace_items(
             row.due_at = item.due_at
             row.due_end_at = item.due_end_at if item.due_at else None
             row.all_day = item.all_day if item.due_at else False
+            row.recur = item.recur if item.due_at else None
             row.calendar_title = item.calendar_title
             row.position = position
             vues.add(row.id)
@@ -200,6 +210,7 @@ def _replace_items(
                 due_at=item.due_at,
                 due_end_at=item.due_end_at if item.due_at else None,
                 all_day=item.all_day if item.due_at else False,
+                recur=item.recur if item.due_at else None,
                 calendar_title=item.calendar_title,
                 position=position,
             )
@@ -414,10 +425,12 @@ def create_note(
 ):
     _check_color(payload.color)
     _check_icon(payload.icon)
+    _check_recur(payload.recur)
     _check_labels(payload.label_ids, user, session)
     note = Note(**payload.model_dump(exclude={"items"}), user_id=user.id)
     if note.due_at is None:
         note.all_day = False
+        note.recur = None
     session.add(note)
     session.flush()
     # Pas d'orphelins possibles à la création : la notask vient de naître, il
@@ -458,6 +471,7 @@ def update_note(
     data = payload.model_dump(exclude_unset=True)
     _check_color(data.get("color"))
     _check_icon(data.get("icon"))
+    _check_recur(data.get("recur"))
     _check_labels(data.get("label_ids"), user, session)
 
     # Sans échéance, une note n'est pas une tâche : rien à terminer.
@@ -467,10 +481,19 @@ def update_note(
             "Une notask sans échéance ne peut pas être marquée terminée",
         )
 
+    # État AVANT application de `data` : sert plus bas à ne reprogrammer une
+    # notask récurrente que si elle vient RÉELLEMENT d'être cochée dans cet
+    # envoi. Un simple `if note.done` testerait un état, pas une transition —
+    # ajouter une récurrence à une notask déjà terminée (elle garde done=True,
+    # la boîte d'édition n'envoie pas `done`) l'aurait alors fait sauter d'une
+    # semaine sans que l'utilisateur n'ait rien coché.
+    etait_done = note.done
+
     if "done" in data and data["done"] != note.done:
         note.done_at = utcnow() if data["done"] else None
 
-    # Retirer l'échéance annule aussi l'état terminé.
+    # Retirer l'échéance annule aussi l'état terminé et toute récurrence :
+    # une récurrence n'a de sens qu'adossée à une échéance.
     if "due_at" in data and data["due_at"] is None:
         note.done = False
         note.done_at = None
@@ -479,6 +502,7 @@ def update_note(
         # l'échéance, que le client ait pensé à l'envoyer à None ou non.
         data["due_end_at"] = None
         data["all_day"] = False
+        data["recur"] = None
 
     items = data.pop("items", None)
     for key, value in data.items():
@@ -541,6 +565,70 @@ def update_note(
     if new_items is not None:
         for item in new_items:
             gcal.sync_item(item, note, session)
+
+    # Récurrence (voir next_recurrence dans models.py) : UNIQUEMENT au moment
+    # où la notask/ligne vient d'être cochée terminée dans CET envoi — jamais
+    # avant, et jamais sur une notask déjà terminée qu'on se contente de
+    # réenregistrer (d'où `not etait_done`, voir plus haut). Le sync ci-dessus
+    # a déjà retiré l'ancien événement Google (une tâche cochée quitte
+    # l'agenda) ; on décoche, on avance l'échéance, et un second sync crée un
+    # nouvel événement à la date suivante.
+    # Fuseau de l'utilisateur : décaler « d'une semaine » veut dire « même
+    # heure locale », pas « + 7 × 24 h » (voir next_recurrence). Lu À LA
+    # DEMANDE et mémorisé, jamais d'office : cette fonction est le chemin
+    # d'écriture le plus fréquenté de l'appli (enregistrement d'une notask,
+    # épinglage, réordonnancement, changement de couleur…) et il serait
+    # absurde de lui coûter une requête de plus à chaque passage pour un
+    # réglage qui ne sert qu'aux rares reprogrammations ci-dessous.
+    _fuseau: List[Optional[str]] = []
+
+    def fuseau() -> Optional[str]:
+        if not _fuseau:
+            _fuseau.append(fuseau_utilisateur(note.user_id, session))
+        return _fuseau[0]
+
+    if note.done and not etait_done and note.recur and note.due_at is not None:
+        nouveau_due, nouveau_fin = next_recurrence(
+            note.due_at, note.due_end_at, note.recur, fuseau(), note.all_day)
+        note.done = False
+        note.done_at = None
+        note.due_at = nouveau_due
+        note.due_end_at = nouveau_fin
+        note.updated_at = utcnow()
+        session.add(note)
+        session.commit()
+        session.refresh(note)
+        gcal.sync_note(note, session)
+
+    if new_items is not None:
+        item_reprogramme = False
+        for item in new_items:
+            # Même règle de TRANSITION que pour la notask ci-dessus, appuyée
+            # sur `coches_avant` (relevé avant remplacement des lignes) : la
+            # ligne existait déjà, elle n'était pas cochée, elle l'est
+            # maintenant. Une ligne simplement réenregistrée en l'état, ou
+            # créée déjà cochée, n'est donc pas reprogrammée.
+            vient_detre_cochee = item.id in coches_avant and not coches_avant[item.id]
+            if item.checked and vient_detre_cochee and item.recur and item.due_at is not None:
+                nouveau_due, nouveau_fin = next_recurrence(
+                    item.due_at, item.due_end_at, item.recur, fuseau(), item.all_day)
+                item.checked = False
+                item.due_at = nouveau_due
+                item.due_end_at = nouveau_fin
+                session.add(item)
+                item_reprogramme = True
+        if item_reprogramme:
+            session.commit()
+            # Peut faire ressortir la notask des archives : l'archivage
+            # automatique ci-dessus l'y a peut-être rangée à l'instant parce
+            # que toutes les cases étaient cochées, mais celle(s) qui viennent
+            # de se reprogrammer ne le sont plus.
+            if archiver_si_tout_coche(note, session):
+                session.commit()
+            for item in new_items:
+                session.refresh(item)
+                gcal.sync_item(item, note, session)
+
     # Événements des lignes réellement supprimées. Après le commit : leur
     # ligne n'existe plus en base, il ne reste qu'à nettoyer l'agenda.
     for event_id in orphelins:
@@ -603,6 +691,10 @@ def update_item(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")
 
     data = payload.model_dump(exclude_unset=True)
+    _check_recur(data.get("recur"))
+    # Cf. update_note : état AVANT application, pour ne reprogrammer que sur
+    # une vraie transition "décochée -> cochée".
+    etait_coche = item.checked
     # `trashed` est un booléen côté API, converti ici en horodatage (voir
     # NoteItemUpdate) : il ne correspond à aucun attribut du modèle et
     # ferait échouer le setattr générique s'il y restait.
@@ -614,6 +706,7 @@ def update_item(
         item.calendar_title = None  # cf. update_note : hygiène, pas de titre en clair sans échéance
         item.due_end_at = None      # une fin de plage sans début n'a pas de sens
         item.all_day = False
+        item.recur = None           # cf. update_note : une récurrence sans échéance n'a pas de sens
 
     session.add(item)
     session.commit()
@@ -626,4 +719,27 @@ def update_item(
 
     session.refresh(item)
     gcal.sync_item(item, note, session)
+
+    # Récurrence (voir next_recurrence dans models.py) : UNIQUEMENT au moment
+    # où la ligne vient d'être cochée terminée dans CET envoi — jamais avant.
+    # Le sync ci-dessus a déjà retiré l'ancien événement Google (should_have_
+    # event devient False tant que la ligne est cochée) ; on la décoche, on
+    # avance sa date, et un second sync en crée un nouveau à la date suivante
+    # plutôt que de faire glisser le même événement.
+    if item.checked and not etait_coche and item.recur and item.due_at is not None:
+        nouveau_due, nouveau_fin = next_recurrence(
+            item.due_at, item.due_end_at, item.recur,
+            fuseau_utilisateur(note.user_id, session), item.all_day)
+        item.checked = False
+        item.due_at = nouveau_due
+        item.due_end_at = nouveau_fin
+        session.add(item)
+        session.commit()
+        # Peut faire ressortir la notask des archives si archiver_si_tout_coche
+        # venait de l'y ranger à l'instant : cette ligne-ci ne l'est plus.
+        if archiver_si_tout_coche(note, session):
+            session.commit()
+        session.refresh(item)
+        gcal.sync_item(item, note, session)
+
     return item

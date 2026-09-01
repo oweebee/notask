@@ -224,6 +224,14 @@
                 <span id="nc-due-label" class="due-label">Aucune échéance</span>
                 <input type="hidden" id="nc-due">
                 <input type="hidden" id="nc-due-end">
+                <!-- Doivent exister ICI AUSSI, même si cette page fantôme est
+                     réduite : app.js est le MÊME fichier pour les deux pages
+                     et lit ces champs sans garde-fou (renderNcDueBtn(),
+                     appelée dès le chargement, puis resetComposer()).
+                     Absents, tout le script s'arrêtait sur un TypeError au
+                     chargement de /quick et le composeur ne répondait plus. -->
+                <input type="hidden" id="nc-all-day">
+                <input type="hidden" id="nc-recur">
               </div>
             </div>
             <div class="palette" id="nc-colors" hidden></div>
@@ -370,6 +378,11 @@
         <span id="dns-due-label" class="due-label">Aucune échéance</span>
         <input type="hidden" id="dns-due">
         <input type="hidden" id="dns-due-end">
+        <!-- Cf. #nc-all-day / #nc-recur plus haut : mêmes champs, mêmes
+             lectures sans garde-fou côté app.js (renderNoteDueBtnSimple(),
+             openNoteSimpleDialog(), saveNoteSimpleDialog()). -->
+        <input type="hidden" id="dns-all-day">
+        <input type="hidden" id="dns-recur">
       </div>
     </div>
     <div class="palette" id="dns-colors" hidden></div>

@@ -432,8 +432,15 @@ let state = {
 const BUCKET_LABELS = {
   late: 'notasks en retard',
   today: 'notasks du jour',
+  imminent: 'notasks imminentes',
   upcoming: 'notasks à venir',
   done: 'notasks terminées',
+};
+
+// Cf. RECUR_VALUES côté serveur (app/models.py) — doit rester synchronisé.
+const RECUR_LABELS = {
+  weekly: 'chaque semaine',
+  yearly: 'chaque année',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -1146,15 +1153,20 @@ function closeCalPopup() {
   if (_closeCalPopup) { _closeCalPopup(); _closeCalPopup = null; }
 }
 
-/* `onChange` reçoit (isoDebut, isoFin, journeeComplete) — isoFin vaut null
-   tant que la case « période » n'est pas cochée. `currentEndIso` permet de
-   rouvrir le popup sur une plage déjà enregistrée, `currentAllDay` sur une
-   échéance en mode journée complète (voir NoteBase.all_day). Une plage se
-   traduit par un événement Google couvrant réellement l'intervalle, au lieu
-   des 30 minutes par défaut (voir DEFAULT_DURATION dans
+/* `onChange` reçoit (isoDebut, isoFin, journeeComplete, recur) — isoFin vaut
+   null tant que la case « période » n'est pas cochée, `recur` vaut null,
+   "weekly" ou "yearly" (voir RECUR_LABELS/RECUR_VALUES côté serveur).
+   `currentEndIso` permet de rouvrir le popup sur une plage déjà enregistrée,
+   `currentAllDay` sur une échéance en mode journée complète (voir
+   NoteBase.all_day), `currentRecur` sur une récurrence déjà réglée. Une
+   plage se traduit par un événement Google couvrant réellement l'intervalle,
+   au lieu des 30 minutes par défaut (voir DEFAULT_DURATION dans
    app/google_calendar.py) — ou par un événement "journée entière" si
-   journeeComplete est vrai. */
-function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, currentAllDay = false) {
+   journeeComplete est vrai. La récurrence, elle, ne reprogramme la tâche
+   qu'au moment où elle est cochée terminée (voir next_recurrence côté
+   serveur) : elle n'a aucun effet tant que l'échéance choisie ici n'a pas
+   encore eu lieu. */
+function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, currentAllDay = false, currentRecur = null) {
   closeCalPopup();
 
   const parts = isoToParts(currentIso) || nextQuarterHourParts();
@@ -1201,6 +1213,14 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
       ${champsHeure('cal-popup-end')}
     </div>
     <p class="cal-popup-erreur" hidden>La fin doit être après le début.</p>
+    <label class="cal-popup-recur-label">
+      <span>Répéter</span>
+      <select class="cal-popup-recur">
+        <option value="">Jamais</option>
+        <option value="weekly">Chaque semaine</option>
+        <option value="yearly">Chaque année</option>
+      </select>
+    </label>
     <div class="cal-popup-actions">
       <button type="button" class="btn ghost sm" data-act="clear">Effacer</button>
       <button type="button" class="btn sm" data-act="ok">Valider</button>
@@ -1230,6 +1250,8 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
   const erreur = pop.querySelector('.cal-popup-erreur');
   const allDayToggle = pop.querySelector('.cal-popup-allday-toggle');
   const heureEls = pop.querySelectorAll('.cal-popup-heure');
+  const recurSelect = pop.querySelector('.cal-popup-recur');
+  recurSelect.value = currentRecur || '';
   dateEnd.value = endDateStr;
   hourEnd.value = endParts.hour;
   minEnd.value = endParts.minute;
@@ -1308,14 +1330,14 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
     return !fin || !debut || new Date(fin) > new Date(debut);
   };
 
-  const finish = (iso, endIso, allDay) => { onChange(iso, endIso, allDay); closeCalPopup(); };
+  const finish = (iso, endIso, allDay, recur) => { onChange(iso, endIso, allDay, iso ? (recur || null) : null); closeCalPopup(); };
   const valider = () => {
     if (!finEstValide()) { erreur.hidden = false; return false; }
-    finish(currentValue(), currentEndValue(), allDayToggle.checked);
+    finish(currentValue(), currentEndValue(), allDayToggle.checked, recurSelect.value);
     return true;
   };
   pop.querySelector('[data-act=ok]').onclick = valider;
-  pop.querySelector('[data-act=clear]').onclick = () => finish(null, null, false);
+  pop.querySelector('[data-act=clear]').onclick = () => finish(null, null, false, null);
 
   // Comme les autres popovers de l'app : toute façon de le quitter applique
   // la valeur en cours (pas seulement le bouton Valider) — sans quoi choisir
@@ -1324,7 +1346,7 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
   // Une plage incohérente ne doit pas non plus être validée par une sortie
   // « douce » (clic ailleurs / Échap) : dans ce cas on ferme en ignorant la
   // fin plutôt qu'en enregistrant une plage que Google refuserait.
-  const sortieDouce = () => finish(currentValue(), finEstValide() ? currentEndValue() : null, allDayToggle.checked);
+  const sortieDouce = () => finish(currentValue(), finEstValide() ? currentEndValue() : null, allDayToggle.checked, recurSelect.value);
   const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) sortieDouce(); };
   const onKey = (e) => { if (e.key === 'Escape') sortieDouce(); };
   setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
@@ -2253,6 +2275,7 @@ function enterApp() {
   if (notaskParam && /^\d+$/.test(notaskParam)) notaskDemandeeParUrl = Number(notaskParam);
 
   loadLabels();
+  declarerFuseauHoraire();
   switchView('notes');
   if (state.user.must_change_password) {
     $('#dlg-password').showModal();
@@ -2753,6 +2776,32 @@ $('#nav-tasks').addEventListener('click', () => {
     switchView('tasks');
   }
 });
+
+/* Déclare le fuseau du navigateur au serveur, qui vit sinon entièrement en
+   UTC. Sert UNIQUEMENT à reprogrammer une échéance récurrente à la même
+   heure locale d'une fois sur l'autre : sans lui, le serveur ajoute
+   7 × 24 h, et une notask hebdomadaire de 10h posée en mars réapparaît à 11h
+   une fois l'heure d'été passée (voir next_recurrence et
+   fuseau_utilisateur() côté serveur).
+
+   Rangé dans les réglages libres (voir routers/settings.py), donc aucune
+   migration. N'écrit QUE si la valeur a changé — un PATCH à chaque
+   chargement pour réécrire la même chaîne ne servirait à rien. Échec
+   silencieux et sans conséquence : le serveur retombe alors sur son calcul
+   en UTC, c'est-à-dire le comportement d'avant. */
+async function declarerFuseauHoraire() {
+  let fuseau;
+  try {
+    fuseau = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch { return; }
+  if (!fuseau) return;
+  try {
+    const reglages = await api('/settings');
+    if (reglages && reglages.timezone === fuseau) return;
+    await api('/settings', { method: 'PATCH', body: { timezone: fuseau } });
+    log.info('fuseau', `fuseau horaire déclaré : ${fuseau}`);
+  } catch { /* réglages indisponibles : sans effet, cf. ci-dessus */ }
+}
 
 /* -------------------------------- Notes -------------------------------- */
 
@@ -4509,6 +4558,7 @@ function resetComposer() {
   $('#nc-due').value = '';
   $('#nc-due-end').value = '';
   $('#nc-all-day').value = '';
+  $('#nc-recur').value = '';
   renderNcDueBtn();
   $('#nc-colors').hidden = true;
   renderComposerLabelChips();
@@ -4640,16 +4690,17 @@ function renderComposerLabelChips() {
 // Échéance : même bouton + popover calendrier que sur une notask existante
 // (voir renderDueBtn()/openCalPopup(), partagés avec dn-due-btn/dns-due-btn).
 function renderNcDueBtn() {
-  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null, $('#nc-due-end').value || null, $('#nc-all-day').value === '1');
+  renderDueBtn('#nc-due-btn', '#nc-due-label', $('#nc-due').value || null, $('#nc-due-end').value || null, $('#nc-all-day').value === '1', $('#nc-recur').value || null);
 }
 $('#nc-due-btn').addEventListener('click', () => {
   composerExpand();
-  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso, finIso, allDay) => {
+  openCalPopup($('#nc-due-btn'), $('#nc-due').value || null, (iso, finIso, allDay, recur) => {
     $('#nc-due').value = iso || '';
     $('#nc-due-end').value = (iso && finIso) || '';
     $('#nc-all-day').value = (iso && allDay) ? '1' : '';
+    $('#nc-recur').value = recur || '';
     renderNcDueBtn();
-  }, $('#nc-due-end').value || null, $('#nc-all-day').value === '1');
+  }, $('#nc-due-end').value || null, $('#nc-all-day').value === '1', $('#nc-recur').value || null);
 });
 renderNcDueBtn();
 
@@ -5118,6 +5169,7 @@ async function creerNotaskDepuisComposeur() {
         due_at: l.due_at,
         due_end_at: l.due_end_at,
         all_day: l.all_day,
+        recur: l.recur,
         calendar_title: l.due_at ? l.text : null,
         text: await encryptField(l.text),
       }))),
@@ -5129,6 +5181,8 @@ async function creerNotaskDepuisComposeur() {
       due_end_at: ($('#nc-due').value && $('#nc-due-end').value) || null,
       // Cf. NoteBase.all_day : même garde-fou, pas de journée complète sans échéance.
       all_day: !!($('#nc-due').value && $('#nc-all-day').value === '1'),
+      // Cf. NoteBase.recur : même garde-fou, pas de récurrence sans échéance.
+      recur: ($('#nc-due').value && $('#nc-recur').value) || null,
       // Miroir en clair du titre, vu par le serveur UNIQUEMENT quand une
       // échéance est posée — sert à nommer l'événement Google Calendar lié
       // (voir app/google_calendar.py). Reste vide sans échéance : compromis
@@ -5302,24 +5356,26 @@ brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', ()
    toute sa gestion en double ont été retirées sur demande explicite. */
 
 /* Icône calendrier de la note : jaune dès qu'une échéance est réglée. */
-function renderDueBtn(btnSel, labelSel, iso, isoEnd = null, allDay = false) {
+function renderDueBtn(btnSel, labelSel, iso, isoEnd = null, allDay = false, recur = null) {
   const btn = $(btnSel);
   if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
   btn.classList.toggle('has-due', !!iso);
-  $(labelSel).textContent = iso ? formatDueRange(iso, isoEnd, allDay) : 'Aucune échéance';
+  const base = iso ? formatDueRange(iso, isoEnd, allDay) : 'Aucune échéance';
+  $(labelSel).textContent = base + (iso && recur ? ` · ${RECUR_LABELS[recur] || recur}` : '');
 }
 
 function renderNoteDueBtnSimple() {
-  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null, $('#dns-due-end').value || null, $('#dns-all-day').value === '1');
+  renderDueBtn('#dns-due-btn', '#dns-due-label', $('#dns-due').value || null, $('#dns-due-end').value || null, $('#dns-all-day').value === '1', $('#dns-recur').value || null);
 }
 
 $('#dns-due-btn').addEventListener('click', () => {
-  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso, finIso, allDay) => {
+  openCalPopup($('#dns-due-btn'), $('#dns-due').value || null, (iso, finIso, allDay, recur) => {
     $('#dns-due').value = iso || '';
     $('#dns-due-end').value = (iso && finIso) || '';
     $('#dns-all-day').value = (iso && allDay) ? '1' : '';
+    $('#dns-recur').value = recur || '';
     renderNoteDueBtnSimple();
-  }, $('#dns-due-end').value || null, $('#dns-all-day').value === '1');
+  }, $('#dns-due-end').value || null, $('#dns-all-day').value === '1', $('#dns-recur').value || null);
 });
 
 /* Chips de libellés dans la boîte d'édition simple (seule restante — voir
@@ -5760,7 +5816,7 @@ function poserLignesDansTexte(items, zone) {
     bloc.querySelector('.note-ligne-txt').textContent = i.text;
     bloc.querySelector('.note-ligne-case').checked = !!i.checked;
     bloc.classList.toggle('done', !!i.checked);
-    majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null, !!i.all_day);
+    majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null, !!i.all_day, i.recur || null);
     majCaseVide(bloc);
     fragment.appendChild(bloc);
   });
@@ -5837,6 +5893,7 @@ function openNoteSimpleDialog(note) {
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
   $('#dns-all-day').value = note.all_day ? '1' : '';
+  $('#dns-recur').value = note.recur || '';
   renderNoteDueBtnSimple();
   renderAttachmentsSimple();
   renderNoteLabelChipsSimple();
@@ -6936,7 +6993,7 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
     const case_ = bloc.querySelector('.note-ligne-case');
     case_.checked = !!item.checked;
     bloc.classList.toggle('done', !!item.checked);
-    majEcheanceLigne(bloc, item.due_at || null, item.due_end_at || null, !!item.all_day);
+    majEcheanceLigne(bloc, item.due_at || null, item.due_end_at || null, !!item.all_day, item.recur || null);
 
     if (editable) {
       brancherLigneEditable(bloc);
@@ -6964,14 +7021,15 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
    L'échéance est stockée sur le bloc lui-même (data-due) : c'est de là que
    lignesDepuisZone() la relit à l'enregistrement, sans avoir à tenir un
    tableau parallèle synchronisé avec le DOM. */
-function majEcheanceLigne(bloc, iso, finIso, allDay = false) {
+function majEcheanceLigne(bloc, iso, finIso, allDay = false, recur = null) {
   bloc.dataset.due = iso || '';
   bloc.dataset.dueEnd = (iso && finIso) || '';
   bloc.dataset.allDay = (iso && allDay) ? '1' : '';
+  bloc.dataset.recur = (iso && recur) || '';
   const tag = bloc.querySelector('.note-ligne-due');
   if (tag) {
     tag.hidden = !iso;
-    tag.textContent = iso ? formatDueRange(iso, finIso, allDay) : '';
+    tag.textContent = (iso ? formatDueRange(iso, finIso, allDay) : '') + (iso && recur ? ` · ${RECUR_LABELS[recur] || recur}` : '');
   }
   const cal = bloc.querySelector('.note-ligne-cal');
   if (cal) {
@@ -7085,9 +7143,9 @@ function brancherLigneEditable(bloc) {
     // quitte la zone de saisie avant même que le clic n'arrive.
     cal.addEventListener('mousedown', (e) => e.preventDefault());
     cal.addEventListener('click', () => {
-      openCalPopup(cal, bloc.dataset.due || null, (iso, finIso, allDay) => {
-        majEcheanceLigne(bloc, iso, finIso, allDay);
-      }, bloc.dataset.dueEnd || null, bloc.dataset.allDay === '1');
+      openCalPopup(cal, bloc.dataset.due || null, (iso, finIso, allDay, recur) => {
+        majEcheanceLigne(bloc, iso, finIso, allDay, recur);
+      }, bloc.dataset.dueEnd || null, bloc.dataset.allDay === '1', bloc.dataset.recur || null);
     });
   }
 
@@ -7281,6 +7339,7 @@ function lignesDepuisZone(root) {
       due_at: bloc.dataset.due || null,
       due_end_at: (bloc.dataset.due && bloc.dataset.dueEnd) || null,
       all_day: bloc.dataset.due ? bloc.dataset.allDay === '1' : false,
+      recur: (bloc.dataset.due && bloc.dataset.recur) || null,
     }))
     .filter((l) => l.text);
 }
@@ -7655,6 +7714,8 @@ async function saveNoteSimpleDialog() {
       due_end_at: ($('#dns-due').value && $('#dns-due-end').value) || null,
       // Cf. NoteBase.all_day : même garde-fou, pas de journée complète sans échéance.
       all_day: !!($('#dns-due').value && $('#dns-all-day').value === '1'),
+      // Cf. NoteBase.recur : même garde-fou, pas de récurrence sans échéance.
+      recur: ($('#dns-due').value && $('#dns-recur').value) || null,
       // Cf. #nc-add : miroir en clair du titre pour Google Calendar, vidé
       // dès que la notask n'a plus d'échéance.
       calendar_title: $('#dns-due').value ? $('#dns-title').value : null,
@@ -7680,6 +7741,7 @@ async function saveNoteSimpleDialog() {
       due_at: l.due_at,
       due_end_at: l.due_end_at,
       all_day: l.all_day,
+      recur: l.recur,
       // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
       // quand la ligne porte une échéance à mettre dans l'agenda Google.
       calendar_title: l.due_at ? l.text : null,
@@ -8939,9 +9001,9 @@ async function updateTaskBadges() {
   } catch {
     return;
   }
-  const counts = { late: 0, today: 0, upcoming: 0 };
+  const counts = { late: 0, today: 0, imminent: 0, upcoming: 0 };
   for (const t of tasks) if (t.bucket in counts) counts[t.bucket] += 1;
-  const total = counts.late + counts.today + counts.upcoming;
+  const total = counts.late + counts.today + counts.imminent + counts.upcoming;
 
   const set = (id, n) => {
     const el = document.getElementById(id);
@@ -9030,7 +9092,7 @@ function renderTasks(items) {
   // Ordre demandé, de gauche à droite : à venir, aujourd'hui, en retard,
   // terminées — différent de la colonne d'échéances de l'accueil, qui
   // empile en retard/aujourd'hui/à venir.
-  for (const b of ['upcoming', 'today', 'late', 'done']) {
+  for (const b of ['upcoming', 'imminent', 'today', 'late', 'done']) {
     const liste = groupes[b] || [];
     // Colonne affichée même vide : des colonnes qui apparaissent et
     // disparaissent au fil des échéances feraient sauter la mise en page
@@ -9052,7 +9114,7 @@ function renderAgenda(items) {
   box.innerHTML = '';
   $('#agenda-empty').hidden = items.length > 0;
 
-  const ordre = ['late', 'today', 'upcoming'];
+  const ordre = ['late', 'today', 'imminent', 'upcoming'];
   const groupes = {};
   for (const t of items) (groupes[t.bucket] ||= []).push(t);
 
@@ -9099,7 +9161,7 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
     <span class="agenda-item-icon">${icon}</span>
     <span class="agenda-item-body">
       <span class="agenda-item-text">${escapeHtml(label)}</span>
-      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at, t.all_day)}</span>
+      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at, t.all_day)}${t.recur ? ` · ↻ ${RECUR_LABELS[t.recur] || t.recur}` : ''}</span>
     </span>` + (avecActions ? `<span class="agenda-item-actions">
       <button type="button" data-act="archive"
               title="${modeArchive === 'unarchive' ? 'Désarchiver' : 'Archiver'}"
@@ -9143,7 +9205,22 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
   btn.querySelector('input').onchange = async (e) => {
     e.stopPropagation();
     await api(`/tasks/${t.kind}/${t.id}`, { method: 'PATCH', body: { done: e.target.checked } });
-    rafraichir();
+    /* Une tâche RÉCURRENTE ne change pas seulement d'état en étant cochée :
+       elle change de DATE (voir next_recurrence côté serveur, qui la décoche
+       et l'avance d'une semaine ou d'un an). Recharger la seule liste
+       d'origine ne suffit donc plus — la carte de la notask, dans la
+       mosaïque, continuerait d'afficher l'ANCIENNE échéance jusqu'au
+       prochain rechargement complet, en la signalant même en retard une fois
+       la date passée. loadNotes() rafraîchit la mosaïque ET la colonne
+       d'échéances (il rappelle loadAgenda en fin de course) ; la vue en
+       trois colonnes, elle, n'est pas de son ressort, d'où le rafraichir()
+       complémentaire quand l'appel ne vient pas de la colonne. */
+    if (t.recur) {
+      await loadNotes();
+      if (rafraichir !== loadAgenda) rafraichir();
+    } else {
+      rafraichir();
+    }
     updateTaskBadges();
   };
   btn.addEventListener('click', (e) => {
@@ -9366,6 +9443,7 @@ async function collecterExport(progres) {
       title: n.title, description: n.description, content: n.content,
       color: n.color, pinned: n.pinned, archived: n.archived,
       is_checklist: n.is_checklist, due_at: n.due_at, icon: n.icon,
+      due_end_at: n.due_end_at || null, all_day: !!n.all_day, recur: n.recur || null,
       label_ids: n.label_ids || [],
       trashed: !!n.trashed_at,
       items: (n.items || []).map((it) => ({
@@ -9375,6 +9453,7 @@ async function collecterExport(progres) {
         text: it.text, checked: it.checked, due_at: it.due_at,
         due_end_at: it.due_end_at || null,
         all_day: !!it.all_day,
+        recur: it.recur || null,
         archived: !!it.archived,
         calendar_title: it.due_at ? it.text : null,
       })),
@@ -9699,6 +9778,9 @@ $('#import-file').addEventListener('change', async () => {
           archived: !!n.archived,
           is_checklist: false,   // vestige, toujours faux à l'écriture
           due_at: n.due_at || null,
+          due_end_at: n.due_at ? (n.due_end_at || null) : null,
+          all_day: n.due_at ? !!n.all_day : false,
+          recur: n.due_at ? (n.recur || null) : null,
           calendar_title: n.due_at ? (n.title || '') : null,
           icon: n.icon || null,
           label_ids: (n.label_ids || [])
@@ -9710,6 +9792,7 @@ $('#import-file').addEventListener('change', async () => {
             due_at: it.due_at || null,
             due_end_at: it.due_at ? (it.due_end_at || null) : null,
             all_day: it.due_at ? !!it.all_day : false,
+            recur: it.due_at ? (it.recur || null) : null,
             calendar_title: it.due_at ? (it.text || '') : null,
           }))),
         };

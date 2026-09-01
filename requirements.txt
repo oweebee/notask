@@ -9,3 +9,11 @@ python-multipart==0.0.9
 # google-auth-oauthlib (bien plus lourds, avec leur propre arbre de
 # dépendances) pour rester cohérent avec le peu de dépendances de ce projet.
 httpx==0.28.1
+# Base de fuseaux horaires pour zoneinfo (voir next_recurrence dans
+# app/models.py : reprogrammer une récurrence à la même heure LOCALE d'une
+# fois sur l'autre, malgré les changements d'heure). L'image python:3.12-slim
+# du Dockerfile ne contient PAS /usr/share/zoneinfo — Debian la retire des
+# variantes slim — et zoneinfo se rabat alors sur ce paquet. Sans lui,
+# ZoneInfo("Europe/Paris") échoue en production alors qu'il marche en local,
+# et la reprogrammation retombe silencieusement sur son calcul en UTC.
+tzdata==2025.2

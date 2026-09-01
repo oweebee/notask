@@ -92,7 +92,16 @@ def test_note_datee_devient_tache():
     mine = [x for x in tasks if x["note_id"] == n["id"]]
     assert len(mine) == 1
     assert mine[0]["kind"] == "note"
-    assert mine[0]["bucket"] == "upcoming"
+    # "imminent" et non plus "upcoming" : une échéance à 3 jours tombe
+    # désormais dans la fenêtre des notasks imminentes (7 jours ou moins,
+    # voir IMMINENT_WINDOW_DAYS dans app/routers/tasks.py). "upcoming" ne
+    # couvre plus que l'au-delà de cette fenêtre — vérifié juste en dessous.
+    assert mine[0]["bucket"] == "imminent"
+
+    loin = client.post("/api/notes", json={"title": "Bien plus tard", "due_at": iso(days=30)},
+                       headers=auth(t)).json()
+    tasks_loin = client.get("/api/tasks", headers=auth(t)).json()
+    assert [x for x in tasks_loin if x["note_id"] == loin["id"]][0]["bucket"] == "upcoming"
 
     # Terminer depuis la vue Tâches
     r = client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t))
