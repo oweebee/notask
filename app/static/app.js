@@ -4705,6 +4705,11 @@ function appliquerCouleurComposeur() {
 
   for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
     bloc.style.background = teinte;
+    // Texte noir sur composeur blanc — même raison que pour les cartes (voir
+    // .c-white dans style.css). La teinte arrive ici en style inline et non
+    // par une classe .c-*, d'où cette classe dédiée : sans elle le composeur
+    // blanc garderait le texte clair de l'appli, donc illisible.
+    bloc.classList.toggle('composeur-clair', composerColor === 'white');
   }
 }
 

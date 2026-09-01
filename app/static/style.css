@@ -1632,6 +1632,43 @@ body.is-dragging * {
    pastille du fond de la palette quand elle est blanche elle aussi. */
 .c-white   { background: #ffffff; --note-color: #ffffff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
 
+/* Notasks blanches : texte NOIR.
+   Le blanc est la seule teinte de la palette assez claire pour que le texte
+   clair de l'application (--md-on-surface, quasi blanc) y devienne
+   illisible. Plutôt que de repeindre un par un chaque élément d'une carte
+   (titre, description, contenu, cases à cocher, étiquettes, échéance, icônes
+   des boutons…), on REDÉFINIT LES VARIABLES de couleur sur l'élément blanc
+   lui-même : tout ce qu'il contient et qui s'appuie sur var(--md-on-surface)
+   ou var(--md-on-surface-variant) bascule alors en sombre par simple
+   héritage, y compris les icônes SVG dessinées en currentColor.
+
+   Le `color:` explicite est indispensable en plus des variables : une carte
+   n'a pas de couleur de texte propre, elle hérite celle du <body>, déjà
+   résolue en clair — redéfinir la variable seule ne la rattraperait pas.
+
+   .composeur-clair est posée par appliquerCouleurComposeur() dans app.js :
+   le composeur, lui, reçoit sa teinte en style inline et non par une classe
+   .c-*, il ne serait donc pas atteint par le sélecteur ci-dessous. */
+.note.c-white,
+.trash-card.c-white,
+.history-item.c-white,
+.agenda-item.c-white,
+dialog.c-white,
+.nc-card.composeur-clair,
+.nc-toolbar-block.composeur-clair {
+  --md-on-surface: #16151a;
+  --md-on-surface-variant: #46454d;
+  --md-outline-variant: rgba(0,0,0,.16);
+  color: var(--md-on-surface);
+}
+/* Exception pour la colonne d'échéances : sa pastille "blanche" n'est PAS
+   blanche mais grise, la teinte y étant atténuée sur le fond sombre de la
+   page (voir ATTENUATION_PASTILLE dans app.js). Le gris secondaire ci-dessus
+   n'y tenait qu'un contraste de 3,4:1 sur la ligne de date — sous le seuil
+   lisible pour un texte de 11px. On le fonce donc, ce qui le remonte à
+   5,2:1. Mesuré, pas estimé. */
+.agenda-item.c-white { --md-on-surface-variant: #2b2a30; }
+
 /* ---- Corbeille ---- : cartes en lecture seule, mêmes proportions que
    .notes-grid/.note mais sans interaction (pas de clic pour éditer, pas de
    glisser-déposer) — seules actions possibles : restaurer ou supprimer
