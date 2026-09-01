@@ -122,6 +122,62 @@ def test_notask_annuelle_conserve_la_plage():
     assert relu["done"] is False
 
 
+def test_notask_mensuelle_se_replanifie_au_meme_quantieme():
+    t = token()
+    depart = datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc)
+    n = client.post("/api/notes", json={"title": "Loyer", "due_at": depart.isoformat(),
+                                        "recur": "monthly"}, headers=auth(t)).json()
+    assert n["recur"] == "monthly"
+
+    client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t))
+    relu = client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()
+    assert parse(relu["due_at"]) == datetime(2026, 5, 12, 9, 30, tzinfo=timezone.utc)
+    assert relu["done"] is False
+
+
+def test_mensuel_passe_bien_decembre_a_janvier():
+    t = token()
+    depart = datetime(2026, 12, 15, 8, 0, tzinfo=timezone.utc)
+    n = client.post("/api/notes", json={"title": "fin d'année", "due_at": depart.isoformat(),
+                                        "recur": "monthly"}, headers=auth(t)).json()
+    client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t))
+    relu = client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()
+    assert parse(relu["due_at"]) == datetime(2027, 1, 15, 8, 0, tzinfo=timezone.utc)
+
+
+def test_mensuel_fins_de_mois_courtes():
+    """Le vrai piège du mensuel : tous les mois n'ont pas le même nombre de
+    jours. Un 31 doit tomber sur le dernier jour du mois visé, pas planter."""
+    from app.models import next_recurrence
+
+    cas = [
+        # (départ,                        attendu)
+        (datetime(2026, 1, 31, 10, 0),    datetime(2026, 2, 28, 10, 0)),   # 2026 non bissextile
+        (datetime(2028, 1, 31, 10, 0),    datetime(2028, 2, 29, 10, 0)),   # 2028 bissextile
+        (datetime(2026, 3, 31, 10, 0),    datetime(2026, 4, 30, 10, 0)),   # avril = 30 jours
+        (datetime(2026, 5, 31, 10, 0),    datetime(2026, 6, 30, 10, 0)),
+        (datetime(2026, 1, 30, 10, 0),    datetime(2026, 2, 28, 10, 0)),
+    ]
+    for depart, attendu in cas:
+        depart = depart.replace(tzinfo=timezone.utc)
+        obtenu, _ = next_recurrence(depart, None, "monthly")
+        assert obtenu == attendu.replace(tzinfo=timezone.utc), f"{depart} -> {obtenu}"
+
+
+def test_mensuel_garde_lheure_locale_au_changement_dheure():
+    t = token()
+    client.patch("/api/settings", json={"timezone": "Europe/Paris"}, headers=auth(t))
+    # 10 mars (heure d'hiver) -> 10 avril (heure d'été) : 1h d'écart en UTC.
+    depart = datetime(2026, 3, 10, 10, 0, tzinfo=PARIS)
+    n = client.post("/api/notes", json={"title": "mensuel",
+                                        "due_at": depart.astimezone(timezone.utc).isoformat(),
+                                        "recur": "monthly"}, headers=auth(t)).json()
+    client.patch(f"/api/tasks/note/{n['id']}", json={"done": True}, headers=auth(t))
+    local = parse(client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()["due_at"]).astimezone(PARIS)
+    assert (local.month, local.day, local.hour, local.minute) == (4, 10, 10, 0), f"{local:%d %b %H:%M}"
+    client.patch("/api/settings", json={"timezone": None}, headers=auth(t))
+
+
 def test_notask_sans_recurrence_reste_terminee():
     """Garde-fou : la reprogrammation ne doit toucher QUE les récurrentes."""
     t = token()

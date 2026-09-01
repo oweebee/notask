@@ -1,4 +1,5 @@
 import time
+from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -14,7 +15,7 @@ def utcnow() -> datetime:
 
 # Valeurs acceptées pour `recur` (Note.recur / NoteItem.recur) : None = pas de
 # récurrence. Synchronisé avec RECUR_LABELS côté client (app.js).
-RECUR_VALUES = {"weekly", "yearly"}
+RECUR_VALUES = {"weekly", "monthly", "yearly"}
 
 
 def _zone(tz_name: Optional[str]):
@@ -66,6 +67,18 @@ def next_recurrence(
     def _decale(dt: datetime) -> datetime:
         if recur == "weekly":
             return dt + timedelta(weeks=1)
+        if recur == "monthly":
+            # Même quantième le mois suivant. Les mois n'ayant pas tous le
+            # même nombre de jours, un 31 est ramené au dernier jour du mois
+            # visé (31 janvier -> 28 ou 29 février). Conséquence assumée,
+            # identique à celle du 29 février en annuel ci-dessous : une fois
+            # ramenée, l'échéance reste sur ce quantième-là les fois
+            # suivantes — on ne mémorise pas de quantième "d'origine" à
+            # retrouver, il faudrait une colonne de plus pour un cas rare.
+            mois = dt.month % 12 + 1
+            annee = dt.year + (1 if dt.month == 12 else 0)
+            return dt.replace(year=annee, month=mois,
+                              day=min(dt.day, monthrange(annee, mois)[1]))
         if recur == "yearly":
             try:
                 return dt.replace(year=dt.year + 1)

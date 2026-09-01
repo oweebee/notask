@@ -578,14 +578,6 @@ header.topbar .who {
   top: 64px;
   max-height: calc(100vh - 64px);
   overflow-y: auto;
-  /* Panneau légèrement plus sombre que le fond de la mosaïque centrale —
-     un simple voile noir semi-transparent plutôt qu'une nouvelle teinte de
-     surface : ça marche par-dessus n'importe quelle couleur de fond sans
-     avoir à décliner une variable --md-surface encore plus sombre que
-     --md-surface (déjà la plus sombre de la palette, voir :root). Même
-     traitement sur .agenda-col ci-dessous, à la demande explicite : les
-     deux colonnes latérales doivent se distinguer pareillement du centre. */
-  background: rgba(0,0,0,.18);
 }
 
 /* Comme les autres titres de section : casse respectée, pas de majuscules
@@ -793,9 +785,6 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
      à gauche seulement, "collée au bord droit"), un padding-right cassait
      ça en laissant un liseré vide entre les cartes et le bord. */
   padding: 1.5rem 0 3rem;
-  /* Cf. .drawer ci-dessus : même voile sombre, pour que les deux colonnes
-     latérales se distinguent pareillement du centre. */
-  background: rgba(0,0,0,.18);
 }
 /* Vue "notasks prévues" (desktop) : trois colonnes côte à côte, une par
    regroupement. minmax(0, 1fr) et non 1fr : un titre long dans une ligne

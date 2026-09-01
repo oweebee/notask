@@ -172,6 +172,23 @@ const LABEL_COLOR_HEX = {
    contenu. */
 const ATTENUATION_LIBELLE = .75;
 
+/* Atténuation des PASTILLES des deux colonnes latérales : les libellés du
+   menu de gauche et les lignes de la colonne d'échéances à droite. Plus
+   basse que ATTENUATION_LIBELLE ci-dessus, à la demande — ces deux colonnes
+   encadrent la mosaïque et doivent rester en retrait d'elle, pas rivaliser
+   avec les cartes.
+
+   Constante à part et non simple réutilisation de ATTENUATION_LIBELLE :
+   celle-ci sert AUSSI aux tags posés sur les cartes de notasks, où elle joue
+   sur un fond coloré et non sur le quasi-noir de la page (voir son
+   commentaire). Les baisser ensemble aurait délavé les tags des cartes, que
+   personne n'a demandé à changer.
+
+   Toujours un ALPHA posé sur le fond quasi noir de la page : baisser la
+   valeur assombrit. Les échéances passent ainsi du à-plat vif des classes
+   .c-* au même registre que les libellés d'en face. */
+const ATTENUATION_PASTILLE = .58;
+
 function hexToRgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
@@ -440,6 +457,7 @@ const BUCKET_LABELS = {
 // Cf. RECUR_VALUES côté serveur (app/models.py) — doit rester synchronisé.
 const RECUR_LABELS = {
   weekly: 'chaque semaine',
+  monthly: 'chaque mois',
   yearly: 'chaque année',
 };
 
@@ -1218,6 +1236,7 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
       <select class="cal-popup-recur">
         <option value="">Jamais</option>
         <option value="weekly">Chaque semaine</option>
+        <option value="monthly">Chaque mois</option>
         <option value="yearly">Chaque année</option>
       </select>
     </label>
@@ -3067,7 +3086,7 @@ function renderLabelsDrawer() {
     // classes .c-*), atténuée — voir ATTENUATION_LIBELLE pour le pourquoi de
     // la valeur.
     if (l.color && LABEL_COLOR_HEX[l.color]) {
-      btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
+      btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_PASTILLE);
     }
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
@@ -9152,6 +9171,18 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
   // sur sa carte), pas un simple repère en bordure : on veut
   // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
   btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '');
+  /* Même traitement que les libellés du menu d'en face (voir
+     renderLabelsDrawer et ATTENUATION_PASTILLE) : la teinte de la notask,
+     atténuée, au lieu de l'aplat vif de la classe .c-*. Les deux colonnes
+     latérales se répondent ainsi, et restent en retrait de la mosaïque.
+     Style INLINE et non classe CSS, pour la même raison qu'au menu : à
+     spécificité égale, .agenda-item:hover l'emporterait sur une classe et
+     la couleur sauterait au survol. La couleur "default" n'est pas dans
+     LABEL_COLOR_HEX (c'est un gris de surface, pas une teinte) : elle garde
+     alors le fond de sa classe .c-default, déjà sobre. */
+  if (LABEL_COLOR_HEX[t.color]) {
+    btn.style.background = hexToRgba(LABEL_COLOR_HEX[t.color], ATTENUATION_PASTILLE);
+  }
   const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
   // Icône toujours affichée dans un rond : celle de la notask si elle en
   // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
