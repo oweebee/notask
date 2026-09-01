@@ -8959,7 +8959,13 @@ async function updateTaskBadges() {
    menu de gauche y renvoie directement (plus de vue à part, voir le
    gestionnaire de clic de #nav-tasks). Aucune limite de date : toutes les
    échéances à venir y figurent, par ordre chronologique. Les tâches
-   terminées n'y figurent pas. */
+   terminées n'y figurent pas.
+   Un libellé sélectionné (state.labelFilter, voir renderLabelsDrawer) doit
+   filtrer cette colonne comme il filtre la mosaïque : /api/tasks n'a pas de
+   paramètre "label" (une tâche ne porte pas ses libellés, seule la notask
+   qui la contient les porte), donc on redemande la liste des notasks pour
+   ce libellé — juste leurs id, pas de déchiffrement nécessaire — et on ne
+   garde que les tâches dont la notask parente y figure. */
 async function loadAgenda() {
   let tasks;
   try {
@@ -8975,7 +8981,18 @@ async function loadAgenda() {
   // lointain (limite d'un mois retirée à la demande — elle masquait
   // silencieusement les périodes longues). Le tri chronologique vient du
   // serveur (tasks.sort par due_at croissante dans list_tasks).
-  const items = tasks.filter((t) => t.bucket !== 'done');
+  let items = tasks.filter((t) => t.bucket !== 'done');
+  if (state.labelFilter) {
+    const params = new URLSearchParams({ archived: state.showArchived, label: state.labelFilter });
+    let notesDuLibelle;
+    try {
+      notesDuLibelle = await api('/notes?' + params);
+    } catch {
+      notesDuLibelle = [];
+    }
+    const idsAutorises = new Set(notesDuLibelle.map((n) => n.id));
+    items = items.filter((t) => idsAutorises.has(t.note_id));
+  }
   renderAgenda(items);
 }
 
