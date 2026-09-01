@@ -566,11 +566,23 @@ header.topbar .who {
    une 3e piste de grille qui n'existe carrément pas quand elle est absente,
    pas une piste minmax(0, …) dont le calcul de taille avec un contenu
    display:none serait plus difficile à garantir stable. */
-.shell.has-agenda { grid-template-columns: 278px minmax(0, 1fr) 280px; }
+/* 330px et non 280 : la ligne de date d'une échéance récurrente débordait
+   sur deux lignes. Les 50px de plus sont pris INTÉGRALEMENT sur les marges
+   (voir juste en dessous) — demande explicite : ne pas rogner la zone
+   d'affichage des notasks. C'est à peu près le maximum tenable : sur un
+   écran de 1280px il ne reste alors qu'une trentaine de pixels entre la
+   mosaïque et cette colonne. */
+.shell.has-agenda { grid-template-columns: 278px minmax(0, 1fr) 330px; }
 /* Les marges de la mosaïque se resserrent d'autant pour financer la
    colonne, plutôt que de rétrécir la grille de notes elle-même (demande
-   explicite : gratter dans les marges, pas dans la zone centrale). */
-.shell.has-agenda main { width: 88%; }
+   explicite : gratter dans les marges, pas dans la zone centrale).
+   Le « + 44px » compense EXACTEMENT les 50px repris par la colonne
+   ci-dessus : la piste centrale ayant perdu 50px, 88 % de celle-ci en perd
+   44 — les rajouter rend à la mosaïque la largeur au pixel près qu'elle
+   avait avant l'élargissement, quelle que soit la taille de l'écran. Une
+   simple hausse du pourcentage n'aurait pas cette propriété : elle ne
+   tomberait juste qu'à une seule largeur de fenêtre. */
+.shell.has-agenda main { width: calc(88% + 44px); }
 
 .drawer {
   padding: .75rem .75rem 2rem 0;
@@ -962,6 +974,17 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   font-size: .6875rem;
   color: var(--md-on-surface-variant);
   margin-top: .125rem;
+  /* JAMAIS deux lignes, quelle que soit la date — exigence explicite. Aucune
+     largeur de colonne ne peut le garantir : une plage sur deux jours avec
+     récurrence ("12 déc. 19:00 → 14 déc. 21:00 · ↻ an") dépasse les 400px de
+     texte, largeur qu'on ne peut pas offrir sans manger la mosaïque. On
+     interdit donc le retour à la ligne et on coupe aux points de suspension,
+     comme le titre juste au-dessus. Le texte entier (avec la récurrence en
+     toutes lettres) reste lisible au survol — voir le `title` posé par
+     creerLigneAgenda() dans app.js. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .agenda-empty { padding: 0 0 0 .125rem; text-align: left; font-size: .8125rem; }
 

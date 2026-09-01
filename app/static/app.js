@@ -461,6 +461,22 @@ const RECUR_LABELS = {
   yearly: 'chaque année',
 };
 
+/* Forme courte, réservée à la COLONNE D'ÉCHÉANCES (voir creerLigneAgenda).
+   Ailleurs — bouton d'échéance d'une notask, étiquette d'une ligne à cocher —
+   c'est RECUR_LABELS en toutes lettres qui s'affiche : la place ne manque
+   pas et l'abrégé n'y apporterait rien.
+
+   Mesuré plutôt que supposé : la ligne de date de cette colonne dispose de
+   ~168px utiles (280px de colonne, moins sa barre de défilement, les
+   marges, la case à cocher et le rond d'icône). « 12 déc. 19:00 · ↻ chaque
+   année » en réclame 235, et « chaque semaine » 251 — d'où le retour à la
+   ligne. Garder le texte entier aurait demandé une colonne de ~400px. */
+const RECUR_COURTS = {
+  weekly: 'sem.',
+  monthly: 'mois',
+  yearly: 'an',
+};
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -9188,11 +9204,20 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
   // a une, sinon la cuillère bleue par défaut — jamais de rond vide, le
   // texte est ainsi toujours décalé de la même largeur.
   const icon = ICON_CHOICES[t.icon] || ICON_CHOICES.spoonblue;
+  /* Deux formes de la même ligne de date : celle qu'on AFFICHE, abrégée pour
+     tenir sur une seule ligne dans cette colonne étroite (voir RECUR_COURTS
+     et .agenda-item-due dans style.css, qui coupe aux points de suspension
+     plutôt que de passer à la ligne) ; et celle du SURVOL, complète, avec la
+     récurrence en toutes lettres et la date entière même si elle a été
+     coupée à l'écran. */
+  const dateTexte = formatDueRange(t.due_at, t.due_end_at, t.all_day);
+  const dueAffiche = dateTexte + (t.recur ? ` · ↻ ${RECUR_COURTS[t.recur] || t.recur}` : '');
+  const dueComplet = dateTexte + (t.recur ? ` · répétée ${RECUR_LABELS[t.recur] || t.recur}` : '');
   btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer"${t.done ? ' checked' : ''}>
     <span class="agenda-item-icon">${icon}</span>
     <span class="agenda-item-body">
-      <span class="agenda-item-text">${escapeHtml(label)}</span>
-      <span class="agenda-item-due">${formatDueRange(t.due_at, t.due_end_at, t.all_day)}${t.recur ? ` · ↻ ${RECUR_LABELS[t.recur] || t.recur}` : ''}</span>
+      <span class="agenda-item-text" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <span class="agenda-item-due" title="${escapeHtml(dueComplet)}">${escapeHtml(dueAffiche)}</span>
     </span>` + (avecActions ? `<span class="agenda-item-actions">
       <button type="button" data-act="archive"
               title="${modeArchive === 'unarchive' ? 'Désarchiver' : 'Archiver'}"
