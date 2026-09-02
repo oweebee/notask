@@ -1838,14 +1838,38 @@ dialog.c-white,
   margin-top: .625rem;
   padding: .25rem .7rem .25rem .45rem;
   border-radius: var(--shape-full);
-  background: rgba(230,224,233,.09);
+  /* Même pastille que celle des lignes à cocher (voir .note-ligne-due) :
+     fond SOMBRE et franc plutôt qu'un voile clair à 9 %, plus une ombre
+     portée. Le voile d'origine ne se détachait pas d'une carte colorée
+     (mesuré : 1,14:1 sur une carte magenta, autant dire rien) et le texte
+     n'y tenait que 3:1, sous le seuil lisible. C'est exactement la leçon
+     déjà tirée pour la pastille des lignes, dont le commentaire raconte le
+     même passage de .10 à .55 — les deux pastilles disent la même chose,
+     elles doivent se ressembler. */
+  background: rgba(45, 42, 51, .55);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
   font-size: .75rem;
   color: var(--md-on-surface-variant);
 }
 .note-due svg { width: 14px; height: 14px; }
 .note-due input[type=checkbox] { width: 18px; height: 18px; }
-.note-due.late { background: rgba(242,184,181,.15); color: var(--md-error); }
+/* En retard : même pastille sombre, teintée de rouge, pour que la couleur du
+   texte (--md-error) ne soit pas seule à porter l'alerte. */
+.note-due.late { background: rgba(62, 26, 28, .62); color: var(--md-error); }
 .note-due.done { opacity: .6; }
+
+/* Notasks BLANCHES : les deux pastilles doivent s'inverser.
+   Leur fond sombre était pensé pour du texte clair ; depuis que le texte
+   d'une carte blanche est noir (voir .c-white plus haut), une pastille
+   sombre y devenait du noir sur noir — mesuré à 2,8:1 sur la pastille de
+   ligne, illisible. On repasse donc à un voile NOIR très léger, qui détache
+   la pastille du blanc tout en gardant le texte sombre parfaitement lisible. */
+.c-white .note-due,
+.c-white .note-ligne-due {
+  background: rgba(0, 0, 0, .07);
+  box-shadow: 0 1px 2px rgba(0,0,0,.12);
+}
+.c-white .note-due.late { background: rgba(160, 32, 36, .12); color: #8c1d21; }
 .note-due.done span { text-decoration: line-through; }
 
 /* Échéance d'une ligne à cocher, à même la note */
