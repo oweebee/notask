@@ -1838,38 +1838,40 @@ dialog.c-white,
   margin-top: .625rem;
   padding: .25rem .7rem .25rem .45rem;
   border-radius: var(--shape-full);
-  /* Même pastille que celle des lignes à cocher (voir .note-ligne-due) :
-     fond SOMBRE et franc plutôt qu'un voile clair à 9 %, plus une ombre
-     portée. Le voile d'origine ne se détachait pas d'une carte colorée
-     (mesuré : 1,14:1 sur une carte magenta, autant dire rien) et le texte
-     n'y tenait que 3:1, sous le seuil lisible. C'est exactement la leçon
-     déjà tirée pour la pastille des lignes, dont le commentaire raconte le
-     même passage de .10 à .55 — les deux pastilles disent la même chose,
-     elles doivent se ressembler. */
-  background: rgba(45, 42, 51, .55);
-  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  /* Voile clair très léger, volontairement DISCRET : sur une carte colorée
+     il ne dessine pas de pastille détachée, l'échéance se lit comme une
+     mention posée sur la carte. C'est le parti pris retenu, et la pastille
+     des lignes à cocher a été alignée dessus (voir .note-ligne-due). */
+  background: rgba(230,224,233,.09);
   font-size: .75rem;
-  color: var(--md-on-surface-variant);
+  /* Blanc franc et non le gris secondaire : sur un voile aussi transparent,
+     c'est la couleur de la CARTE qu'on a derrière le texte. Mesuré sur les
+     teintes réelles, le gris #cac4d0 n'y tenait que 2,7 à 3,0:1 — sous le
+     seuil lisible — quand le blanc pur atteint 4,6 à 5,2:1. Seule façon de
+     garder ce fond discret sans rendre la date pénible à lire. */
+  color: #fff;
 }
 .note-due svg { width: 14px; height: 14px; }
 .note-due input[type=checkbox] { width: 18px; height: 18px; }
-/* En retard : même pastille sombre, teintée de rouge, pour que la couleur du
-   texte (--md-error) ne soit pas seule à porter l'alerte. */
-.note-due.late { background: rgba(62, 26, 28, .62); color: var(--md-error); }
+/* En retard : le rouge passe du TEXTE au fond. Le rose pâle --md-error ne
+   tenait que 2,9:1 sur une carte magenta — du rouge clair sur du magenta,
+   deux teintes trop proches — alors qu'un voile rouge sous du texte blanc
+   donne 6,3:1. L'alerte est donc portée par le fond, qui reste assez léger
+   (mesuré à 1,07:1 sur magenta) pour ne pas redessiner la pastille franche
+   dont on ne veut pas. */
+.note-due.late { background: rgba(180, 35, 40, .32); color: #fff; }
 .note-due.done { opacity: .6; }
 
-/* Notasks BLANCHES : les deux pastilles doivent s'inverser.
-   Leur fond sombre était pensé pour du texte clair ; depuis que le texte
-   d'une carte blanche est noir (voir .c-white plus haut), une pastille
-   sombre y devenait du noir sur noir — mesuré à 2,8:1 sur la pastille de
-   ligne, illisible. On repasse donc à un voile NOIR très léger, qui détache
-   la pastille du blanc tout en gardant le texte sombre parfaitement lisible. */
+/* Notasks BLANCHES : le texte redevient sombre (voir .c-white plus haut, qui
+   redéfinit --md-on-surface). Sans cette règle, le blanc franc ci-dessus
+   resterait du blanc sur blanc. Le voile passe en noir très léger pour que
+   la mention se distingue quand même du fond de la carte. */
 .c-white .note-due,
 .c-white .note-ligne-due {
-  background: rgba(0, 0, 0, .07);
-  box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  background: rgba(0, 0, 0, .05);
+  color: var(--md-on-surface);
 }
-.c-white .note-due.late { background: rgba(160, 32, 36, .12); color: #8c1d21; }
+.c-white .note-due.late { background: rgba(160, 32, 36, .10); color: #8c1d21; }
 .note-due.done span { text-decoration: line-through; }
 
 /* Échéance d'une ligne à cocher, à même la note */
@@ -3379,16 +3381,24 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   margin: 0;
   padding: .05rem .5rem;
   border-radius: var(--shape-full);
-  /* Alpha remonté (.10 → .55) : posée à cheval sur le bord, la pastille se
-     détache aussi bien du fond de la carte que de celui, plus sombre, d'un
-     bloc actif — un fond quasi transparent s'y lisait mal. */
-  background: rgba(45, 42, 51, .55);
-  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  /* Aligné sur la mention d'échéance de la notask entière (voir .note-due) :
+     même voile clair très discret, ni fond franc ni ombre portée. Les deux
+     disent la même chose, elles doivent se ressembler — décision explicite.
+
+     Historique, parce que la valeur a fait l'aller-retour : elle était
+     passée à .55 avec une ombre pour qu'une pastille posée à cheval sur le
+     bord d'un bloc actif s'en détache nettement. Ce contraste marqué n'a pas
+     été retenu ; en contrepartie, sur le fond plus sombre d'un bloc actif,
+     ce voile-ci ne dessine presque plus de pastille — c'est assumé, le
+     texte, lui, reste lisible grâce au blanc franc ci-dessous. */
+  background: rgba(230,224,233,.09);
   /* +15 %, comme le bouton calendrier à côté : les deux forment un même
      groupe, les agrandir séparément les aurait désaccordés. */
   font-size: .79rem;
   font-style: normal;
-  color: var(--md-on-surface-variant);
+  /* Cf. .note-due : le gris secondaire tombait sous le seuil lisible sur les
+     teintes de carte saturées, avec un fond aussi transparent. */
+  color: #fff;
 }
 /* Bouton calendrier : discret au repos, révélé au survol de la ligne — il ne
    doit pas encombrer la lecture d'une notask qui en compte dix.
