@@ -2610,6 +2610,7 @@ $('#btn-profil').addEventListener('click', () => {
     dd.textContent = valeur;
     box.append(dt, dd);
   }
+  majEtatRappels();   // état de l'autorisation de notification, relu à chaque ouverture
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
   // Identifiants OAuth de l'installation : réservés aux administrateurs
@@ -2766,6 +2767,7 @@ $('#dlg-profil').addEventListener('cancel', (e) => {
   e.preventDefault();
   fermerAvecAnimation($('#dlg-profil'));
 });
+$('#profil-rappels-activer').addEventListener('click', activerRappels);
 $('#profil-logout').addEventListener('click', seDeconnecter);
 $('#profil-password').addEventListener('click', () => {
   $('#dlg-profil').close();
@@ -2836,6 +2838,214 @@ async function declarerFuseauHoraire() {
     await api('/settings', { method: 'PATCH', body: { timezone: fuseau } });
     log.info('fuseau', `fuseau horaire déclaré : ${fuseau}`);
   } catch { /* réglages indisponibles : sans effet, cf. ci-dessus */ }
+}
+
+/* --------------------- Rafraîchissement automatique ---------------------
+   Un onglet laissé ouvert affichait indéfiniment l'état du dernier
+   chargement : une échéance cochée depuis le téléphone, une notask ajoutée
+   depuis un autre poste, rien n'arrivait tant qu'on ne rechargeait pas la
+   page à la main.
+
+   Deux déclencheurs, et c'est le second qui compte le plus en pratique :
+   une minuterie pendant que l'onglet est visible, et un rafraîchissement
+   immédiat au RETOUR sur l'onglet — le geste réel, c'est de revenir à une
+   fenêtre laissée de côté depuis une heure et de vouloir y voir juste.
+
+   Rien ne tourne quand l'onglet est caché : recharger une page que personne
+   ne regarde ne sert qu'à consommer de la batterie et du réseau. */
+const REFRESH_AUTO_MS = 5 * 60 * 1000;
+
+/* Le rafraîchissement REMPLACE l'affichage : il ne doit jamais tomber au
+   milieu d'une saisie, sous peine de faire disparaître ce qu'on est en
+   train d'écrire. D'où ces garde-fous, du plus fréquent au plus rare. */
+function rafraichissementAutoPossible() {
+  if (document.hidden) return false;                        // personne ne regarde
+  if (!state.user) return false;                            // écran de connexion
+  if (document.querySelector('dialog[open]')) return false; // notask ouverte, réglages...
+  if (composerExpanded) return false;                       // notask en cours d'écriture
+  if (_closeCalPopup) return false;                         // sélecteur de date ouvert
+  // Vue "comptes" : rien de daté à rafraîchir, et recharger la liste des
+  // utilisateurs sous les doigts d'un administrateur n'aiderait personne.
+  return ['notes', 'favorites', 'archives', 'tasks', 'trash'].includes(state.view);
+}
+
+async function rafraichirAuto() {
+  if (!rafraichissementAutoPossible()) return;
+  try {
+    // Même répartition que switchView() : chaque vue a son chargeur, et
+    // loadNotes() rafraîchit au passage la colonne d'échéances et les
+    // compteurs du menu.
+    if (state.view === 'tasks') await loadTasks();
+    else if (state.view === 'trash') await loadTrash();
+    else await loadNotes();
+  } catch {
+    // Réseau coupé, serveur en cours de redéploiement : on ne dit rien et on
+    // retentera au prochain passage. Sans ce catch, chaque échec laisserait
+    // une promesse rejetée non traitée dans la console.
+  }
+}
+
+setInterval(rafraichirAuto, REFRESH_AUTO_MS);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) rafraichirAuto();
+});
+
+/* ---------------------- Rappels d'échéance (navigateur) ------------------
+   Équivalent web des alarmes de l'application Android (voir
+   ReminderScheduler.kt), avec les MÊMES règles pour que les deux ne se
+   contredisent pas : rappel à l'heure de l'échéance, et la VEILLE À 20 H
+   pour une échéance en journée complète.
+
+   Une vérification par MINUTE, et surtout pas une alarme posée à l'avance
+   par échéance : dans un onglet en arrière-plan, les navigateurs brident
+   les minuteries — au-delà de quelques minutes cachées, Chrome ne les
+   réveille plus qu'environ une fois par minute. Une alarme réglée pour
+   14 h 00 sonnerait donc en retard de façon imprévisible, alors qu'un
+   balayage à la minute tombe naturellement juste à la minute près.
+
+   Aucun appel réseau ici : on se sert des tâches déjà rapatriées par
+   updateTaskBadges() (voir state.tasksRappels), rafraîchies toutes les cinq
+   minutes par le rafraîchissement automatique.
+
+   Limite assumée : tout ceci ne vit que dans la page. Navigateur fermé ou
+   machine en veille, aucun rappel — c'est ce qui distingue ce mécanisme des
+   vraies notifications push, qui demanderaient un envoi depuis le serveur. */
+const RAPPEL_HEURE_JOURNEE_COMPLETE = 20;   // cf. ALL_DAY_REMINDER_HOUR côté Android
+const RAPPEL_FENETRE_MS = 60 * 60 * 1000;   // voir plus bas : pas de rattrapage au-delà d'une heure
+const RAPPEL_CLE_STOCKAGE = 'notask.rappels.envoyes';
+
+/* Rappels déjà émis, conservés d'une session à l'autre — sans quoi rouvrir
+   l'onglet renotifierait tout. La clé inclut la DATE d'échéance : une notask
+   récurrente reprogrammée obtient donc une nouvelle clé et sonnera de
+   nouveau au tour suivant, ce qui est bien le comportement voulu. */
+function rappelsDejaEmis() {
+  try { return JSON.parse(localStorage.getItem(RAPPEL_CLE_STOCKAGE) || '{}'); }
+  catch { return {}; }
+}
+
+function memoriserRappel(cle, quand) {
+  try {
+    const emis = rappelsDejaEmis();
+    emis[cle] = quand;
+    // Purge des entrées de plus d'un mois : ce stockage ne doit pas enfler
+    // indéfiniment avec l'historique de toutes les échéances passées.
+    const limite = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    for (const [k, v] of Object.entries(emis)) if (v < limite) delete emis[k];
+    localStorage.setItem(RAPPEL_CLE_STOCKAGE, JSON.stringify(emis));
+  } catch { /* stockage refusé (navigation privée) : au pire, un doublon */ }
+}
+
+/* Instant auquel une tâche doit sonner. Aligné sur instantRappel() côté
+   Android : l'échéance elle-même, sauf en journée complète où due_at vaut
+   minuit UTC par convention (voir NoteBase.all_day) et ne désigne donc
+   aucune heure réelle — on rappelle alors la veille au soir. */
+function instantRappel(task) {
+  const due = new Date(task.due_at);
+  if (Number.isNaN(due.getTime())) return null;
+  if (!task.all_day) return due.getTime();
+  const veille = new Date(due.getTime());
+  veille.setDate(veille.getDate() - 1);
+  veille.setHours(RAPPEL_HEURE_JOURNEE_COMPLETE, 0, 0, 0);
+  return veille.getTime();
+}
+
+async function verifierRappels() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!state.user) return;
+
+  const maintenant = Date.now();
+  const emis = rappelsDejaEmis();
+
+  for (const task of (state.tasksRappels || [])) {
+    if (task.done || !task.due_at) continue;
+    const instant = instantRappel(task);
+    if (instant === null) continue;
+
+    // Fenêtre de rattrapage volontairement courte : en ouvrant le navigateur
+    // le matin, on ne veut pas recevoir d'un coup les rappels de toute la
+    // semaine écoulée. Passé une heure, l'échéance se lit dans la colonne
+    // d'échéances, elle n'a plus à s'imposer en notification.
+    if (instant > maintenant || maintenant - instant > RAPPEL_FENETRE_MS) continue;
+
+    const cle = `${task.kind}:${task.id}@${task.due_at}`;
+    if (emis[cle]) continue;
+
+    // Déchiffrement au dernier moment, et pour cette tâche seulement.
+    let titre = await decryptField(task.text);
+    titre = (titre || '').trim() || 'Notask sans titre';
+
+    try {
+      const notif = new Notification(titre, {
+        body: formatDueRange(task.due_at, task.due_end_at, task.all_day),
+        icon: '/static/icon-192.png',
+        badge: '/static/icon-192.png',
+        // Deux rappels d'une même notask ne doivent pas s'empiler.
+        tag: cle,
+      });
+      notif.onclick = () => {
+        window.focus();
+        ouvrirNoteParId(task.note_id);
+        notif.close();
+      };
+      memoriserRappel(cle, maintenant);
+      log.info('rappel', `notification émise : ${task.kind}:${task.id}`);
+    } catch (err) {
+      // Certains navigateurs refusent `new Notification` hors service
+      // worker (Android notamment) : on note et on continue, sans casser la
+      // boucle pour les tâches suivantes.
+      log.warn('rappel', `notification refusée : ${err.message}`);
+    }
+  }
+}
+
+setInterval(verifierRappels, 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) verifierRappels();
+});
+
+/* --- Réglage dans le Profil --------------------------------------------- */
+
+function majEtatRappels() {
+  const dot = $('#profil-rappels-dot');
+  const label = $('#profil-rappels-label');
+  const bouton = $('#profil-rappels-activer');
+  if (!dot || !label || !bouton) return;   // absent de la page fantôme /quick
+
+  dot.classList.remove('connected', 'needs-reauth');
+  if (!('Notification' in window)) {
+    label.textContent = 'Rappels : non gérés par ce navigateur';
+    bouton.hidden = true;
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    dot.classList.add('connected');
+    label.textContent = 'Rappels : activés';
+    bouton.hidden = true;
+  } else if (Notification.permission === 'denied') {
+    dot.classList.add('needs-reauth');
+    label.textContent = 'Rappels : bloqués par le navigateur';
+    // Rien à proposer : une fois refusée, l'autorisation ne peut être
+    // redonnée que depuis les réglages du site, pas par un nouvel appel.
+    bouton.hidden = true;
+  } else {
+    label.textContent = 'Rappels : désactivés';
+    bouton.hidden = false;
+  }
+}
+
+async function activerRappels() {
+  if (!('Notification' in window)) return;
+  try {
+    await Notification.requestPermission();
+  } catch { /* navigateur ancien : signature à rappel, ignorée */ }
+  majEtatRappels();
+  if (Notification.permission === 'granted') {
+    new Notification('Rappels activés', {
+      body: 'Vous serez prévenu à l\'heure de vos échéances.',
+      icon: '/static/icon-192.png',
+    });
+    verifierRappels();
+  }
 }
 
 /* -------------------------------- Notes -------------------------------- */
@@ -9041,6 +9251,12 @@ async function updateTaskBadges() {
   } catch {
     return;
   }
+  // Tâches gardées telles quelles (donc CHIFFRÉES) pour les rappels : la
+  // vérification tourne toutes les minutes et ne doit surtout pas rappeler
+  // le serveur à chaque passage. Elle ne déchiffrera que le titre des rares
+  // tâches réellement sur le point de sonner. Voir verifierRappels().
+  state.tasksRappels = tasks;
+
   const counts = { late: 0, today: 0, imminent: 0, upcoming: 0 };
   for (const t of tasks) if (t.bucket in counts) counts[t.bucket] += 1;
   const total = counts.late + counts.today + counts.imminent + counts.upcoming;

@@ -561,6 +561,18 @@
     </div>
   </div>
 
+  <!-- Cf. index.html : le MÊME app.js sert les deux pages et branche ce
+       bouton sans garde-fou. Absent d'ici, tout le script s'arrêtait sur un
+       TypeError au chargement de /quick. -->
+  <div class="profil-google" id="profil-rappels">
+    <p class="aide">Un rappel s'affiche à l'heure de l'échéance, et la veille au soir pour une journée complète. Ne fonctionne que si une fenêtre notask est ouverte, même en arrière-plan.</p>
+    <div class="profil-google-row">
+      <span class="profil-google-dot" id="profil-rappels-dot"></span>
+      <span id="profil-rappels-label">Rappels : vérification…</span>
+    </div>
+    <button class="btn ghost" id="profil-rappels-activer" type="button" hidden>Activer les rappels</button>
+  </div>
+
   <div class="dialog-actions">
     <button class="btn ghost" id="profil-password" type="button">Changer de mot de passe</button>
     <span class="spacer" style="flex:1"></span>
