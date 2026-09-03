@@ -552,6 +552,7 @@ class ArchivedItemOut(SQLModel):
     all_day: bool = False
     color: str
     icon: Optional[str] = None
+    note_title: Optional[str] = None
 
     @field_validator("due_at", "due_end_at", mode="after")
     @classmethod

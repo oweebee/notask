@@ -441,7 +441,7 @@ def list_archived_items(
         ArchivedItemOut(
             id=item.id, note_id=note.id, text=item.text, checked=item.checked,
             due_at=item.due_at, due_end_at=item.due_end_at, all_day=item.all_day,
-            color=note.color, icon=note.icon,
+            color=note.color, icon=note.icon, note_title=note.title,
         )
         for item, note in rows
     ]

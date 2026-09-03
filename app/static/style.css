@@ -882,7 +882,32 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   color: var(--md-on-surface-variant);
   margin: 0 0 .75rem;
 }
-#archived-items-list { display: grid; gap: .375rem; }
+#archived-items-list { display: grid; gap: .75rem; }
+
+/* Un groupe = les lignes archivées d'une même notask, réunies sous son
+   icône et son titre — même principe de carte que la mosaïque de
+   l'accueil (voir .note), en plus sobre puisqu'il n'y a ici qu'un
+   en-tête et des lignes, jamais de contenu ni de pièces jointes. */
+.archived-group {
+  border-radius: var(--shape-sm);
+  background: var(--md-surface-2);
+  padding: .625rem .75rem .75rem;
+}
+.archived-group-title {
+  margin: 0 0 .5rem 0;
+  cursor: pointer;
+  border-radius: var(--shape-xs, 6px);
+}
+.archived-group-title:hover, .archived-group-title:focus-visible {
+  outline: none;
+  color: var(--md-primary, inherit);
+}
+.archived-group-title h3 {
+  margin: 0;
+  font-size: .9375rem;
+  font-weight: 600;
+}
+.archived-group-items { display: grid; gap: .375rem; }
 #archived-items-list .agenda-item { border-radius: var(--shape-sm); position: relative; }
 #archived-items-list .agenda-item:hover .agenda-item-actions,
 #archived-items-list .agenda-item:focus-within .agenda-item-actions { opacity: 1; }

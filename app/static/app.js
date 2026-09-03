@@ -3349,20 +3349,53 @@ async function loadArchivedItems() {
     bloc.hidden = true;
     return;
   }
-  await Promise.all(items.map(async (it) => { it.text = await decryptField(it.text); }));
+  await Promise.all(items.map(async (it) => {
+    it.text = await decryptField(it.text);
+    it.note_title = await decryptField(it.note_title);
+  }));
 
   bloc.hidden = items.length === 0;
   const liste = $('#archived-items-list');
   liste.innerHTML = '';
+
+  // Regroupées par notask d'origine, comme sur l'accueil (icône + titre en
+  // en-tête, lignes imbriquées dessous) — plutôt qu'une liste plate où l'on
+  // perd de vue de quelle notask vient chaque ligne. Map plutôt qu'un objet
+  // brut : conserve l'ordre d'arrivée des groupes (celui du serveur).
+  const groupes = new Map();
   for (const it of items) {
-    // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
-    // une ligne archivée peut ne plus avoir d'échéance du tout.
-    const ligne = creerLigneAgenda({
-      kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
-      due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
-      color: it.color, icon: it.icon,
-    }, () => loadNotes(), true, 'unarchive');
-    liste.appendChild(ligne);
+    if (!groupes.has(it.note_id)) groupes.set(it.note_id, []);
+    groupes.get(it.note_id).push(it);
+  }
+
+  for (const [noteId, lignes] of groupes) {
+    const premiere = lignes[0];
+    const groupe = document.createElement('div');
+    groupe.className = 'archived-group c-' + premiere.color;
+
+    const header = document.createElement('div');
+    header.className = 'note-title-row archived-group-title';
+    const icon = ICON_CHOICES[premiere.icon] || ICON_CHOICES.spoonblue;
+    header.innerHTML = `<span class="note-icon">${icon}</span><h3>${escapeHtml(premiere.note_title || 'Notask sans titre')}</h3>`;
+    header.tabIndex = 0;
+    header.setAttribute('role', 'button');
+    header.addEventListener('click', () => ouvrirNoteParId(noteId));
+    groupe.appendChild(header);
+
+    const sousListe = document.createElement('div');
+    sousListe.className = 'archived-group-items';
+    for (const it of lignes) {
+      // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
+      // une ligne archivée peut ne plus avoir d'échéance du tout.
+      const ligne = creerLigneAgenda({
+        kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
+        due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
+        color: it.color, icon: it.icon,
+      }, () => loadNotes(), true, 'unarchive');
+      sousListe.appendChild(ligne);
+    }
+    groupe.appendChild(sousListe);
+    liste.appendChild(groupe);
   }
 }
 
