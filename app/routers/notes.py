@@ -135,6 +135,7 @@ ICON_KEYS = {
     "thumbup", "thumbdown", "okhand", "fuck", "peace", "rock", "clap",
     "raise", "stop", "crossed", "point", "callme", "lovehands", "fist",
     "wave2",
+    "film", "series", "discord", "teams", "word", "excel", "cart", "bite", "nichons", "chartreuse", "hellfest",
 }
 
 
