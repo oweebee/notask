@@ -32,8 +32,25 @@ est une lecture, pas un lieu de création.
 **Notes** — titre et texte libre, 21 couleurs, épinglage, archive, listes à
 cocher, recherche.
 
-**Tâches** — regroupement automatique en *En retard*, *Aujourd'hui*, *À venir*
-et *Terminées*, échéance à la minute, lien retour vers la note d'origine.
+**Tâches** — regroupement automatique en *En retard*, *Aujourd'hui*,
+*Imminentes* (échéance dans 7 jours ou moins), *À venir* et *Terminées*,
+échéance à la minute, lien retour vers la note d'origine.
+
+**Récurrence** — une échéance peut se répéter chaque semaine, chaque mois ou
+chaque année. La reprogrammation a lieu **au moment où la notask est cochée
+terminée**, jamais avant : la date affichée reste celle qu'on a fixée tant
+que la tâche n'est pas faite. Le décalage se fait dans le fuseau de
+l'utilisateur, pour qu'un rendez-vous hebdomadaire de 10 h reste à 10 h de
+part et d'autre d'un changement d'heure.
+
+**Rappels navigateur** — notification à l'heure de l'échéance (la veille à
+20 h pour une journée complète), activables depuis *Profil*. Fonctionnent
+tant qu'une fenêtre notask est ouverte, même en arrière-plan ; navigateur
+fermé, seuls l'APK Android et Google Calendar prennent le relais.
+
+**Rafraîchissement automatique** — un onglet laissé ouvert se remet à jour
+toutes les cinq minutes et immédiatement au retour dessus, sans jamais
+interrompre une saisie en cours.
 
 ## Structure
 
@@ -51,8 +68,10 @@ app/
     notes.py         notes façon Keep
     tasks.py         listes et tâches façon Tasks
     google.py        connexion/déconnexion Google Calendar
+    settings.py      réglages libres par utilisateur (dont le fuseau horaire)
   static/            interface web (HTML, CSS, JS)
-tests/test_api.py    tests bout en bout
+tests/test_api.py         tests bout en bout
+tests/test_recurrence.py  récurrences, regroupements, changement d'heure
 Dockerfile
 push.bat             envoi des modifications sur GitHub
 ```
@@ -78,7 +97,7 @@ Documentation interactive sur `/docs`.
 | GET/POST | `/api/notes` | lister / créer |
 | GET/PATCH/DELETE | `/api/notes/{id}` | détail / modifier / supprimer |
 | PATCH | `/api/notes/{id}/items/{item_id}` | cocher ou dater une ligne |
-| GET | `/api/tasks` | notes et lignes datées, regroupées |
+| GET | `/api/tasks` | notes et lignes datées, regroupées (`?bucket=late\|today\|imminent\|upcoming\|done`) |
 | PATCH | `/api/tasks/{kind}/{id}` | terminer (`kind` = `note` ou `item`) |
 | GET | `/api/google/status` | connecté / déconnecté / à reconnecter |
 | GET | `/api/google/connect?token=` | démarre la connexion (redirige vers Google) |
@@ -103,6 +122,14 @@ curl -X PATCH https://notask.exemple.tld/api/settings \
 ```
 
 Limites : 100 clés par utilisateur, 10 000 caractères par valeur texte.
+
+Une clé est lue par le serveur, et une seule : **`timezone`** (`"Europe/Paris"`),
+que le client déclare au démarrage. C'est la seule notion de fuseau horaire du
+serveur, qui vit par ailleurs entièrement en UTC. Elle sert uniquement à
+reprogrammer une échéance récurrente à la même heure locale d'une fois sur
+l'autre — sans elle, « + 1 semaine » vaut « + 7 × 24 h » et un rappel de 10 h
+dérive à 11 h au passage à l'heure d'été. Absente ou invalide, le calcul
+retombe en UTC sans erreur.
 
 ## Google Calendar
 
