@@ -1661,6 +1661,15 @@ dialog.c-white,
   --md-outline-variant: rgba(0,0,0,.16);
   color: var(--md-on-surface);
 }
+/* La .cal-popup est accrochée au dialog mais garde le thème sombre global —
+   on réinitialise les variables que dialog.c-white aurait héritées, sinon
+   le picker apparaît avec du texte foncé sur fond sombre. */
+dialog.c-white .cal-popup {
+  --md-on-surface: #e6e0e9;
+  --md-on-surface-variant: #cac4d0;
+  --md-outline-variant: #49454f;
+  color: var(--md-on-surface);
+}
 /* Exception pour la colonne d'échéances : sa pastille "blanche" n'est PAS
    blanche mais grise, la teinte y étant atténuée sur le fond sombre de la
    page (voir ATTENUATION_PASTILLE dans app.js). Le gris secondaire ci-dessus

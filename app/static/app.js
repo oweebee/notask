@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9051';
+const APP_VERSION = '0.9047';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -9243,7 +9243,7 @@ async function ouvrirNoteParId(noteId) {
    partir de due_at/done, jamais chiffré — on n'a besoin que de ce champ
    pour compter, inutile de déchiffrer texte/titre pour un simple nombre.
    Volontairement indépendant de loadAgenda() : le badge "à venir" doit
-   refléter le total réel (la colonne, elle, se limite à 7 jours). */
+   refléter le même périmètre que les vues (31 jours pour "upcoming"). */
 async function updateTaskBadges() {
   let tasks;
   try {
@@ -9257,8 +9257,13 @@ async function updateTaskBadges() {
   // tâches réellement sur le point de sonner. Voir verifierRappels().
   state.tasksRappels = tasks;
 
+  const limiteUnMois = Date.now() + 31 * 24 * 60 * 60 * 1000;
   const counts = { late: 0, today: 0, imminent: 0, upcoming: 0 };
-  for (const t of tasks) if (t.bucket in counts) counts[t.bucket] += 1;
+  for (const t of tasks) {
+    if (!(t.bucket in counts)) continue;
+    if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) continue;
+    counts[t.bucket] += 1;
+  }
   const total = counts.late + counts.today + counts.imminent + counts.upcoming;
 
   const set = (id, n) => {
@@ -9295,11 +9300,15 @@ async function loadAgenda() {
     t.text = await decryptField(t.text);
     t.note_title = await decryptField(t.note_title);
   }));
-  // Plus aucune fenêtre : "à venir" montre TOUT, du plus proche au plus
-  // lointain (limite d'un mois retirée à la demande — elle masquait
-  // silencieusement les périodes longues). Le tri chronologique vient du
-  // serveur (tasks.sort par due_at croissante dans list_tasks).
-  let items = tasks.filter((t) => t.bucket !== 'done');
+  // "À venir" limité à 1 mois glissant : seules les tâches dont l'échéance
+  // tombe dans les 31 prochains jours apparaissent dans cette colonne.
+  // En retard / aujourd'hui / imminentes passent toujours (bucket ≠ upcoming).
+  const limiteUnMois = Date.now() + 31 * 24 * 60 * 60 * 1000;
+  let items = tasks.filter((t) => {
+    if (t.bucket === 'done') return false;
+    if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
+    return true;
+  });
   if (state.labelFilter) {
     const params = new URLSearchParams({ archived: state.showArchived, label: state.labelFilter });
     let notesDuLibelle;
@@ -9319,8 +9328,8 @@ async function loadAgenda() {
    colonne d'échéances, faute de largeur). Mêmes données et mêmes lignes que
    la colonne de droite — c'est la disposition qui change, d'où la
    réutilisation de creerLigneAgenda() plutôt qu'un second rendu parallèle
-   qui finirait par diverger. Contrairement à la colonne, aucune limite
-   d'un mois : cette vue-ci sert justement à tout voir. */
+   qui finirait par diverger. Même filtre d'un mois sur "upcoming" que
+   la colonne d'échéances de l'accueil. */
 async function loadTasks() {
   let tasks;
   try {
@@ -9333,8 +9342,13 @@ async function loadTasks() {
     t.note_title = await decryptField(t.note_title);
   }));
   // "done" inclus ici, contrairement à la colonne d'échéances : cette vue a
-  // sa propre colonne "terminées".
-  renderTasks(tasks);
+  // sa propre colonne "terminées". Même filtre d'un mois sur "upcoming".
+  const limiteUnMois = Date.now() + 31 * 24 * 60 * 60 * 1000;
+  const filtered = tasks.filter((t) => {
+    if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
+    return true;
+  });
+  renderTasks(filtered);
 }
 
 function renderTasks(items) {
