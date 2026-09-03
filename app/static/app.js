@@ -1065,15 +1065,31 @@ const ICON_CHOICES = {
   thumbup: '👍', thumbdown: '👎', okhand: '👌', fuck: '🖕', peace: '✌️',
   rock: '🤘', clap: '👏', raise: '🙌', stop: '✋', crossed: '🤞',
   point: '🫵', callme: '🤙', lovehands: '🫶', fist: '👊', wave2: '👋',
+  /* ── Électricité ────────────────────────────────────────────── */
+  electrique: '<svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-2.5 8L20 10h-7z" fill="#fdd835" stroke="#f9a825" stroke-width="0.5" stroke-linejoin="round"/></svg>',
+
   /* ── Divertissement ──────────────────────────────────────────── */
   film: '<svg viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="12" rx="1.5" fill="#37474f"/><rect x="3" y="5.5" width="18" height="4.5" rx="1.5" fill="#263238"/><path d="M6.5 5.5l-2 4.5M10.5 5.5l-2 4.5M14.5 5.5l-2 4.5M18.5 5.5l-2 4.5" stroke="#fff" stroke-width="1.8" stroke-linecap="butt" fill="none"/><rect x="5" y="12" width="14" height="6.5" rx="1" fill="#455a64"/><path d="M8 15h8M8 17.5h5" stroke="#7986cb" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>',
   series: '<svg viewBox="0 0 24 24"><rect x="1" y="4.5" width="15" height="10.5" rx="1.5" fill="#7986cb" opacity="0.75"/><rect x="8" y="9" width="15" height="10.5" rx="1.5" fill="#3f51b5"/><rect x="9" y="10" width="13" height="8" rx="1" fill="#5c6bc0"/></svg>',
 
   /* ── Apps & services ─────────────────────────────────────────── */
   discord: '<svg viewBox="0 0 24 24"><path d="M20.3 4.4A19.3 19.3 0 0 0 15.9 3a13 13 0 0 0-.6 1.3 18 18 0 0 0-5.5 0A13 13 0 0 0 9.2 3a19.5 19.5 0 0 0-4.4 1.4C2 8.4 1.2 12.3 1.6 16.1a19.6 19.6 0 0 0 6 3.1 14.8 14.8 0 0 0 1.3-2.1 12.7 12.7 0 0 1-2-.9l.5-.4a14 14 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1 14.6 14.6 0 0 0 1.2 2A19.5 19.5 0 0 0 22 16.1c.5-4.4-.7-8.3-1.7-11.7zM8.5 13.7c-1.2 0-2.2-1.1-2.2-2.4s.9-2.4 2.2-2.4 2.2 1.1 2.2 2.4-.9 2.4-2.2 2.4zm7 0c-1.2 0-2.2-1.1-2.2-2.4s.9-2.4 2.2-2.4 2.2 1.1 2.2 2.4-.9 2.4-2.2 2.4z" fill="#5865F2"/></svg>',
-  teams: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#6264a7"/><rect x="6" y="7" width="12" height="2.5" rx="1.2" fill="#fff"/><rect x="10.5" y="7" width="3" height="10" rx="1.2" fill="#fff"/></svg>',
+  teams: '<svg viewBox="0 0 24 24"><g transform="scale(1.5)"><path d="M9.186 4.797a2.42 2.42 0 1 0-2.86-2.448h1.178c.929 0 1.682.753 1.682 1.682zm-4.295 7.738h2.613c.929 0 1.682-.753 1.682-1.682V5.58h2.783a.7.7 0 0 1 .682.716v4.294a4.197 4.197 0 0 1-4.093 4.293c-1.618-.04-3-.99-3.667-2.35Zm10.737-9.372a1.674 1.674 0 1 1-3.349 0 1.674 1.674 0 0 1 3.349 0m-2.238 9.488-.12-.002a5.2 5.2 0 0 0 .381-2.07V6.306a1.7 1.7 0 0 0-.15-.725h1.792c.39 0 .707.317.707.707v3.765a2.6 2.6 0 0 1-2.598 2.598z" fill="#5558af"/><path d="M.682 3.349h6.822c.377 0 .682.305.682.682v6.822a.68.68 0 0 1-.682.682H.682A.68.68 0 0 1 0 10.853V4.03c0-.377.305-.682.682-.682Zm5.206 2.596v-.72h-3.59v.72h1.357V9.66h.87V5.945z" fill="#4b53bc"/></g></svg>',
   word: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#2b579a"/><path d="M5.5 7.5l2 9 2.5-6 2.5 6 2-9h-1.5l-1 5-2-5.5-2 5.5-1-5z" fill="#fff"/></svg>',
   excel: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#217346"/><path d="M7 7.5l10 9M17 7.5l-10 9" stroke="#fff" stroke-width="2.8" stroke-linecap="round" fill="none"/></svg>',
+  plex: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="4.5" fill="#1d1d1d"/><path d="M7.5 5.5l11 6.5-11 6.5z" fill="#e5a00d"/></svg>',
+
+  /* ── Plateformes gaming ──────────────────────────────────────── */
+  steam: '<svg viewBox="0 0 24 24"><g transform="scale(1.5)" fill="#1b9fd4"><path d="M.329 10.333A8.01 8.01 0 0 0 7.99 16C12.414 16 16 12.418 16 8s-3.586-8-8.009-8A8.006 8.006 0 0 0 0 7.468l.003.006 4.304 1.769A2.2 2.2 0 0 1 5.62 8.88l1.96-2.844-.001-.04a3.046 3.046 0 0 1 3.042-3.043 3.046 3.046 0 0 1 3.042 3.043 3.047 3.047 0 0 1-3.111 3.044l-2.804 2a2.223 2.223 0 0 1-3.075 2.11 2.22 2.22 0 0 1-1.312-1.568L.33 10.333Z"/><path d="M4.868 12.683a1.715 1.715 0 0 0 1.318-3.165 1.7 1.7 0 0 0-1.263-.02l1.023.424a1.261 1.261 0 1 1-.97 2.33l-.99-.41a1.7 1.7 0 0 0 .882.84Zm3.726-6.687a2.03 2.03 0 0 0 2.027 2.029 2.03 2.03 0 0 0 2.027-2.029 2.03 2.03 0 0 0-2.027-2.027 2.03 2.03 0 0 0-2.027 2.027m2.03-1.527a1.524 1.524 0 1 1-.002 3.048 1.524 1.524 0 0 1 .002-3.048"/></g></svg>',
+  epic: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="3" fill="#2d2d2d"/><rect x="5" y="5" width="14" height="3.2" rx="0.6" fill="#fff"/><rect x="5" y="10.4" width="9" height="3.2" rx="0.6" fill="#fff"/><rect x="5" y="15.8" width="14" height="3.2" rx="0.6" fill="#fff"/></svg>',
+  gog: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="4" fill="#3d0068"/><path d="M12 4.5a7.5 7.5 0 1 0 7.2 9.5H13V11.5h8.5A9.5 9.5 0 1 1 12 2.5c2.63 0 5 1.07 6.72 2.78l-1.84 1.84A7 7 0 0 0 12 4.5z" fill="#fff"/></svg>',
+  ubisoft: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#0078d7"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17A8.5 8.5 0 0 1 5.5 8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M12 6a6 6 0 0 1 0 12A6 6 0 0 1 7.5 9.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.65"/><path d="M12 8.5a3.5 3.5 0 0 1 0 7" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity="0.35"/><circle cx="12" cy="3.5" r="1.8" fill="#fff"/></svg>',
+  blizzard: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#003087"/><path d="M8 5v14h5.2c2.7 0 4.3-1.6 4.3-3.7 0-1.5-.8-2.6-2.1-3.1 1-.6 1.7-1.6 1.7-2.8C17.1 7.1 15.5 5 12.6 5zm2.6 2.5h2.1c1 0 1.6.8 1.6 1.7s-.6 1.6-1.6 1.6h-2.1zm0 5.5h2.4c1.2 0 1.9.9 1.9 1.9s-.7 1.8-1.9 1.8h-2.4z" fill="#f4a208"/></svg>',
+  playstation: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#003087"/><rect x="7.5" y="5.5" width="2.5" height="13" rx="1" fill="#fff"/><path d="M7.5 5.5h4c2.2 0 4 1.8 4 4s-1.8 4-4 4H7.5z" fill="#fff"/></svg>',
+  xbox: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#107c10"/><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none"/></svg>',
+  nintendo: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="#e4000f"/><path d="M6.5 18V6l6.5 10.5V6h2.5v12l-6.5-10.5V18z" fill="#fff"/></svg>',
+  android: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="13.5" rx="7.5" ry="6" fill="#3ddb85"/><ellipse cx="12" cy="8" rx="5.5" ry="4.5" fill="#3ddb85"/><circle cx="9.8" cy="7.8" r="1.1" fill="#fff"/><circle cx="14.2" cy="7.8" r="1.1" fill="#fff"/><path d="M8.5 5.5 7 3.5M15.5 5.5 17 3.5" stroke="#3ddb85" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="4.5" y="12.5" width="2" height="5.5" rx="1" fill="#3ddb85"/><rect x="17.5" y="12.5" width="2" height="5.5" rx="1" fill="#3ddb85"/></svg>',
+  apple: '<svg viewBox="0 0 24 24"><path d="M15 4.2c.4-1 1.4-2 2.5-2.2a5.5 5.5 0 0 1-1.2 3.2c-.7.9-1.8 1.5-2.7 1.5-.1-1 .7-2.1 1.4-2.5zm1.7 2.3c-1.1 0-2.3-.9-3.7-.9s-2.6.8-3.5.8C6.7 6.4 4 9.5 4 13.5c0 4.5 3 9 5.5 9 1 0 1.9-.8 3-.8 1.2 0 2 .8 3 .8 2.5 0 5.5-4.5 5.5-9 0-2.7-1.5-4.8-2.5-5a5 5 0 0 0-1.8.5z" fill="#888"/></svg>',
 
   /* ── Achat ───────────────────────────────────────────────────── */
   cart: '<svg viewBox="0 0 24 24"><path d="M2 3h2l2.5 11h10l2-7.5H6.5" fill="none" stroke="#546e7a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="20" r="1.5" fill="#546e7a"/><circle cx="16.5" cy="20" r="1.5" fill="#546e7a"/></svg>',
@@ -1082,7 +1098,7 @@ const ICON_CHOICES = {
   bite: '<svg viewBox="0 0 24 24"><path d="M9 20.5h6V12a3 3 0 0 0-6 0z" fill="#f48fb1"/><ellipse cx="12" cy="9.5" rx="3.2" ry="3.5" fill="#f8bbd0"/><ellipse cx="9.5" cy="19.5" rx="1.3" ry="1.5" fill="#f8bbd0"/><ellipse cx="14.5" cy="19.5" rx="1.3" ry="1.5" fill="#f8bbd0"/></svg>',
   nichons: '<svg viewBox="0 0 24 24"><ellipse cx="8" cy="14" rx="5" ry="5" fill="#f8bbd0"/><ellipse cx="16" cy="14" rx="5" ry="5" fill="#f8bbd0"/><circle cx="8" cy="15" r="1.3" fill="#f06292"/><circle cx="16" cy="15" r="1.3" fill="#f06292"/></svg>',
   chartreuse: '<svg viewBox="0 0 24 24"><rect x="9" y="13" width="6" height="9" rx="1.5" fill="#33691e"/><path d="M9 13c0-3 1-4 1-5h4c0 1 1 2 1 5z" fill="#558b2f"/><rect x="10" y="8" width="4" height="2.5" rx="1" fill="#8bc34a"/><rect x="10.5" y="6" width="3" height="2" rx="0.8" fill="#9ccc65"/><path d="M9.5 16h5M9.5 19h5" stroke="#558b2f" stroke-width="0.8" stroke-linecap="round" fill="none"/></svg>',
-  hellfest: '<svg viewBox="0 0 24 24"><path d="M4 17c-1-5 1-12 8-12s9 7 8 12z" fill="#ff6f00" opacity="0.9"/><path d="M6 17c-1-4 1-9 6-9s7 5 6 9z" fill="#ffa000"/><path d="M8 17c0-3 1-6 4-6s4 3 4 6z" fill="#ffd54f"/><ellipse cx="12" cy="14.5" rx="4.5" ry="5" fill="#eeeeee"/><circle cx="10.2" cy="13.5" r="1.2" fill="#424242"/><circle cx="13.8" cy="13.5" r="1.2" fill="#424242"/><rect x="10" y="17" width="1.2" height="2" rx="0.5" fill="#9e9e9e"/><rect x="12.8" y="17" width="1.2" height="2" rx="0.5" fill="#9e9e9e"/><path d="M10 16h4" stroke="#bdbdbd" stroke-width="0.8" stroke-linecap="round" fill="none"/></svg>',
+  hellfest: '<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="2.5" fill="#0a0a0a"/><path d="M2 4h2.5v7h4V4h2.5v16H8.5v-7h-4v7H2z" fill="#f0f0f0"/><path d="M13 4h9v2.5h-6.5v4.5H22v2.5h-6.5V20H13z" fill="#f0f0f0"/></svg>',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ».
@@ -1472,7 +1488,7 @@ const ICON_THEMES = [
   },
   {
     titre: 'Vie quotidienne',
-    cles: ['health', 'sport', 'football', 'bike', 'car', 'train', 'plane', 'bed', 'coffee', 'food', 'pizza', 'cake', 'umbrella', 'alarm', 'phone', 'mail', 'camera', 'music', 'paintbrush', 'scissors', 'tool', 'magnifier', 'tv', 'urgente', 'interruption', 'cart'],
+    cles: ['health', 'sport', 'football', 'bike', 'car', 'train', 'plane', 'bed', 'coffee', 'food', 'pizza', 'cake', 'umbrella', 'alarm', 'phone', 'mail', 'camera', 'music', 'paintbrush', 'scissors', 'tool', 'magnifier', 'tv', 'urgente', 'interruption', 'cart', 'electrique'],
   },
   {
     titre: 'Nature',
@@ -1535,12 +1551,16 @@ const ICON_THEMES = [
     cles: ['thumbup', 'thumbdown', 'okhand', 'fuck', 'peace', 'rock', 'clap', 'raise', 'stop', 'crossed', 'point', 'callme', 'lovehands', 'fist', 'wave2'],
   },
   {
+    titre: 'Plateformes gaming',
+    cles: ['steam', 'epic', 'gog', 'ubisoft', 'blizzard', 'playstation', 'xbox', 'nintendo', 'android', 'apple'],
+  },
+  {
     titre: 'Divertissement',
     cles: ['film', 'series'],
   },
   {
     titre: 'Apps',
-    cles: ['discord', 'teams', 'word', 'excel'],
+    cles: ['discord', 'teams', 'word', 'excel', 'plex'],
   },
   {
     titre: 'Fun & perso',
@@ -1724,7 +1744,19 @@ const ICON_MOTS = {
   bite: 'bite pénis sexe cul',
   nichons: 'nichons seins poitrine',
   chartreuse: 'chartreuse liqueur alcool bouteille verte',
-  hellfest: 'hellfest metal festival crâne flammes',
+  hellfest: 'hellfest metal festival lettrage',
+  electrique: 'électricité éclair foudre énergie éclairage',
+  plex: 'plex media server streaming films séries',
+  steam: 'steam valve jeux gaming plateforme',
+  epic: 'epic games store jeux gaming',
+  gog: 'gog galaxy jeux gaming drm-free',
+  ubisoft: 'ubisoft jeux gaming assasin creed',
+  blizzard: 'blizzard activision warcraft overwatch hearthstone',
+  playstation: 'playstation sony ps4 ps5 console jeux',
+  xbox: 'xbox microsoft console jeux',
+  nintendo: 'nintendo switch console mario zelda jeux',
+  android: 'android google mobile smartphone',
+  apple: 'apple ios iphone ipad mac appstore',
 };
 
 /* Thèmes prêts à l'affichage : chaque entrée ne garde que les icônes qui

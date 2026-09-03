@@ -136,6 +136,9 @@ ICON_KEYS = {
     "raise", "stop", "crossed", "point", "callme", "lovehands", "fist",
     "wave2",
     "film", "series", "discord", "teams", "word", "excel", "cart", "bite", "nichons", "chartreuse", "hellfest",
+    "electrique", "plex",
+    "steam", "epic", "gog", "ubisoft", "blizzard",
+    "playstation", "xbox", "nintendo", "android", "apple",
 }
 
 
