@@ -1743,7 +1743,19 @@ dialog.c-white .cal-popup {
   top: 0;
   left: 0;
   transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1);
+  -webkit-touch-callout: none;   /* cf. .note : pas de menu iOS pendant l'appui long */
 }
+/* Pendant le glisser : transition coupée, sinon la carte tenue traînerait
+   derrière le pointeur au lieu de le suivre (même raison que
+   .notes-grid .note.dragging). Le repère visuel passe par l'opacité et
+   l'ombre, jamais par `transform` — c'est la propriété que le JS pilote. */
+.trash-grid .trash-card.dragging { transition: none; }
+.trash-card.dragging {
+  opacity: .55;
+  box-shadow: var(--elev-3);
+  cursor: grabbing;
+}
+.trash-card { cursor: pointer; }
 .trash-card {
   border: none;
   border-radius: var(--shape-sm);

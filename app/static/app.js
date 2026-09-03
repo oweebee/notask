@@ -3499,6 +3499,9 @@ function renderTrash() {
   for (const n of notes) {
     const el = document.createElement('article');
     el.className = 'trash-card c-' + n.color;
+    // Nécessaire au glisser-déposer : commitTrashOrder() relit l'ordre du
+    // DOM par cet identifiant, comme commitNoteOrder() sur la mosaïque.
+    el.dataset.id = n.id;
 
     const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
     const title = n.title || 'Notask sans titre';
@@ -3872,7 +3875,12 @@ $('#label-new-input').addEventListener('keydown', (e) => {
 // positions que du sous-ensemble visible mélangerait l'ordre des notes
 // masquées par le filtre.
 function notesReorderable() {
-  return !state.showArchived && !state.showFavoritesOnly && !state.search
+  /* Les Archives sont réordonnables comme l'accueil : c'est une liste
+     COMPLÈTE (toutes les notasks archivées), donc l'ordre visuel fait foi
+     sans risque de mélanger l'ordre d'un sous-ensemble avec celui des
+     notasks non affichées. Restent exclus les vrais sous-ensembles filtrés
+     — favoris, recherche, libellé — pour cette raison-là précisément. */
+  return !state.showFavoritesOnly && !state.search
     && !state.deepSearch && !state.labelFilter;
 }
 
@@ -5074,6 +5082,44 @@ enablePointerReorder($('#notes-grid'), '.note', {
   // s'écrasent en chaîne serait illisible plus qu'expressif.
   blob: true,
 });
+
+/* Corbeille : exactement le même geste que la mosaïque de l'accueil — mêmes
+   options, même recalcul de mosaïque à chaque permutation, même déformation
+   des voisines. Rien de spécifique ici sinon le conteneur, la classe des
+   cartes et la liste de référence (state.trashNotes). Pas de garde
+   `enabled` : la corbeille n'a ni recherche ni filtre par libellé, la liste
+   y est donc toujours complète, donc toujours réordonnable. */
+enablePointerReorder($('#trash-grid'), '.trash-card', {
+  excludeSelector: '.trash-card-actions, .note-icon, a, input, button',
+  onSwap: () => layoutMosaic(),
+  onDrop: commitTrashOrder,
+  blob: true,
+});
+
+/* Pendant de commitNoteOrder() pour la corbeille : l'ordre visuel du DOM
+   fait foi une fois le geste terminé, et l'on ne PATCH que les notasks dont
+   la position a réellement changé. `position` reste modifiable sur une
+   notask en corbeille (voir _owned_note, qui ne la refuse pas). */
+async function commitTrashOrder() {
+  const ids = [...$('#trash-grid').querySelectorAll('.trash-card')].map((el) => Number(el.dataset.id));
+  const total = ids.length;
+  const updates = [];
+  ids.forEach((id, idx) => {
+    const note = (state.trashNotes || []).find((x) => x.id === id);
+    if (!note) return;
+    const newPos = (total - idx) * 1000;
+    if (Math.round(note.position || 0) !== newPos) {
+      updates.push(api('/notes/' + id, { method: 'PATCH', body: { position: newPos } }));
+    }
+  });
+  if (!updates.length) return;
+  try {
+    await Promise.all(updates);
+  } catch (err) {
+    alert(err.message);
+  }
+  loadTrash();
+}
 
 // `itemSelector` par défaut à '.note' : seul le réordonnancement des
 // libellés (voir renderLabelsDrawer()) passe '.label-row'. Doit rester

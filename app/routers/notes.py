@@ -418,8 +418,14 @@ def list_notes(
             Note.title.contains(q) | Note.description.contains(q) | Note.content.contains(q)
         )
     if trashed:
-        # Les plus récemment mises à la corbeille en premier.
-        notes = session.exec(stmt.order_by(Note.trashed_at.desc())).all()
+        # Ordre manuel d'abord (glisser-déposer, voir commitTrashOrder côté
+        # client) : sans lui, un ordre réarrangé à la main serait écrasé au
+        # rechargement par le tri par date. La date de mise à la corbeille
+        # ne départage plus que les notasks à position égale — dont celles,
+        # antérieures à `position`, qui partagent toutes la valeur 0.
+        notes = session.exec(
+            stmt.order_by(Note.position.desc(), Note.trashed_at.desc())
+        ).all()
     else:
         # Épinglées d'abord, puis par ordre manuel (glisser-déposer) ; les
         # notes antérieures à l'ajout de `position` partagent toutes la
