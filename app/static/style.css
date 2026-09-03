@@ -882,7 +882,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   color: var(--md-on-surface-variant);
   margin: 0 0 .75rem;
 }
-#archived-items-list { display: grid; gap: .75rem; }
+#archived-items-list {
+  position: relative;
+  --mosaic-min-col: 240px;
+  --mosaic-gap: 16px;
+}
 
 /* Un groupe = les lignes archivées (ou mises seules à la corbeille) d'une
    même notask, réunies sous son icône et son titre. La carte elle-même
@@ -890,7 +894,16 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    cartes de l'accueil (voir renderNotes) — .archived-group n'ajoute que ce
    qui n'existe pas dans une carte normale : l'en-tête cliquable et
    l'espacement entre les lignes imbriquées. */
-.archived-group { padding-bottom: .625rem; }
+.archived-group {
+  padding-bottom: .625rem;
+  /* Posée par le masonry commun (voir MOSAIQUES dans app.js), comme les
+     cartes de l'accueil : chaque groupe se cale sous le plus bas de sa
+     colonne au lieu de s'empiler sur toute la largeur. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1);
+}
 .archived-group-title {
   cursor: pointer;
   border-radius: var(--shape-xs, 6px);
@@ -915,7 +928,11 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    disposition que les lignes archivées ci-dessus, sous la grille des
    notasks supprimées plutôt que sous la mosaïque. */
 #trashed-items { margin-top: 2rem; }
-#trashed-items-list { display: grid; gap: .75rem; }
+#trashed-items-list {
+  position: relative;
+  --mosaic-min-col: 240px;
+  --mosaic-gap: 16px;
+}
 
 .agenda-group + .agenda-group { margin-top: 1.25rem; }
 /* …sauf en colonnes : chacune démarre en haut de sa propre colonne, la
@@ -1382,7 +1399,10 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    layoutMosaic(true) dans app.js) : sans ça, tout le tableau semblait
    "sauter" depuis le coin en haut à gauche à chaque fermeture de notask,
    quand la grille se reconstruit entièrement à neuf. */
-.notes-grid.mosaic-instant .note, .notes-grid.mosaic-instant .composer-stack { transition: none; }
+.notes-grid.mosaic-instant .note, .notes-grid.mosaic-instant .composer-stack,
+.trash-grid.mosaic-instant .trash-card,
+#archived-items-list.mosaic-instant .archived-group,
+#trashed-items-list.mosaic-instant .archived-group { transition: none; }
 
 /* Carte Material : aucune bordure, c'est le ton de la surface qui la détache
    du fond. L'élévation ne change qu'au survol. */
@@ -1710,11 +1730,19 @@ dialog.c-white .cal-popup {
    glisser-déposer) — seules actions possibles : restaurer ou supprimer
    définitivement. Pas de `background` fixe ici, même piège que .agenda-item :
    la couleur vient de .c-*, posée après dans ce fichier. */
+/* Même masonry que l'accueil (voir .notes-grid et layoutMosaic dans app.js),
+   plus une grille CSS en rangées : une notask courte à côté d'une longue
+   laissait sinon un grand vide sous elle jusqu'à la rangée suivante. */
 .trash-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1rem;
-  align-items: start;
+  position: relative;
+  --mosaic-min-col: 240px;
+  --mosaic-gap: 16px;
+}
+.trash-grid .trash-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: left .26s cubic-bezier(.34, 1.4, .5, 1), top .26s cubic-bezier(.34, 1.4, .5, 1);
 }
 .trash-card {
   border: none;

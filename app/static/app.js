@@ -3431,6 +3431,7 @@ async function loadArchivedItems() {
     groupe.appendChild(sousListe);
     liste.appendChild(groupe);
   }
+  layoutMosaic(true);
 }
 
 async function ouvrirNotaskDemandeeParUrl() {
@@ -3554,6 +3555,7 @@ function renderTrash() {
 
     grid.appendChild(el);
   }
+  layoutMosaic(true); // rendu complet : positionnement instantané, cf. layoutMosaic()
 }
 
 /* Ligne d'un élément SEUL à la corbeille, imbriquée sous sa notask d'origine
@@ -3650,6 +3652,7 @@ async function loadTrashedItems() {
     groupe.appendChild(sousListe);
     liste.appendChild(groupe);
   }
+  layoutMosaic(true);
 }
 
 /* -------------------------------- Libellés --------------------------------
@@ -3942,10 +3945,31 @@ const mosaicResizeObserver = new ResizeObserver((entries) => {
   if (changed) scheduleLayoutMosaic();
 });
 
+/* Grilles qui partagent le masonry de l'accueil. Une seule liste, un seul
+   moteur (poserMosaique ci-dessous) : la corbeille, les lignes archivées et
+   les lignes en corbeille s'empilent exactement comme la mosaïque de
+   l'accueil — cartes calées sous la plus basse de leur colonne, sans les
+   trous d'une grille CSS en rangées. Une grille masquée (vue inactive) a une
+   largeur nulle et est simplement sautée, puis recalculée à l'affichage. */
+const MOSAIQUES = [
+  { grille: '#notes-grid', cartes: '#notes-grid .note', pile: '.composer-stack' },
+  { grille: '#trash-grid', cartes: '#trash-grid .trash-card' },
+  { grille: '#archived-items-list', cartes: '#archived-items-list .archived-group' },
+  { grille: '#trashed-items-list', cartes: '#trashed-items-list .archived-group' },
+];
+
 function layoutMosaic(instant) {
-  const grid = $('#notes-grid');
-  const stack = $('.composer-stack');
-  if (!grid || !stack) return;
+  /* Un SEUL disconnect() pour toutes les grilles, avant de les repositionner
+     l'une après l'autre : appelé à l'intérieur de poserMosaique(), il
+     effacerait les observations que la grille précédente vient de poser. */
+  mosaicResizeObserver.disconnect();
+  for (const m of MOSAIQUES) {
+    poserMosaique($(m.grille), $$(m.cartes), m.pile ? $(m.pile) : null, instant);
+  }
+}
+
+function poserMosaique(grid, cartes, stack, instant) {
+  if (!grid) return;
   if (instant) grid.classList.add('mosaic-instant');
 
   const css = getComputedStyle(grid);
@@ -3958,10 +3982,8 @@ function layoutMosaic(instant) {
   const colWidth = (containerWidth - gap * (cols - 1)) / cols;
   const heights = new Array(cols).fill(0);
 
-  // Repart d'un suivi propre à chaque calcul : les cartes d'un rendu
-  // précédent (détruites depuis, voir renderNotes()) ne doivent pas rester
-  // observées indéfiniment.
-  mosaicResizeObserver.disconnect();
+  // (Le suivi est remis à plat une seule fois par layoutMosaic(), pour
+  // toutes les grilles à la fois — voir le disconnect() là-bas.)
 
   // Pose l'élément à la colonne `col` (0-indexée), sur `span` colonnes, à la
   // hauteur atteinte par la plus haute des colonnes concernées — puis met à
@@ -3989,10 +4011,13 @@ function layoutMosaic(instant) {
     return best;
   };
 
-  const stackSpan = Math.min(2, cols);
-  place(stack, Math.max(0, Math.floor((cols - stackSpan) / 2)), stackSpan);
+  // Bloc composeur+recherche : propre à l'accueil, absent des autres grilles.
+  if (stack) {
+    const stackSpan = Math.min(2, cols);
+    place(stack, Math.max(0, Math.floor((cols - stackSpan) / 2)), stackSpan);
+  }
 
-  for (const el of $$('#notes-grid .note')) {
+  for (const el of cartes) {
     const span = el.classList.contains('search-hit') ? Math.min(2, cols) : 1;
     place(el, bestStart(span), span);
   }
