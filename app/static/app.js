@@ -1023,6 +1023,48 @@ const ICON_CHOICES = {
 
   /* Général (suite) — 20 au total dans le thème. */
   trombone: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#8d6e63"/><path d="M15.5 9.5v6a3 3 0 0 1-6 0V9a2 2 0 0 1 4 0v5.5a1 1 0 0 1-2 0V10" fill="none" stroke="#efebe9" stroke-width="1.6" stroke-linecap="round"/></svg>',
+
+  /* ── Événements & occasions ─────────────────────────────────── */
+  tv: '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="13" rx="2" fill="#546e7a"/><rect x="4" y="6.5" width="16" height="9.5" rx="1" fill="#4fc3f7"/><rect x="10" y="18" width="4" height="2" rx="1" fill="#546e7a"/><path d="M8 20h8" stroke="#546e7a" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>',
+  interruption: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ef5350"/><rect x="8.5" y="7.5" width="2.5" height="9" rx="1.2" fill="#fff"/><rect x="13" y="7.5" width="2.5" height="9" rx="1.2" fill="#fff"/></svg>',
+  urgente: '<svg viewBox="0 0 24 24"><rect x="5" y="12" width="14" height="7.5" rx="1.5" fill="#b71c1c"/><path d="M7 12a5 5 0 0 1 10 0z" fill="#ef5350"/><ellipse cx="12" cy="10" rx="2.5" ry="1.5" fill="#ff8a80"/><rect x="3.5" y="18.5" width="17" height="2" rx="1" fill="#7f0000"/><path d="M12 3.5v2M6.5 5.8l1.2 1.2M17.5 5.8l-1.2 1.2" stroke="#ff5252" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>',
+  anniversaire: '<svg viewBox="0 0 24 24"><ellipse cx="7" cy="8.5" rx="3.2" ry="4.2" fill="#ef5350"/><path d="M7 12.7c0 0-.4 1 0 1.8" stroke="#ef5350" stroke-width="1.2" stroke-linecap="round" fill="none"/><ellipse cx="17" cy="7.5" rx="3.2" ry="4.2" fill="#42a5f5"/><path d="M17 11.7c0 0-.4 1 0 1.8" stroke="#42a5f5" stroke-width="1.2" stroke-linecap="round" fill="none"/><ellipse cx="12" cy="9.5" rx="3.2" ry="4.2" fill="#ffd54f"/><path d="M12 13.7c0 0-.4 1 0 1.8" stroke="#fbd835" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M7 14.5l-1.5 6M17 13.5l1 7M12 15.5v6" stroke="#bdbdbd" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>',
+  fete: '<svg viewBox="0 0 24 24"><path d="M4 20.5l6-10.5 5 5z" fill="#ffd54f"/><path d="M10 10l3.5-5.5" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="14.5" cy="5" r="1.5" fill="#ef5350"/><circle cx="18.5" cy="7.5" r="1.2" fill="#42a5f5"/><circle cx="20" cy="12" r="1" fill="#66bb6a"/><circle cx="17" cy="16" r="1.3" fill="#ab47bc"/><circle cx="11.5" cy="3" r="1" fill="#ff8a65"/><circle cx="20.5" cy="4" r="0.8" fill="#ffd54f"/></svg>',
+  vacances: '<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="2" height="12" rx="1" fill="#8d6e63"/><path d="M11.5 10c-1-3.5-4.5-4.5-5.5-7.5C8 3.5 10.5 5.5 11.5 9z" fill="#66bb6a"/><path d="M12.5 10c1-3.5 4.5-4.5 5.5-7.5C16 3.5 13.5 5.5 12.5 9z" fill="#81c784"/><path d="M12 10c-1.5-2.5-.5-7 0-9.5.5 2.5 1.5 5.5 0 7z" fill="#a5d6a7"/><ellipse cx="11.5" cy="22" rx="4" ry="1" fill="#f9a825"/><circle cx="19.5" cy="5.5" r="3" fill="#ffd54f"/></svg>',
+
+  /* ── Fruits ──────────────────────────────────────────────────── */
+  fraise: '🍓', pomme: '🍎', banane: '🍌', orange: '🍊', raisin: '🍇',
+  pasteque: '🍉', citron: '🍋', poire: '🍐', peche: '🍑', cerise: '🍒',
+  mangue: '🥭', ananas: '🍍', myrtille: '🫐', kiwi: '🥝', melon: '🍈',
+  grenade: '🍎',
+
+  /* ── Légumes ─────────────────────────────────────────────────── */
+  carotte: '🥕', brocoli: '🥦', mais: '🌽', poivron: '🫑', oignon: '🧅',
+  ail: '🧄', concombre: '🥒', pomdeterre: '🥔', laitue: '🥬',
+  aubergine: '🍆', haricot: '🫘', tomate: '🍅', pois: '🫛',
+
+  /* ── Jardin ──────────────────────────────────────────────────── */
+  arrosoir: '🪣', bouquet: '💐', tournesol: '🌻', tulipe: '🌷',
+  rose: '🌹', herbe: '🌿', plantule: '🌱', plante2: '🪴',
+  ble: '🌾', graine: '🌰', feuillage: '🍃', champarden: '🍄',
+
+  /* ── Animaux ─────────────────────────────────────────────────── */
+  chat: '🐱', chien: '🐶', lapin: '🐰', ours: '🐻', vache: '🐮',
+  cochon: '🐷', mouton: '🐑', cheval: '🐴', renard: '🦊', lion: '🦁',
+  tigre: '🐯', singe: '🐵', elephant: '🐘', tortue: '🐢', serpent: '🐍',
+  pingouin: '🐧', canard: '🦆', grenouille: '🐸', loup: '🐺', abeille: '🐝',
+  dauphin: '🐬', baleine: '🐳', pieuvre: '🐙', crabe: '🦀', papillon2: '🦋',
+
+  /* ── Smileys ─────────────────────────────────────────────────── */
+  smile: '😀', laugh: '😂', love: '😍', cool: '😎', think: '🤔',
+  sleep: '😴', cry: '😭', angry: '😡', explode: '🤯', sweat: '😅',
+  party2: '🥳', happy: '😊', salute: '🫡', plead: '🥺', huff: '😤',
+  angel: '😇', starstruck: '🤩', smirk: '😏', weary: '🥹', grimace: '😬',
+
+  /* ── Gestes ──────────────────────────────────────────────────── */
+  thumbup: '👍', thumbdown: '👎', okhand: '👌', fuck: '🖕', peace: '✌️',
+  rock: '🤘', clap: '👏', raise: '🙌', stop: '✋', crossed: '🤞',
+  point: '🫵', callme: '🤙', lovehands: '🫶', fist: '👊', wave2: '👋',
 };
 
 /* Affiche une échéance de façon lisible : « aujourd'hui 14:00 », « 3 août 09:30 ».
@@ -1408,11 +1450,11 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
 const ICON_THEMES = [
   {
     titre: 'Général',
-    cles: ['star', 'heart', 'flag', 'idea', 'gift', 'money', 'target', 'gem', 'key', 'lock', 'warning', 'document', 'trombone', 'book', 'school', 'work', 'home', 'shopping', 'travel', 'globe'],
+    cles: ['star', 'heart', 'flag', 'idea', 'gift', 'money', 'target', 'gem', 'key', 'lock', 'warning', 'document', 'trombone', 'book', 'school', 'work', 'home', 'shopping', 'travel', 'globe', 'anniversaire', 'fete', 'vacances'],
   },
   {
     titre: 'Vie quotidienne',
-    cles: ['health', 'sport', 'football', 'bike', 'car', 'train', 'plane', 'bed', 'coffee', 'food', 'pizza', 'cake', 'umbrella', 'alarm', 'phone', 'mail', 'camera', 'music', 'paintbrush', 'scissors', 'tool', 'magnifier'],
+    cles: ['health', 'sport', 'football', 'bike', 'car', 'train', 'plane', 'bed', 'coffee', 'food', 'pizza', 'cake', 'umbrella', 'alarm', 'phone', 'mail', 'camera', 'music', 'paintbrush', 'scissors', 'tool', 'magnifier', 'tv', 'urgente', 'interruption'],
   },
   {
     titre: 'Nature',
@@ -1449,6 +1491,30 @@ const ICON_THEMES = [
   {
     titre: 'Pastilles',
     cles: ['dotred', 'dotdeeporange', 'dotorange', 'dotamber', 'dotyellow', 'dotlime', 'dotlightgreen', 'dotgreen', 'dotteal', 'dotcyan', 'dotlightblue', 'dotblue', 'dotindigo', 'dotdeeppurple', 'dotpurple', 'dotpink', 'dotbrown', 'dotbluegrey', 'dotgrey', 'dotwhite'],
+  },
+  {
+    titre: 'Fruits',
+    cles: ['fraise', 'pomme', 'banane', 'orange', 'raisin', 'pasteque', 'citron', 'poire', 'peche', 'cerise', 'mangue', 'ananas', 'myrtille', 'kiwi', 'melon'],
+  },
+  {
+    titre: 'Légumes',
+    cles: ['carotte', 'brocoli', 'mais', 'poivron', 'oignon', 'ail', 'concombre', 'pomdeterre', 'laitue', 'aubergine', 'haricot', 'tomate', 'pois'],
+  },
+  {
+    titre: 'Jardin',
+    cles: ['arrosoir', 'bouquet', 'tournesol', 'tulipe', 'rose', 'herbe', 'plantule', 'plante2', 'ble', 'graine', 'feuillage', 'champarden'],
+  },
+  {
+    titre: 'Animaux',
+    cles: ['chat', 'chien', 'lapin', 'ours', 'vache', 'cochon', 'mouton', 'cheval', 'renard', 'lion', 'tigre', 'singe', 'elephant', 'tortue', 'serpent', 'pingouin', 'canard', 'grenouille', 'loup', 'abeille', 'dauphin', 'baleine', 'pieuvre', 'crabe', 'papillon2'],
+  },
+  {
+    titre: 'Smileys',
+    cles: ['smile', 'laugh', 'love', 'cool', 'think', 'sleep', 'cry', 'angry', 'explode', 'sweat', 'party2', 'happy', 'salute', 'plead', 'huff', 'angel', 'starstruck', 'smirk', 'weary', 'grimace'],
+  },
+  {
+    titre: 'Gestes',
+    cles: ['thumbup', 'thumbdown', 'okhand', 'fuck', 'peace', 'rock', 'clap', 'raise', 'stop', 'crossed', 'point', 'callme', 'lovehands', 'fist', 'wave2'],
   },
   {
     titre: 'notask',
@@ -1560,6 +1626,64 @@ const ICON_MOTS = {
   regex: 'expression régulière regex motif', refactor: 'refactorisation réécriture',
   review: 'revue de code relecture', deploy: 'déploiement mise en production',
   docs: 'documentation manuel', trombone: 'trombone attache pièce jointe',
+  // Événements
+  tv: 'télévision télé écran', interruption: 'pause interruption stop arrêt',
+  urgente: 'urgent sirène alerte alarme rouge priorité', anniversaire: 'anniversaire ballon fête année',
+  fete: 'fête célébration confetti cotillon soirée party', vacances: 'vacances palmier plage soleil repos',
+  // Fruits
+  fraise: 'fraise fruit rouge', pomme: 'pomme fruit', banane: 'banane fruit jaune',
+  orange: 'orange agrume fruit', raisin: 'raisin grappe fruit', pasteque: 'pastèque melon fruit été',
+  citron: 'citron agrume jaune', poire: 'poire fruit', peche: 'pêche fruit',
+  cerise: 'cerise fruit rouge', mangue: 'mangue fruit tropical', ananas: 'ananas fruit tropical',
+  myrtille: 'myrtille fruit bleu', kiwi: 'kiwi fruit', melon: 'melon fruit',
+  grenade: 'grenade fruit rouge',
+  // Légumes
+  carotte: 'carotte légume orange', brocoli: 'brocoli légume vert',
+  mais: 'maïs légume jaune', poivron: 'poivron légume',
+  oignon: 'oignon légume', ail: 'ail légume aromate',
+  concombre: 'concombre légume', pomdeterre: 'pomme de terre légume patate',
+  laitue: 'laitue salade légume', aubergine: 'aubergine légume violet',
+  haricot: 'haricot légume', tomate: 'tomate légume fruit rouge', pois: 'pois légume vert',
+  // Jardin
+  arrosoir: 'arrosoir jardinage eau', bouquet: 'bouquet fleurs',
+  tournesol: 'tournesol fleur jaune', tulipe: 'tulipe fleur',
+  rose: 'rose fleur', herbe: 'herbe feuille plante',
+  plantule: 'plantule graine pousser jardinage', plante2: 'plante pot intérieur',
+  ble: 'blé grain céréale', graine: 'graine noisette', feuillage: 'feuillage nature vert',
+  champarden: 'champignon nature forêt',
+  // Animaux
+  chat: 'chat félin animal', chien: 'chien animal domestique',
+  lapin: 'lapin animal', ours: 'ours animal', vache: 'vache animal ferme',
+  cochon: 'cochon porc animal ferme', mouton: 'mouton animal laine',
+  cheval: 'cheval équitation animal', renard: 'renard animal',
+  lion: 'lion animal sauvage', tigre: 'tigre animal sauvage',
+  singe: 'singe primate animal', elephant: 'éléphant animal',
+  tortue: 'tortue animal lent', serpent: 'serpent reptile animal',
+  pingouin: 'pingouin oiseau glace', canard: 'canard oiseau animal',
+  grenouille: 'grenouille amphibien animal', loup: 'loup animal sauvage',
+  abeille: 'abeille insecte miel', dauphin: 'dauphin océan animal',
+  baleine: 'baleine océan animal', pieuvre: 'pieuvre poulpe animal mer',
+  crabe: 'crabe animal mer crustacé', papillon2: 'papillon insecte',
+  // Smileys
+  smile: 'sourire heureux content', laugh: 'rire drôle mort de rire',
+  love: 'amour yeux cœurs', cool: 'cool lunettes de soleil',
+  think: 'réfléchir penser doute', sleep: 'dormir sommeil zzz',
+  cry: 'pleurer triste larmes', angry: 'en colère fâché rouge',
+  explode: 'tête qui explose choqué', sweat: 'soulagement sueur',
+  party2: 'fête anniversaire célébration', happy: 'heureux sourire doux',
+  salute: 'salut respect militaire', plead: 'pitié mignon triste',
+  huff: 'vapeur fâché agacé', angel: 'ange innocent gentil',
+  starstruck: 'étoiles dans les yeux admiratif', smirk: 'petit sourire malin',
+  weary: 'soupir ému touché', grimace: 'grimace gêne malaise',
+  // Gestes
+  thumbup: 'pouce en haut bravo ok bien', thumbdown: 'pouce en bas non mauvais',
+  okhand: 'ok parfait', fuck: 'doigt honneur fuck',
+  peace: 'paix victoire deux doigts', rock: 'rock métal cornes',
+  clap: 'applaudir bravo', raise: 'lever les mains hourra',
+  stop: 'stop arrêt main', crossed: 'doigts croisés chance espoir',
+  point: 'pointer désigner toi', callme: 'appelle-moi téléphone',
+  lovehands: 'cœur mains amour', fist: 'poing frapper',
+  wave2: 'salut au revoir bonjour main',
 };
 
 /* Thèmes prêts à l'affichage : chaque entrée ne garde que les icônes qui

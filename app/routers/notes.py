@@ -109,6 +109,32 @@ ICON_KEYS = {
     "ledger", "piggybank", "goldbar", "contract", "nft",
     "fonction", "variable", "regex", "refactor", "review", "deploy",
     "docs", "trombone",
+    # Événements & occasions
+    "tv", "interruption", "urgente", "anniversaire", "fete", "vacances",
+    # Fruits
+    "fraise", "pomme", "banane", "orange", "raisin", "pasteque",
+    "citron", "poire", "peche", "cerise", "mangue", "ananas",
+    "myrtille", "kiwi", "melon", "grenade",
+    # Légumes
+    "carotte", "brocoli", "mais", "poivron", "oignon", "ail",
+    "concombre", "pomdeterre", "laitue", "aubergine", "haricot",
+    "tomate", "pois",
+    # Jardin
+    "arrosoir", "bouquet", "tournesol", "tulipe", "rose", "herbe",
+    "plantule", "plante2", "ble", "graine", "feuillage", "champarden",
+    # Animaux
+    "chat", "chien", "lapin", "ours", "vache", "cochon", "mouton",
+    "cheval", "renard", "lion", "tigre", "singe", "elephant", "tortue",
+    "serpent", "pingouin", "canard", "grenouille", "loup", "abeille",
+    "dauphin", "baleine", "pieuvre", "crabe", "papillon2",
+    # Smileys
+    "smile", "laugh", "love", "cool", "think", "sleep", "cry", "angry",
+    "explode", "sweat", "party2", "happy", "salute", "plead", "huff",
+    "angel", "starstruck", "smirk", "weary", "grimace",
+    # Gestes
+    "thumbup", "thumbdown", "okhand", "fuck", "peace", "rock", "clap",
+    "raise", "stop", "crossed", "point", "callme", "lovehands", "fist",
+    "wave2",
 }
 
 
