@@ -884,17 +884,14 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 }
 #archived-items-list { display: grid; gap: .75rem; }
 
-/* Un groupe = les lignes archivées d'une même notask, réunies sous son
-   icône et son titre — même principe de carte que la mosaïque de
-   l'accueil (voir .note), en plus sobre puisqu'il n'y a ici qu'un
-   en-tête et des lignes, jamais de contenu ni de pièces jointes. */
-.archived-group {
-  border-radius: var(--shape-sm);
-  background: var(--md-surface-2);
-  padding: .625rem .75rem .75rem;
-}
+/* Un groupe = les lignes archivées (ou mises seules à la corbeille) d'une
+   même notask, réunies sous son icône et son titre. La carte elle-même
+   (fond, coins, ombre au survol) vient de .note, la VRAIE classe des
+   cartes de l'accueil (voir renderNotes) — .archived-group n'ajoute que ce
+   qui n'existe pas dans une carte normale : l'en-tête cliquable et
+   l'espacement entre les lignes imbriquées. */
+.archived-group { padding-bottom: .625rem; }
 .archived-group-title {
-  margin: 0 0 .5rem 0;
   cursor: pointer;
   border-radius: var(--shape-xs, 6px);
 }
@@ -902,18 +899,23 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   outline: none;
   color: var(--md-primary, inherit);
 }
-.archived-group-title h3 {
-  margin: 0;
-  font-size: .9375rem;
-  font-weight: 600;
-}
 .archived-group-items { display: grid; gap: .375rem; }
-#archived-items-list .agenda-item { border-radius: var(--shape-sm); position: relative; }
+#archived-items-list .agenda-item,
+#trashed-items-list .agenda-item { border-radius: var(--shape-sm); position: relative; }
 #archived-items-list .agenda-item:hover .agenda-item-actions,
-#archived-items-list .agenda-item:focus-within .agenda-item-actions { opacity: 1; }
+#archived-items-list .agenda-item:focus-within .agenda-item-actions,
+#trashed-items-list .agenda-item:hover .agenda-item-actions,
+#trashed-items-list .agenda-item:focus-within .agenda-item-actions { opacity: 1; }
 @media (hover: none) {
-  #archived-items-list .agenda-item-actions { opacity: 1; }
+  #archived-items-list .agenda-item-actions,
+  #trashed-items-list .agenda-item-actions { opacity: 1; }
 }
+
+/* Lignes en corbeille (voir #trashed-items dans index.html) : même
+   disposition que les lignes archivées ci-dessus, sous la grille des
+   notasks supprimées plutôt que sous la mosaïque. */
+#trashed-items { margin-top: 2rem; }
+#trashed-items-list { display: grid; gap: .75rem; }
 
 .agenda-group + .agenda-group { margin-top: 1.25rem; }
 /* …sauf en colonnes : chacune démarre en haut de sa propre colonne, la

@@ -2295,6 +2295,40 @@ function cibleAspiration(action) {
   return { corbeille: '#nav-trash', archives: '#nav-archives', notes: '#nav-notes' }[action];
 }
 
+/* Suppression DÉFINITIVE : la carte se replie sur elle-même et s'efface sur
+   place, sans destination — contrairement à aspirerNotask() qui vole vers
+   une entrée du menu, rien ici ne "reçoit" la carte, elle cesse simplement
+   d'exister. Même esprit (un clone animé, l'originale masquée aussitôt) : la
+   disparition doit rester lisible même si la liste se recharge pendant le
+   vol de l'animation. */
+function disparaitreCarte(el) {
+  if (!el || !el.getBoundingClientRect || !el.animate) return Promise.resolve();
+  el.style.visibility = 'hidden';
+  const rect = el.getBoundingClientRect();
+  if (!rect.width) return Promise.resolve();
+  const clone = el.cloneNode(true);
+  clone.style.cssText = `
+    position: fixed;
+    left: ${rect.left}px; top: ${rect.top}px;
+    width: ${rect.width}px; height: ${rect.height}px;
+    margin: 0; z-index: 3000; pointer-events: none;
+    border-radius: var(--shape-sm); overflow: hidden;
+    transform-origin: center center;
+  `;
+  document.body.appendChild(clone);
+  const animation = clone.animate(
+    [
+      { transform: 'scale(1)', opacity: 1 },
+      { transform: 'scale(.88)', opacity: .8, offset: .35 },
+      { transform: 'scale(0)', opacity: 0 },
+    ],
+    { duration: 380, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
+  );
+  return animation.finished
+    .catch(() => {})
+    .then(() => clone.remove());
+}
+
 function animerOuvertureDialogue(dlg) {
   const r = dlg.getBoundingClientRect();
   // transform-origin exprimée dans le repère de la boîte : le point cliqué
@@ -3371,7 +3405,7 @@ async function loadArchivedItems() {
   for (const [noteId, lignes] of groupes) {
     const premiere = lignes[0];
     const groupe = document.createElement('div');
-    groupe.className = 'archived-group c-' + premiere.color;
+    groupe.className = 'note archived-group c-' + premiere.color;
 
     const header = document.createElement('div');
     header.className = 'note-title-row archived-group-title';
@@ -3447,6 +3481,7 @@ async function loadTrash() {
   await Promise.all(notes.map(decryptNote));
   state.trashNotes = notes;
   renderTrash();
+  loadTrashedItems();
 }
 
 function daysLeftInTrash(trashedAt) {
@@ -3498,17 +3533,122 @@ function renderTrash() {
     ajouterBoutonsCopieCode(el);
 
     el.querySelector('[data-act=restore]').onclick = async () => {
-      await api('/notes/' + n.id + '/restore', { method: 'POST' });
+      // Même mécanique que la mosaïque de l'accueil : la carte vole vers
+      // l'entrée "notasks" plutôt que de disparaître d'un coup.
+      const vol = aspirerNotask(el, cibleAspiration('notes'));
+      const envoi = api('/notes/' + n.id + '/restore', { method: 'POST' });
+      await Promise.all([vol, envoi]);
       loadTrash();
       updateTaskBadges();
     };
     el.querySelector('[data-act=purge]').onclick = async () => {
       if (!confirm('Supprimer définitivement cette notask ? Cette action est irréversible.')) return;
-      await api('/notes/' + n.id, { method: 'DELETE' });
+      // Suppression définitive : rien ne "reçoit" la carte, elle se replie
+      // sur elle-même et s'efface (voir disparaitreCarte), au lieu de voler
+      // vers un point du menu comme un archivage ou une mise à la corbeille.
+      const pli = disparaitreCarte(el);
+      const envoi = api('/notes/' + n.id, { method: 'DELETE' });
+      await Promise.all([pli, envoi]);
       loadTrash();
     };
 
     grid.appendChild(el);
+  }
+}
+
+/* Ligne d'un élément SEUL à la corbeille, imbriquée sous sa notask d'origine
+   (voir loadTrashedItems ci-dessous) — pendant de .trash-card-actions pour
+   une ligne plutôt qu'une notask entière. Pas de case à cocher active : une
+   ligne à la corbeille est aussi inerte qu'une notask qui y est (voir
+   renderTrash), on la restaure d'abord pour y toucher. */
+function creerLigneCorbeille(it, rafraichir) {
+  const row = document.createElement('div');
+  row.className = 'agenda-item c-' + it.color;
+  if (LABEL_COLOR_HEX[it.color]) {
+    row.style.background = hexToRgba(LABEL_COLOR_HEX[it.color], ATTENUATION_PASTILLE);
+  }
+  const icon = ICON_CHOICES[it.icon] || ICON_CHOICES.spoonblue;
+  const label = it.text || 'Ligne sans texte';
+  row.innerHTML = `
+    <span class="agenda-item-icon">${icon}</span>
+    <span class="agenda-item-body">
+      <span class="agenda-item-text" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <span class="agenda-item-due">${daysLeftInTrash(it.trashed_at)} j avant suppression définitive</span>
+    </span>
+    <span class="agenda-item-actions">
+      <button type="button" data-act="restore" title="Restaurer" aria-label="Restaurer">${ICONS.undo}</button>
+      <button type="button" data-act="purge" title="Supprimer définitivement" aria-label="Supprimer définitivement">${ICONS.trash}</button>
+    </span>`;
+
+  row.querySelector('[data-act=restore]').onclick = async (e) => {
+    e.stopPropagation();
+    const vol = aspirerNotask(row, cibleAspiration('notes'));
+    const envoi = api(`/notes/${it.note_id}/items/${it.id}`, { method: 'PATCH', body: { trashed: false } });
+    await Promise.all([vol, envoi]);
+    rafraichir();
+    updateTaskBadges();
+  };
+  row.querySelector('[data-act=purge]').onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm('Supprimer définitivement cette ligne ? Cette action est irréversible.')) return;
+    const pli = disparaitreCarte(row);
+    const envoi = api(`/notes/${it.note_id}/items/${it.id}`, { method: 'DELETE' });
+    await Promise.all([pli, envoi]);
+    rafraichir();
+  };
+  row.addEventListener('click', () => ouvrirNoteParId(it.note_id));
+  return row;
+}
+
+/* Lignes mises SEULES à la corbeille (voir NoteItem.trashed_at), imbriquées
+   sous leur notask d'origine — pendant exact de loadArchivedItems() côté
+   Archives, jusqu'au regroupement par notask (voir ce commentaire-là pour
+   le détail du principe). */
+async function loadTrashedItems() {
+  const bloc = $('#trashed-items');
+  if (!bloc) return;
+
+  let items;
+  try {
+    items = await api('/notes/trashed-items');
+  } catch {
+    bloc.hidden = true;
+    return;
+  }
+  await Promise.all(items.map(async (it) => {
+    it.text = await decryptField(it.text);
+    it.note_title = await decryptField(it.note_title);
+  }));
+
+  bloc.hidden = items.length === 0;
+  const liste = $('#trashed-items-list');
+  liste.innerHTML = '';
+
+  const groupes = new Map();
+  for (const it of items) {
+    if (!groupes.has(it.note_id)) groupes.set(it.note_id, []);
+    groupes.get(it.note_id).push(it);
+  }
+
+  for (const [noteId, lignes] of groupes) {
+    const premiere = lignes[0];
+    const groupe = document.createElement('div');
+    groupe.className = 'note archived-group c-' + premiere.color;
+
+    const header = document.createElement('div');
+    header.className = 'note-title-row archived-group-title';
+    const icon = ICON_CHOICES[premiere.icon] || ICON_CHOICES.spoonblue;
+    header.innerHTML = `<span class="note-icon">${icon}</span><h3>${escapeHtml(premiere.note_title || 'Notask sans titre')}</h3>`;
+    header.tabIndex = 0;
+    header.setAttribute('role', 'button');
+    header.addEventListener('click', () => ouvrirNoteParId(noteId));
+    groupe.appendChild(header);
+
+    const sousListe = document.createElement('div');
+    sousListe.className = 'archived-group-items';
+    for (const it of lignes) sousListe.appendChild(creerLigneCorbeille(it, loadTrashedItems));
+    groupe.appendChild(sousListe);
+    liste.appendChild(groupe);
   }
 }
 
@@ -9702,17 +9842,21 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
         const archiver = b.dataset.act === 'archive';
         // Dans les Archives, le même bouton fait l'inverse : il désarchive.
         const valeurArchive = modeArchive !== 'unarchive';
+        // Même mécanique que sur l'accueil (voir aspirerNotask) : la ligne
+        // vole vers l'entrée de menu qui correspond à sa destination, au
+        // lieu de disparaître d'un coup au rechargement.
+        const destination = !archiver ? 'corbeille' : (valeurArchive ? 'archives' : 'notes');
+        const vol = aspirerNotask(btn, cibleAspiration(destination));
         try {
-          if (t.kind === 'item') {
-            await api(`/notes/${t.note_id}/items/${t.id}`, {
-              method: 'PATCH',
-              body: archiver ? { archived: valeurArchive } : { trashed: true },
-            });
-          } else if (archiver) {
-            await api('/notes/' + t.note_id, { method: 'PATCH', body: { archived: true } });
-          } else {
-            await api('/notes/' + t.note_id, { method: 'DELETE' });
-          }
+          const envoi = t.kind === 'item'
+            ? api(`/notes/${t.note_id}/items/${t.id}`, {
+                method: 'PATCH',
+                body: archiver ? { archived: valeurArchive } : { trashed: true },
+              })
+            : archiver
+              ? api('/notes/' + t.note_id, { method: 'PATCH', body: { archived: true } })
+              : api('/notes/' + t.note_id, { method: 'DELETE' });
+          await Promise.all([vol, envoi]);
         } catch (err) {
           alert(err.message);
           return;

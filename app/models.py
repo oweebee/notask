@@ -560,6 +560,21 @@ class ArchivedItemOut(SQLModel):
         return _due_at_utc(v)
 
 
+class TrashedItemOut(SQLModel):
+    """Ligne à cocher mise SEULE à la corbeille (NoteItem.trashed_at posé,
+    notask parente elle-même hors corbeille) — pendant d'ArchivedItemOut,
+    affichée en Corbeille plutôt qu'en Archives. `trashed_at` sert au
+    décompte avant purge définitive (voir TRASH_RETENTION_DAYS)."""
+    id: int
+    note_id: int
+    text: str
+    checked: bool
+    trashed_at: datetime
+    color: str
+    icon: Optional[str] = None
+    note_title: Optional[str] = None
+
+
 class NoteCreate(NoteBase):
     items: List[NoteItemIn] = []
     label_ids: List[int] = []

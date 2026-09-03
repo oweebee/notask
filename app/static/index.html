@@ -300,6 +300,14 @@
       </div>
       <div class="trash-grid" id="trash-grid"></div>
       <div class="empty" id="trash-empty" hidden>La corbeille est vide.</div>
+
+      <!-- Lignes mises SEULES à la corbeille (notask parente toujours
+           active) : pendant de #archived-items côté Archives, même
+           principe d'imbrication par notask d'origine. -->
+      <section id="trashed-items" hidden>
+        <h2 class="archived-items-title">lignes en corbeille</h2>
+        <div id="trashed-items-list"></div>
+      </section>
     </section>
 
     <!-- ---- Notasks prévues (desktop uniquement) ----

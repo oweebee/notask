@@ -16,6 +16,7 @@ from app.deps import get_current_user
 from app.models import (
     RECUR_VALUES,
     ArchivedItemOut,
+    TrashedItemOut,
     Label,
     Note,
     NoteAttachment,
@@ -356,10 +357,29 @@ def _purge_expired_trash(user: User, session: Session) -> None:
             Note.trashed_at < cutoff,
         )
     ).all()
-    if not expired:
-        return
     for note in expired:
         _purge_note(note, session)
+    if expired:
+        session.commit()
+
+    # Même retenue, mais pour une LIGNE mise seule à la corbeille (notask
+    # parente toujours active) : sans ce second passage, ces lignes ne
+    # seraient jamais purgées puisqu'elles ne dépendent d'aucune Note
+    # elle-même expirée. Jointure sur Note.user_id : NoteItem ne porte pas
+    # l'utilisateur directement.
+    expired_items = session.exec(
+        select(NoteItem)
+        .join(Note, NoteItem.note_id == Note.id)
+        .where(
+            Note.user_id == user.id,
+            NoteItem.trashed_at.is_not(None),
+            NoteItem.trashed_at < cutoff,
+        )
+    ).all()
+    if not expired_items:
+        return
+    for item in expired_items:
+        session.delete(item)
     session.commit()
 
 
@@ -442,6 +462,38 @@ def list_archived_items(
             id=item.id, note_id=note.id, text=item.text, checked=item.checked,
             due_at=item.due_at, due_end_at=item.due_end_at, all_day=item.all_day,
             color=note.color, icon=note.icon, note_title=note.title,
+        )
+        for item, note in rows
+    ]
+
+
+@router.get("/trashed-items", response_model=List[TrashedItemOut])
+def list_trashed_items(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Lignes à cocher mises SEULES à la corbeille (voir NoteItem.trashed_at),
+    pendant de list_archived_items() côté Corbeille — la notask parente,
+    elle, reste active. Une ligne dont la notask ENTIÈRE est à la corbeille
+    n'apparaît pas ici : elle est déjà visible, imbriquée, dans la carte de
+    cette notask en Corbeille.
+
+    Déclarée avant "/{note_id}" pour la même raison qu'archived-items."""
+    _purge_expired_trash(user, session)
+    rows = session.exec(
+        select(NoteItem, Note)
+        .join(Note, NoteItem.note_id == Note.id)
+        .where(
+            Note.user_id == user.id,
+            NoteItem.trashed_at.is_not(None),
+            Note.trashed_at.is_(None),
+        )
+    ).all()
+    return [
+        TrashedItemOut(
+            id=item.id, note_id=note.id, text=item.text, checked=item.checked,
+            trashed_at=item.trashed_at, color=note.color, icon=note.icon,
+            note_title=note.title,
         )
         for item, note in rows
     ]
@@ -706,6 +758,32 @@ def restore_note(
 
 # -------------------- Lignes à cocher, une par une --------------------
 # Utile pour dater une ligne ou la cocher sans réécrire toute la note.
+
+@router.delete("/{note_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_item(
+    note_id: int,
+    item_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Suppression DÉFINITIVE d'une ligne déjà mise seule à la corbeille
+    (voir update_item, payload {trashed: true}) — pendant de delete_note()
+    pour une ligne plutôt qu'une notask entière. Pas de double rôle ici,
+    contrairement à delete_note : la mise à la corbeille passe déjà par le
+    PATCH, cette route-ci ne fait donc jamais que la purge.
+
+    Aucun nettoyage Google Calendar à faire ici : sync_item() a déjà retiré
+    l'événement lié au moment où trashed_at a été posé (should_have_event
+    en dépend), voir update_item."""
+    note = _owned_note(note_id, user, session)
+    item = session.get(NoteItem, item_id)
+    if item is None or item.note_id != note_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")
+    if item.trashed_at is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cette ligne n'est pas dans la corbeille")
+    session.delete(item)
+    session.commit()
+
 
 @router.patch("/{note_id}/items/{item_id}", response_model=NoteItemOut)
 def update_item(
