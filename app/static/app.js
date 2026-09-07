@@ -4612,6 +4612,38 @@ function renderNotes() {
         loadNotes();
       });
     };
+    /* Armement en deux clics, partagé par « corbeille » et « archiver ».
+       Factorisé plutôt que recopié : les deux boutons doivent se désarmer
+       aux mêmes conditions (3 s, ou souris qui quitte la carte), et deux
+       copies auraient divergé à la première retouche. Chaque bouton garde
+       en revanche SA couleur d'armement (rouge pour la corbeille, orange
+       pour l'archivage — voir style.css) : le geste est le même, la portée
+       ne l'est pas, l'archivage étant parfaitement réversible. */
+    const armerEnDeuxClics = (bouton, { titre, titreArme, action }) => {
+      if (!bouton) return null;
+      let minuterie = null;
+      const desarmerCe = () => {
+        clearTimeout(minuterie);
+        minuterie = null;
+        bouton.classList.remove('arme');
+        bouton.title = titre;
+        bouton.setAttribute('aria-label', titre);
+      };
+      bouton.onclick = async () => {
+        if (!bouton.classList.contains('arme')) {
+          bouton.classList.add('arme');
+          bouton.title = titreArme;
+          bouton.setAttribute('aria-label', titreArme);
+          minuterie = setTimeout(desarmerCe, 3000);
+          return;
+        }
+        desarmerCe();
+        await action();
+      };
+      el.addEventListener('mouseleave', desarmerCe);
+      return desarmerCe;
+    };
+
     armerEnDeuxClics(el.querySelector('[data-act=archive]'), {
       titre: n.archived ? 'Désarchiver' : 'Archiver',
       titreArme: n.archived
@@ -4646,38 +4678,6 @@ function renderNotes() {
        L'armement se DÉSARME seul au bout de 3 s, et dès que la souris quitte
        la carte : un bouton rouge oublié là serait un piège au prochain
        passage, d'autant que ces boutons n'apparaissent qu'au survol. */
-    /* Armement en deux clics, partagé par « corbeille » et « archiver ».
-       Factorisé plutôt que recopié : les deux boutons doivent se désarmer
-       aux mêmes conditions (3 s, ou souris qui quitte la carte), et deux
-       copies auraient divergé à la première retouche. Chaque bouton garde
-       en revanche SA couleur d'armement (rouge pour la corbeille, orange
-       pour l'archivage — voir style.css) : le geste est le même, la portée
-       ne l'est pas, l'archivage étant parfaitement réversible. */
-    const armerEnDeuxClics = (bouton, { titre, titreArme, action }) => {
-      if (!bouton) return null;
-      let minuterie = null;
-      const desarmerCe = () => {
-        clearTimeout(minuterie);
-        minuterie = null;
-        bouton.classList.remove('arme');
-        bouton.title = titre;
-        bouton.setAttribute('aria-label', titre);
-      };
-      bouton.onclick = async () => {
-        if (!bouton.classList.contains('arme')) {
-          bouton.classList.add('arme');
-          bouton.title = titreArme;
-          bouton.setAttribute('aria-label', titreArme);
-          minuterie = setTimeout(desarmerCe, 3000);
-          return;
-        }
-        desarmerCe();
-        await action();
-      };
-      el.addEventListener('mouseleave', desarmerCe);
-      return desarmerCe;
-    };
-
     armerEnDeuxClics(el.querySelector('[data-act=delete]'), {
       titre: 'Mettre à la corbeille',
       titreArme: 'Cliquer à nouveau pour envoyer à la corbeille',
