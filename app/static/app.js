@@ -4612,17 +4612,23 @@ function renderNotes() {
         loadNotes();
       });
     };
-    el.querySelector('[data-act=archive]').onclick = async () => {
-      /* Aspiration LANCÉE avant l'appel réseau, mais attendue avec lui : la
-         carte part tout de suite (le geste doit répondre à l'instant), et le
-         rechargement n'a lieu qu'une fois les deux terminés — sinon la
-         mosaïque se redessinerait en plein vol et le clone se retrouverait à
-         voler vers une place que plus rien n'occupe. */
-      const vol = aspirerNotask(el, cibleAspiration(n.archived ? 'notes' : 'archives'));
-      const envoi = api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
-      await Promise.all([vol, envoi]);
-      loadNotes();
-    };
+    armerEnDeuxClics(el.querySelector('[data-act=archive]'), {
+      titre: n.archived ? 'Désarchiver' : 'Archiver',
+      titreArme: n.archived
+        ? 'Cliquer à nouveau pour désarchiver'
+        : 'Cliquer à nouveau pour archiver',
+      action: async () => {
+        /* Aspiration LANCÉE avant l'appel réseau, mais attendue avec lui : la
+           carte part tout de suite (le geste doit répondre à l'instant), et le
+           rechargement n'a lieu qu'une fois les deux terminés — sinon la
+           mosaïque se redessinerait en plein vol et le clone se retrouverait à
+           voler vers une place que plus rien n'occupe. */
+        const vol = aspirerNotask(el, cibleAspiration(n.archived ? 'notes' : 'archives'));
+        const envoi = api('/notes/' + n.id, { method: 'PATCH', body: { archived: !n.archived } });
+        await Promise.all([vol, envoi]);
+        loadNotes();
+      },
+    });
     // Masquer/afficher le contenu sur l'accueil, sans passer par la boîte
     // d'édition — même bascule que #dns-toggle-mask (voir renderBoutonMasque).
     el.querySelector('[data-act=mask]').onclick = async () => {
@@ -4640,32 +4646,48 @@ function renderNotes() {
        L'armement se DÉSARME seul au bout de 3 s, et dès que la souris quitte
        la carte : un bouton rouge oublié là serait un piège au prochain
        passage, d'autant que ces boutons n'apparaissent qu'au survol. */
-    const boutonSuppr = el.querySelector('[data-act=delete]');
-    let minuterieSuppr = null;
-
-    const desarmer = () => {
-      clearTimeout(minuterieSuppr);
-      minuterieSuppr = null;
-      boutonSuppr.classList.remove('arme');
-      boutonSuppr.title = 'Mettre à la corbeille';
-      boutonSuppr.setAttribute('aria-label', 'Mettre à la corbeille');
+    /* Armement en deux clics, partagé par « corbeille » et « archiver ».
+       Factorisé plutôt que recopié : les deux boutons doivent se désarmer
+       aux mêmes conditions (3 s, ou souris qui quitte la carte), et deux
+       copies auraient divergé à la première retouche. Chaque bouton garde
+       en revanche SA couleur d'armement (rouge pour la corbeille, orange
+       pour l'archivage — voir style.css) : le geste est le même, la portée
+       ne l'est pas, l'archivage étant parfaitement réversible. */
+    const armerEnDeuxClics = (bouton, { titre, titreArme, action }) => {
+      if (!bouton) return null;
+      let minuterie = null;
+      const desarmerCe = () => {
+        clearTimeout(minuterie);
+        minuterie = null;
+        bouton.classList.remove('arme');
+        bouton.title = titre;
+        bouton.setAttribute('aria-label', titre);
+      };
+      bouton.onclick = async () => {
+        if (!bouton.classList.contains('arme')) {
+          bouton.classList.add('arme');
+          bouton.title = titreArme;
+          bouton.setAttribute('aria-label', titreArme);
+          minuterie = setTimeout(desarmerCe, 3000);
+          return;
+        }
+        desarmerCe();
+        await action();
+      };
+      el.addEventListener('mouseleave', desarmerCe);
+      return desarmerCe;
     };
 
-    boutonSuppr.onclick = async () => {
-      if (!boutonSuppr.classList.contains('arme')) {
-        boutonSuppr.classList.add('arme');
-        boutonSuppr.title = 'Cliquer à nouveau pour envoyer à la corbeille';
-        boutonSuppr.setAttribute('aria-label', 'Confirmer la mise à la corbeille');
-        minuterieSuppr = setTimeout(desarmer, 3000);
-        return;
-      }
-      desarmer();
-      const vol = aspirerNotask(el, cibleAspiration('corbeille'));
-      const envoi = api('/notes/' + n.id, { method: 'DELETE' });
-      await Promise.all([vol, envoi]);
-      loadNotes();
-    };
-    el.addEventListener('mouseleave', desarmer);
+    armerEnDeuxClics(el.querySelector('[data-act=delete]'), {
+      titre: 'Mettre à la corbeille',
+      titreArme: 'Cliquer à nouveau pour envoyer à la corbeille',
+      action: async () => {
+        const vol = aspirerNotask(el, cibleAspiration('corbeille'));
+        const envoi = api('/notes/' + n.id, { method: 'DELETE' });
+        await Promise.all([vol, envoi]);
+        loadNotes();
+      },
+    });
 
     const doneBox = el.querySelector('[data-act=done]');
     if (doneBox) doneBox.onchange = async (e) => {
@@ -7605,6 +7627,31 @@ function cssColorToHex(valeur) {
 function texteCodeSansBouton(node) {
   const clone = node.cloneNode(true);
   clone.querySelectorAll('.code-copy-btn').forEach((b) => b.remove());
+  /* <br> -> vrai saut de ligne. textContent (lu juste en dessous) IGNORE
+     purement et simplement les <br> : une ligne vide ajoutée en Maj+Entrée
+     à l'intérieur d'un bloc de code disparaissait donc à l'enregistrement.
+     Le reste du texte s'en sortait parce que, dans un <pre> en pre-wrap, le
+     navigateur écrit le plus souvent un vrai \n — mais pas pour une ligne
+     vide insérée à la main.
+
+     Exception : le TOUT DERNIER <br>, celui qui ne précède plus rien, est le
+     <br> de remplissage que le navigateur pose de lui-même pour garder une
+     position de curseur après un saut de ligne final. Le convertir
+     ajouterait une ligne vide de plus à CHAQUE enregistrement, qui
+     s'accumuleraient au fil des modifications. Une vraie ligne vide finale,
+     elle, est déjà portée par le \n qui la précède : elle survit. */
+  const enFinDeBloc = (br) => {
+    let noeud = br;
+    while (noeud && noeud !== clone) {
+      if (noeud.nextSibling) return false;
+      noeud = noeud.parentNode;
+    }
+    return true;
+  };
+  for (const br of [...clone.querySelectorAll('br')]) {
+    if (enFinDeBloc(br)) br.remove();
+    else br.replaceWith('\n');
+  }
   return (clone.textContent || '').replace(/​/g, '');
 }
 
