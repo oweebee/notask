@@ -6979,6 +6979,7 @@ function activerClicDansLeVide(el) {
 
   el.addEventListener('mousedown', (e) => {
     if (e.target !== el) return; // clic sur du contenu : rien à faire
+    if (e.button !== 0) return;  // clic droit/milieu : pas notre affaire
     const dernier = el.lastElementChild || el.lastChild;
     if (!dernier) return;
     const bas = dernier.nodeType === 1
@@ -6986,15 +6987,35 @@ function activerClicDansLeVide(el) {
       : el.getBoundingClientRect().bottom;
     if (e.clientY <= bas) return;
 
-    e.preventDefault();
-    assurerLigneApresBloc(el);
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false); // repliée sur la toute fin
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-    el.focus();
+    /* SURTOUT PAS de preventDefault() ici. Il annulait le glisser de
+       sélection natif du navigateur : partir du vide sous le texte pour
+       remonter en sélectionnant — le geste normal quand on veut prendre
+       tout un passage depuis la fin — ne sélectionnait alors rien du tout,
+       et le curseur sautait à la fin. Seul le double-clic (qui suit un
+       autre chemin) répondait encore, d'où l'impression que seule la
+       sélection d'un mot fonctionnait.
+
+       On attend donc le relâchement pour trancher : souris qui n'a pas
+       bougé ET sélection restée vide = simple clic dans le vide, on place
+       le curseur à la fin comme voulu ; sinon c'est un vrai geste de
+       sélection, et on n'y touche pas. */
+    const departX = e.clientX;
+    const departY = e.clientY;
+    const onUp = (up) => {
+      document.removeEventListener('mouseup', onUp, true);
+      const aBouge = Math.abs(up.clientX - departX) > 3
+        || Math.abs(up.clientY - departY) > 3;
+      const sel = window.getSelection();
+      if (aBouge || (sel && !sel.isCollapsed)) return; // glisser : on laisse faire
+      assurerLigneApresBloc(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false); // repliée sur la toute fin
+      sel.removeAllRanges();
+      sel.addRange(range);
+      el.focus();
+    };
+    document.addEventListener('mouseup', onUp, true);
   });
 }
 
@@ -7166,7 +7187,21 @@ function richToText(root) {
       // zone de code, elle ne doit jamais se retrouver dans le texte
       // enregistr\u00e9 (voir ajouterBoutonsCopieCode).
       case 'pre': return '```' + texteCodeSansBouton(node) + '```';
-      case 'code': return '`' + texteCodeSansBouton(node) + '`';
+      case 'code': {
+        const codeTexte = texteCodeSansBouton(node);
+        /* Promotion en BLOC dès qu'il y a un saut de ligne, même si le nœud
+           est un <code> en ligne : taper Entrée dans un code en ligne le
+           laisse inline dans le DOM, et `…` ne sait pas porter un saut de
+           ligne — la regex du code en ligne de renderFormatted() refuse
+           explicitement \n (`[^`\n]`). Sans cette promotion, le texte
+           revenait en clair ENTOURÉ DE DEUX BACKTICKS visibles, aucune des
+           deux règles de rendu ne pouvant plus le reconnaître.
+           Même distinction que celle déjà appliquée à la POSE de l'effet
+           (voir appliquerFormat, kind === 'code'). */
+        return codeTexte.includes('\n')
+          ? '```' + codeTexte + '```'
+          : '`' + codeTexte + '`';
+      }
       // Image insérée dans le texte (dessin/tableau) : on ne garde qu'un
       // marqueur avec l'id de la pièce jointe, jamais les octets ni une
       // URL temporaire — voir NOTE_IMG_MARK et hydrateInlineImages().
@@ -7584,6 +7619,16 @@ function ajouterBoutonsCopieCode(root) {
     // Un <code> situé à l'intérieur d'un bloc est déjà couvert par le
     // bouton du bloc : pas de second bouton imbriqué.
     if (zone.tagName === 'CODE' && zone.closest('pre.note-code-block')) return;
+    /* JAMAIS dans une zone en cours d'édition. Le bouton est
+       contentEditable="false" (il le faut, sinon le curseur entrerait
+       dedans) : or un îlot non éditable au milieu d'un contenteditable est
+       une BARRIÈRE de sélection dans les navigateurs Chromium — impossible
+       d'étendre une sélection à la souris au travers, en particulier en
+       remontant depuis la fin, et un double-clic sur un mot devient le seul
+       geste qui réponde. En édition, le texte se sélectionne et se copie à
+       la main ; la pastille reste sur les cartes, l'historique et tout ce
+       qui est en lecture seule, là où elle sert vraiment. */
+    if (zone.closest('[contenteditable="true"]')) return;
     if (zone.querySelector('.code-copy-btn')) return;
 
     const btn = document.createElement('button');
@@ -8300,6 +8345,14 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
     const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${archivesDepliees ? '' : ' is-closed'}`;
     return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
+  /* Rattrapage des notasks enregistrées AVANT la correction de richToText :
+     un code en ligne ayant gagné un saut de ligne y a été écrit `…\n…`,
+     que ni la règle de bloc (3 backticks) ni celle du code en ligne (qui
+     refuse \n) ne savent lire — le texte s'affichait alors en clair entre
+     deux backticks. On le promeut en bloc avant les deux règles. Les gardes
+     (?<!`)/(?!`) évitent de mordre sur un vrai ``` ; (?<!\\) laisse
+     tranquille un backtick échappé par richToText. */
+  html = html.replace(/(?<!\\)(?<!`)`([^`]*\n[^`]*?)(?<!\\)`(?!`)/g, (m, code) => '```' + code + '```');
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   // Garde (?<!\\) sur le code EN LIGNE et l'italique : ce sont les deux
   // seuls délimiteurs d'UN SEUL caractère. Un */_/` échappé par
