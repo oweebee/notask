@@ -74,11 +74,15 @@ def _appel(methode: str, url: str, jeton: str, **kwargs: Any) -> httpx.Response:
     scope manquant (compte connecté avant l'ajout de drive.file) il dit
     précisément ce qui manque, ce qu'aucun message écrit ici ne saurait
     deviner."""
+    # L'en-tête d'authentification est FUSIONNÉ avec ceux que l'appelant a pu
+    # passer (televerser envoie son propre Content-Type multipart), et non
+    # posé en argument séparé : deux `headers=` sur client.request() lèvent
+    # « got multiple values for keyword argument 'headers' ».
+    entetes = {"Authorization": f"Bearer {jeton}"}
+    entetes.update(kwargs.pop("headers", {}))
     try:
         with httpx.Client(timeout=TIMEOUT) as client:
-            resp = client.request(
-                methode, url, headers={"Authorization": f"Bearer {jeton}"}, **kwargs
-            )
+            resp = client.request(methode, url, headers=entetes, **kwargs)
     except httpx.HTTPError as exc:
         raise DriveIndisponible(f"Google Drive injoignable : {exc}") from exc
 
