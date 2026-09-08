@@ -4260,24 +4260,6 @@ function renderSearchHits() {
     el.className = 'note search-hit c-' + n.color;
     el.dataset.id = n.id;
 
-    /* Y a-t-il au moins une ligne à cocher ? `n.items` porte les lignes
-       aussi bien d'une liste à cocher pure que d'une notask MIXTE (cases
-       posées dans le texte, voir poserLignesDansTexte) : un seul test
-       couvre donc les deux formes. Les lignes archivées seules ne comptent
-       pas — elles ne sont déjà plus affichées ici. */
-    const aDesCases = (n.items || []).some((i) => !i.archived);
-
-    /* Une ligne cochée disparaît PAR DÉFAUT : c'est le ménage au fil de
-       l'eau, et le bouton sert alors à la faire réapparaître. Les Archives
-       prennent le parti INVERSE — une notask s'archivant justement quand
-       toutes ses lignes sont cochées, les y masquer la ferait paraître
-       vide. Le bouton reste disponible des deux côtés, et dès qu'on s'en
-       sert le choix explicite (hide_checked à true/false) l'emporte sur le
-       défaut de la vue. Cf. Note.hide_checked, tri-état côté serveur. */
-    const cacherCochees = (n.hide_checked === null || n.hide_checked === undefined)
-      ? !state.showArchived
-      : n.hide_checked;
-
     const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
     const nav = hits.length > 1
       ? `<div class="hit-nav">
@@ -4508,6 +4490,24 @@ function renderNotes() {
     const el = document.createElement('article');
     el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
     el.dataset.id = n.id;
+
+    /* Y a-t-il au moins une ligne à cocher ? `n.items` porte les lignes
+       aussi bien d'une liste à cocher pure que d'une notask MIXTE (cases
+       posées dans le texte, voir poserLignesDansTexte) : un seul test
+       couvre donc les deux formes. Les lignes archivées seules ne comptent
+       pas — elles ne sont déjà plus affichées ici. */
+    const aDesCases = (n.items || []).some((i) => !i.archived);
+
+    /* Une ligne cochée disparaît PAR DÉFAUT : c'est le ménage au fil de
+       l'eau, et le bouton sert alors à la faire réapparaître. Les Archives
+       prennent le parti INVERSE — une notask s'archivant justement quand
+       toutes ses lignes sont cochées, les y masquer la ferait paraître
+       vide. Le bouton reste disponible des deux côtés, et dès qu'on s'en
+       sert le choix explicite (hide_checked à true/false) l'emporte sur le
+       défaut de la vue. Cf. Note.hide_checked, tri-état côté serveur. */
+    const cacherCochees = (n.hide_checked === null || n.hide_checked === undefined)
+      ? !state.showArchived
+      : n.hide_checked;
 
     let inner = `<button class="pin-btn" data-act="pin"
       title="${n.pinned ? 'Désépingler' : 'Épingler'}"
