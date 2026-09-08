@@ -297,6 +297,21 @@ class GoogleAccount(SQLModel, table=True):
     # dernier passage, sans tout retélécharger. None => prochain tirage fait
     # une synchro complète et initialise ce jeton.
     sync_token: Optional[str] = Field(default=None, max_length=2000)
+    # Deux fonctions distinctes derrière UN SEUL compte Google : l'agenda et
+    # les sauvegardes sur Drive. Chacune s'active séparément — relier son
+    # compte pour déposer des sauvegardes ne doit pas imposer d'envoyer ses
+    # échéances chez Google, ni l'inverse. Vrai par défaut pour les comptes
+    # déjà reliés avant l'ajout de ces colonnes : leur agenda fonctionnait,
+    # il doit continuer sans intervention.
+    calendar_enabled: bool = True
+    drive_enabled: bool = True
+    # Dossier Google Drive où déposer les sauvegardes, choisi par
+    # l'utilisateur dans Outils. None => aucune destination configurée, les
+    # boutons Drive restent alors inactifs. Le NOM est mémorisé à côté de
+    # l'identifiant uniquement pour l'affichage : le rappeler à Drive à
+    # chaque ouverture d'écran coûterait un appel réseau pour une étiquette.
+    drive_folder_id: Optional[str] = Field(default=None, max_length=200)
+    drive_folder_name: Optional[str] = Field(default=None, max_length=400)
     # Posé à vrai dès qu'un rafraîchissement de jeton échoue (refresh_token
     # révoqué ou expiré côté Google) — c'est le repère affiché côté client
     # ("reconnexion nécessaire") plutôt que de deviner depuis un code
@@ -311,6 +326,18 @@ class GoogleAccountStatus(SQLModel):
     connected: bool
     email: Optional[str] = None
     needs_reauth: bool = False
+    # Interrupteurs par fonction (voir GoogleAccount). Renvoyés même quand le
+    # compte n'est pas relié : le client s'en sert pour décider d'afficher ou
+    # non le bloc Drive et l'alerte de reconnexion, il lui faut donc toujours
+    # une valeur plutôt qu'un champ absent à interpréter.
+    calendar_enabled: bool = True
+    drive_enabled: bool = True
+
+
+class GoogleFeaturesIn(SQLModel):
+    """Activation/désactivation des deux fonctions, depuis Profil."""
+    calendar_enabled: bool
+    drive_enabled: bool
 
 
 # État CSRF éphémère du flux OAuth (voir app/routers/google.py connect()/

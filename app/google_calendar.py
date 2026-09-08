@@ -50,10 +50,30 @@ CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 # avant l'ajout de ce scope continue de fonctionner pour la synchro — seule la
 # liste déroulante des agendas sera indisponible tant qu'il n'est pas reconnecté
 # (l'écran Profil bascule alors sur une saisie manuelle de l'identifiant).
+# drive.file : sauvegardes déposées dans un dossier que notask crée LUI-MÊME
+# à la racine du Drive (voir google_drive.py). Ce scope ne donne accès qu'aux
+# fichiers créés par l'application — elle ne voit donc RIEN d'autre du Drive
+# de l'utilisateur, ce qui est exactement ce qu'on veut ici.
+#
+# Choix délibéré face au scope `drive` complet, qui aurait permis de déposer
+# dans un dossier préexistant choisi à la main : `drive` est un scope
+# « restreint » côté Google, imposant à une application publiée une
+# vérification et un audit de sécurité annuel. `drive.file` n'est soumis à
+# rien de tout cela. Un dossier fixe créé par l'application coûte donc, en
+# pratique, un sélecteur de dossier en moins et zéro contrainte Google.
+#
+# Conséquence à connaître : un fichier déposé À LA MAIN dans ce dossier par
+# l'utilisateur reste invisible pour notask (il ne l'a pas créé). Seules les
+# sauvegardes envoyées depuis l'application se retrouvent dans la liste.
+#
+# Un compte connecté AVANT l'ajout de ce scope continue de fonctionner pour
+# l'agenda ; seules les fonctions Drive resteront indisponibles jusqu'à
+# reconnexion — même principe que calendar.readonly ci-dessus.
 SCOPES = (
     "openid email"
     " https://www.googleapis.com/auth/calendar.events"
     " https://www.googleapis.com/auth/calendar.readonly"
+    " https://www.googleapis.com/auth/drive.file"
 )
 
 # Marque tout événement créé par notask, pour ne jamais tirer (pull_changes)
@@ -523,7 +543,21 @@ def list_changes(account: GoogleAccount, session: Session) -> List[Dict[str, Any
 # ========================= Synchro notask -> Google =========================
 
 def _account_for(user_id: int, session: Session) -> Optional[GoogleAccount]:
-    return session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user_id)).first()
+    """Compte Google utilisable POUR L'AGENDA, ou None.
+
+    L'interrupteur `calendar_enabled` est appliqué ici et nulle part ailleurs :
+    c'est le passage obligé de sync_note(), sync_item(),
+    supprimer_evenement_orphelin() et pull_changes(). Le poser dans chacune
+    de ces quatre fonctions aurait été quatre occasions d'en oublier une, et
+    « agenda désactivé » qui ne désactive qu'à moitié est pire que pas
+    d'interrupteur du tout. Un compte relié pour les seules sauvegardes Drive
+    ressort donc None ici, exactement comme un compte absent."""
+    account = session.exec(
+        select(GoogleAccount).where(GoogleAccount.user_id == user_id)
+    ).first()
+    if account is None or not account.calendar_enabled:
+        return None
+    return account
 
 
 def supprimer_evenement_orphelin(user_id: int, event_id: str, session: Session) -> None:

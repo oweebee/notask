@@ -4259,3 +4259,59 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 @media (max-width: 860px) {
   body.quick-capture .notes-grid .composer-stack { padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
 }
+
+
+/* ---- Sauvegardes Google Drive (bloc Outils, voir #outil-drive) ---- */
+.outil-drive {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-outline-variant);
+}
+.outil-drive h4 {
+  margin: 0 0 .375rem;
+  font-size: .9375rem;
+  font-weight: 600;
+}
+.drive-liste { display: grid; gap: .375rem; margin-top: .75rem; }
+.drive-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .125rem;
+  width: 100%;
+  padding: .5rem .625rem;
+  background: var(--md-surface-2);
+  border: none;
+  border-radius: var(--shape-sm);
+  color: var(--md-on-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s;
+}
+.drive-item:hover { background: rgba(230,224,233,.12); }
+.drive-item-nom { font-size: .875rem; }
+.drive-item-info { font-size: .75rem; color: var(--md-on-surface-variant); }
+
+/* Ligne d'alerte « reconnecter Google » en tête des échéances en retard
+   (voir renderAgenda). Pas de case à cocher : ce n'est pas une notask, on
+   ne la termine pas, elle disparaît quand le compte est reconnecté. D'où
+   le retrait de la place normalement réservée à la case. */
+.agenda-item.agenda-alerte { padding-left: .625rem; }
+
+
+/* Cases d'activation par fonction dans Profil (voir #profil-google-fonctions).
+   Libellé cliquable en entier via <label> : une case à cocher seule fait une
+   cible de 13px, pénible à viser au doigt. */
+.profil-google-fonctions {
+  display: grid;
+  gap: .5rem;
+  margin: .75rem 0 .25rem;
+}
+.profil-google-case {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  font-size: .875rem;
+  cursor: pointer;
+}
+.profil-google-case input { margin-top: .15rem; flex: none; cursor: pointer; }

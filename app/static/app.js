@@ -425,6 +425,10 @@ let state = {
   view: 'notes',
   notes: [],
   showArchived: false,
+  // Compte Google dont le jeton est mort : fait apparaître une ligne d'alerte
+  // en tête des échéances en retard (voir renderAgenda). Relevé par
+  // loadAgenda, jamais deviné.
+  googleReauth: false,
   showFavoritesOnly: false,
   search: '',
   // Recherche en profondeur (seconde barre) : terme cherché, et rang de
@@ -2874,29 +2878,38 @@ async function refreshGoogleStatus() {
   const btnConnect = $('#profil-google-connect');
   const btnDisconnect = $('#profil-google-disconnect');
   dot.className = 'profil-google-dot';
-  label.textContent = 'Google Calendar : vérification…';
+  label.textContent = 'Google : vérification…';
   btnConnect.hidden = true;
   btnDisconnect.hidden = true;
   try {
     const st = await api('/google/status');
     if (!st.connected) {
-      label.textContent = 'Google Calendar : non connecté';
+      label.textContent = 'Google : non connecté';
       btnConnect.hidden = false;
     } else if (st.needs_reauth) {
       dot.classList.add('needs-reauth');
-      label.textContent = `Google Calendar : reconnexion nécessaire (${st.email || 'compte inconnu'})`;
+      label.textContent = `Google : reconnexion nécessaire (${st.email || 'compte inconnu'})`;
       btnConnect.hidden = false;
       btnDisconnect.hidden = false;
     } else {
       dot.classList.add('connected');
-      label.textContent = `Google Calendar : connecté (${st.email || 'compte Google'})`;
+      label.textContent = `Google : connecté (${st.email || 'compte Google'})`;
       btnDisconnect.hidden = false;
     }
-    // Le choix de l'agenda n'a de sens qu'une fois le compte relié.
-    $('#profil-google-cal').hidden = !st.connected;
-    if (st.connected) chargerAgendasGoogle();
+    // Cases d'activation : sans compte relié, il n'y a rien à activer.
+    $('#profil-google-fonctions').hidden = !st.connected;
+    $('#profil-google-cal-on').checked = st.calendar_enabled !== false;
+    $('#profil-google-drive-on').checked = st.drive_enabled !== false;
+
+    /* Le choix de l'AGENDA DE DESTINATION ne s'affiche que si le compte est
+       relié ET l'agenda activé : régler un agenda de destination pour une
+       fonction éteinte n'a pas de sens, et laisser le sélecteur visible
+       laisserait croire que la synchronisation tourne encore. */
+    const agendaActif = st.connected && st.calendar_enabled !== false;
+    $('#profil-google-cal').hidden = !agendaActif;
+    if (agendaActif) chargerAgendasGoogle();
   } catch {
-    label.textContent = 'Google Calendar : statut indisponible';
+    label.textContent = 'Google : statut indisponible';
   }
 }
 
@@ -2972,6 +2985,33 @@ $('#profil-google-cal-save').addEventListener('click', async () => {
   }
   btn.disabled = false;
 });
+
+/* Chaque case part tout de suite, sans bouton Enregistrer : il n'y a que
+   deux réglages, et un bouton pour les valider aurait surtout offert
+   l'occasion de les oublier. On renvoie TOUJOURS les deux valeurs, l'API
+   remplaçant l'état complet plutôt que de fusionner un champ isolé. */
+async function envoyerFonctionsGoogle() {
+  const cal = $('#profil-google-cal-on').checked;
+  const drive = $('#profil-google-drive-on').checked;
+  try {
+    await api('/google/features', {
+      method: 'PUT',
+      body: { calendar_enabled: cal, drive_enabled: drive },
+    });
+  } catch (err) {
+    msg($('#profil-google-msg'), err.message);
+    refreshGoogleStatus();   // remet les cases sur l'état réel du serveur
+    return;
+  }
+  // Le sélecteur d'agenda suit l'interrupteur, et la colonne d'échéances
+  // peut avoir à retirer son alerte de reconnexion (voir renderAgenda).
+  $('#profil-google-cal').hidden = !cal;
+  if (cal) chargerAgendasGoogle();
+  loadAgenda();
+}
+
+$('#profil-google-cal-on').addEventListener('change', envoyerFonctionsGoogle);
+$('#profil-google-drive-on').addEventListener('change', envoyerFonctionsGoogle);
 
 $('#profil-google-connect').addEventListener('click', () => {
   // Navigation complète (pas un fetch) : Google doit pouvoir rediriger le
@@ -9923,6 +9963,28 @@ async function loadAgenda() {
     const idsAutorises = new Set(notesDuLibelle.map((n) => n.id));
     items = items.filter((t) => idsAutorises.has(t.note_id));
   }
+  /* État du compte Google, relevé ici plutôt qu'au seul écran Profil : le
+     jeton peut mourir à tout moment (mot de passe changé, accès révoqué
+     depuis le compte Google), et tant que l'utilisateur n'ouvre pas Profil
+     rien ne le lui dit — ses notasks datées cessent simplement d'arriver
+     dans son agenda, en silence. Une ligne « en retard » est le seul
+     endroit qu'il regarde tous les jours. Requête volontairement muette en
+     cas d'échec : un réseau coupé ne doit pas fabriquer une fausse alerte
+     de reconnexion. */
+  try {
+    const st = await api('/google/status');
+    /* Trois conditions, pas une : un compte relié, un jeton mort, ET au
+       moins une fonction encore active. Sans la troisième, un compte dont
+       l'utilisateur a volontairement éteint l'agenda ET Drive réclamerait
+       une reconnexion dont il n'a plus rien à faire. Et sans compte relié —
+       installation où l'API Google n'est même pas renseignée — `connected`
+       est faux : aucune alerte n'apparaît, ce qui est bien le but. */
+    state.googleReauth = !!(
+      st.connected && st.needs_reauth
+      && (st.calendar_enabled !== false || st.drive_enabled !== false)
+    );
+  } catch { /* réseau : on garde l'état connu, pas d'alerte inventée */ }
+
   renderAgenda(items);
 }
 
@@ -9985,11 +10047,44 @@ function renderTasks(items) {
 function renderAgenda(items) {
   const box = $('#agenda-content');
   box.innerHTML = '';
-  $('#agenda-empty').hidden = items.length > 0;
+  // L'alerte de reconnexion compte comme un contenu : la colonne ne doit pas
+  // s'annoncer vide alors qu'elle porte justement le seul message important.
+  $('#agenda-empty').hidden = items.length > 0 || !!state.googleReauth;
 
   const ordre = ['late', 'today', 'imminent', 'upcoming'];
   const groupes = {};
   for (const t of items) (groupes[t.bucket] ||= []).push(t);
+
+  /* Compte Google à reconnecter : rangé en tête des « en retard », parce que
+     c'en est une — la synchronisation ne se fait plus depuis le moment où le
+     jeton est mort. Ligne SYNTHÉTIQUE, fabriquée ici et jamais renvoyée par
+     /tasks : ce n'est pas une notask, elle n'a ni identifiant, ni case à
+     cocher, ni échéance réelle, et elle disparaît d'elle-même dès que le
+     compte est reconnecté. */
+  if (state.googleReauth) {
+    const section = document.createElement('div');
+    section.className = 'agenda-group late';
+    const h2 = document.createElement('h2');
+    h2.textContent = 'compte Google';
+    section.appendChild(h2);
+
+    const ligne = document.createElement('div');
+    ligne.className = 'agenda-item agenda-alerte c-red';
+    ligne.tabIndex = 0;
+    ligne.setAttribute('role', 'button');
+    ligne.innerHTML = `<span class="agenda-item-icon">${ICONS.warning}</span>
+      <span class="agenda-item-body">
+        <span class="agenda-item-text">Reconnecter le compte Google</span>
+        <span class="agenda-item-due">synchronisation interrompue</span>
+      </span>`;
+    const ouvrirProfil = () => $('#btn-profil').click();
+    ligne.addEventListener('click', ouvrirProfil);
+    ligne.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrirProfil(); }
+    });
+    section.appendChild(ligne);
+    box.appendChild(section);
+  }
 
   for (const b of ordre) {
     if (!groupes[b] || !groupes[b].length) continue;
@@ -10377,6 +10472,7 @@ $('#btn-outils').addEventListener('click', () => {
   $('#import-file').value = '';
   msg($('#outil-msg'), '');
   majCompteJournal();
+  majBlocDrive();
   $('#dlg-outils').showModal();
   animerOuvertureDialogue($('#dlg-outils'));
 });
@@ -10520,6 +10616,33 @@ $('#dlg-outils').addEventListener('cancel', (e) => {
   fermerAvecAnimation($('#dlg-outils'));
 });
 
+/* Destination du prochain export. Une variable plutôt qu'un paramètre : le
+   gestionnaire d'export est branché sur un clic, il ne reçoit rien d'autre
+   qu'un évènement. Remise à 'fichier' à chaque fois, pour qu'un envoi Drive
+   ne contamine jamais le bouton Exporter suivant. */
+let destinationExport = 'fichier';
+
+/* Appels qui transportent des OCTETS et non du JSON (dépôt et relecture
+   d'archive) : api() impose Content-Type application/json et sérialise son
+   body, ce qui ne convient ni à un FormData ni à une réponse binaire. Même
+   en-tête d'authentification, même traitement du 401. */
+async function apiFichier(path, options = {}) {
+  const headers = { 'X-Client-Id': CLIENT_ID, ...(options.headers || {}) };
+  const t = token();
+  if (t) headers['Authorization'] = 'Bearer ' + t;
+  const res = await fetch('/api' + path, { ...options, headers, cache: 'no-store' });
+  if (res.status === 401) {
+    setToken(null); showLogin(); throw new Error('Session expirée');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const detail = (data && data.detail) || 'Erreur ' + res.status;
+    log.error('drive', `${res.status} sur ${options.method || 'GET'} ${path}`, detail);
+    throw new Error(detail);
+  }
+  return res;
+}
+
 $('#export-run').addEventListener('click', async () => {
   /* Mot de passe FACULTATIF : laissé vide, l'archive est écrite en clair.
      C'est un choix de l'utilisateur, assumé — mais qui mérite d'être compris.
@@ -10567,10 +10690,25 @@ $('#export-run').addEventListener('click', async () => {
       fichier.set(clair, entete.length);
     }
 
+    const nomArchive = `notask-${new Date().toISOString().slice(0, 10)}.notask`;
+
+    if (destinationExport === 'drive') {
+      /* Exactement les mêmes octets que le téléchargement ci-dessous : c'est
+         la destination qui change, jamais le contenu. Une archive protégée
+         part donc chiffrée, et ni le serveur ni Google ne peuvent la lire. */
+      avancement('Envoi vers Google Drive…');
+      const formulaire = new FormData();
+      formulaire.append('fichier',
+        new Blob([fichier], { type: 'application/octet-stream' }), nomArchive);
+      await apiFichier('/google/drive/backups', { method: 'POST', body: formulaire });
+      msg($('#outil-msg'), `Envoyé sur Drive : ${nomArchive}`, 'ok');
+      return;
+    }
+
     const url = URL.createObjectURL(new Blob([fichier], { type: 'application/octet-stream' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `notask-${new Date().toISOString().slice(0, 10)}.notask`;
+    a.download = nomArchive;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 
@@ -10579,6 +10717,7 @@ $('#export-run').addEventListener('click', async () => {
     msg($('#outil-msg'), err.message);
   } finally {
     btn.disabled = false;
+    destinationExport = 'fichier';  // cf. sa déclaration : jamais rémanent
   }
 });
 
@@ -10588,6 +10727,85 @@ $('#export-run').addEventListener('click', async () => {
 /* Plus de mot de passe exigé AVANT de choisir le fichier : on ne sait pas
    encore s'il en a un. C'est l'en-tête de l'archive qui le dit, et le mot de
    passe n'est demandé qu'à ce moment-là (voir le gestionnaire ci-dessous). */
+/* ------------------------- Sauvegardes sur Drive -------------------------
+   Le bloc n'apparaît que si un compte Google est relié : un bouton qui ne
+   peut qu'échouer n'aide personne. Appelé à chaque ouverture d'Outils
+   plutôt qu'une fois au démarrage, le compte pouvant être connecté ou
+   délié entre-temps depuis Profil. */
+async function majBlocDrive() {
+  const bloc = $('#outil-drive');
+  if (!bloc) return;
+  try {
+    const st = await api('/google/status');
+    bloc.hidden = !(st.connected && st.drive_enabled !== false);
+  } catch {
+    bloc.hidden = true;  // statut inconnu : on ne propose rien
+  }
+}
+
+$('#drive-export').addEventListener('click', () => {
+  /* Réutilise INTÉGRALEMENT le chemin d'export existant — même collecte,
+     même mot de passe, même chiffrement — en ne changeant que la
+     destination. Refaire une seconde construction d'archive en parallèle,
+     c'était garantir qu'elles divergent au premier changement de format. */
+  destinationExport = 'drive';
+  $('#export-run').click();
+});
+
+$('#drive-import').addEventListener('click', async () => {
+  const liste = $('#drive-liste');
+  liste.hidden = false;
+  liste.innerHTML = '<p class="aide">Lecture du dossier Drive…</p>';
+  let fichiers;
+  try {
+    fichiers = await api('/google/drive/backups');
+  } catch (err) {
+    liste.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  if (!fichiers.length) {
+    liste.innerHTML = '<p class="aide">Aucune sauvegarde dans ce dossier.</p>';
+    return;
+  }
+
+  liste.innerHTML = '';
+  for (const f of fichiers) {
+    const ligne = document.createElement('button');
+    ligne.type = 'button';
+    ligne.className = 'drive-item';
+    const quand = f.createdTime ? new Date(f.createdTime).toLocaleString('fr-FR') : '';
+    const taille = f.size ? `${Math.round(Number(f.size) / 1024)} Ko` : '';
+    ligne.innerHTML = `<span class="drive-item-nom">${escapeHtml(f.name)}</span>
+      <span class="drive-item-info">${escapeHtml([quand, taille].filter(Boolean).join(' · '))}</span>`;
+
+    ligne.onclick = async () => {
+      liste.innerHTML = '<p class="aide">Téléchargement depuis Drive…</p>';
+      try {
+        const res = await apiFichier(`/google/drive/backups/${f.id}`);
+        const octets = new Uint8Array(await res.arrayBuffer());
+
+        /* On repasse par le sélecteur de fichier plutôt que d'appeler une
+           quelconque fonction d'import : toute la relecture (détection de
+           l'en-tête, demande du mot de passe, déchiffrement, recréation des
+           libellés et des notasks) vit dans le gestionnaire `change` de
+           #import-file. La dupliquer ici pour Drive, c'était deux chemins
+           d'import à maintenir en parallèle — et le second n'aurait été
+           testé qu'à moitié. On fabrique donc un vrai File et on le dépose
+           dans l'input, exactement comme l'aurait fait l'utilisateur. */
+        const dt = new DataTransfer();
+        dt.items.add(new File([octets], f.name, { type: 'application/octet-stream' }));
+        $('#import-file').files = dt.files;
+        liste.hidden = true;
+        liste.innerHTML = '';
+        $('#import-file').dispatchEvent(new Event('change'));
+      } catch (err) {
+        liste.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`;
+      }
+    };
+    liste.appendChild(ligne);
+  }
+});
+
 $('#import-run').addEventListener('click', () => {
   $('#import-file').value = '';   // permet de rechoisir le même fichier
   $('#import-file').click();

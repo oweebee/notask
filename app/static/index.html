@@ -547,7 +547,7 @@
        connexion personnelle ci-dessous : il faut ces identifiants avant de
        pouvoir connecter quoi que ce soit. -->
   <div class="admin-google" id="admin-google" hidden>
-    <h3>Google Calendar — identifiants de l'installation</h3>
+    <h3>API Google — identifiants de l'installation</h3>
     <p class="aide">Créés dans Google Cloud Console. Communs à tous les comptes.</p>
     <p class="admin-google-hint" id="admin-google-source"></p>
     <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
@@ -565,7 +565,7 @@
   <div class="dialog-actions profil-google-actions">
     <button class="btn danger" id="ga-clear" type="button" hidden>Effacer</button>
     <span class="spacer" style="flex:1"></span>
-    <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
+    <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google</button>
     <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
     <button class="btn" id="ga-save" type="button" hidden>Enregistrer</button>
   </div>
@@ -575,12 +575,27 @@
        repère visuel demandé : vert = connecté, gris = non connecté, orange =
        reconnexion nécessaire (jeton Google révoqué/expiré). -->
   <div class="profil-google" id="profil-google">
-    <p class="aide">Les notasks datées deviennent des événements de votre agenda.</p>
+    <p class="aide">Un seul compte Google pour deux usages : les notasks datées deviennent des événements de votre agenda, et les sauvegardes peuvent être déposées sur votre Drive (voir Outils).</p>
     <div class="profil-google-row">
       <span class="profil-google-dot" id="profil-google-dot"></span>
-      <span id="profil-google-label">Google Calendar : vérification…</span>
+      <span id="profil-google-label">Google : vérification…</span>
     </div>
     <div id="profil-google-msg"></div>
+
+    <!-- Un compte, deux fonctions indépendantes. Masqué tant que le compte
+         n'est pas relié : il n'y a rien à activer sans compte. Chaque case
+         part en PUT dès qu'on la coche, sans bouton Enregistrer — même
+         logique que la palette de couleur d'une carte. -->
+    <div class="profil-google-fonctions" id="profil-google-fonctions" hidden>
+      <label class="profil-google-case">
+        <input type="checkbox" id="profil-google-cal-on">
+        <span>Agenda — les notasks datées deviennent des événements Google</span>
+      </label>
+      <label class="profil-google-case">
+        <input type="checkbox" id="profil-google-drive-on">
+        <span>Drive — envoyer et relire les sauvegardes (voir Outils)</span>
+      </label>
+    </div>
 
     <!-- Agenda de destination. Masqué tant que le compte n'est pas connecté.
          La liste déroulante demande le scope calendar.readonly ; si Google
@@ -650,6 +665,22 @@
     </div>
     <input type="file" id="import-file" accept=".notask,application/octet-stream" hidden>
     <div id="outil-msg"></div>
+
+    <!-- Google Drive : même archive, même mot de passe, autre destination.
+         Le bloc reste masqué tant qu'aucun compte Google n'est connecté —
+         proposer un bouton qui ne peut qu'échouer n'aide personne (voir
+         majBlocDrive() dans app.js). Le dossier n'est pas choisi : avec le
+         scope drive.file l'application ne voit que ce qu'elle a créé, elle
+         travaille donc dans son propre dossier (voir app/google_drive.py). -->
+    <div class="outil-drive" id="outil-drive" hidden>
+      <h4>vers Google Drive</h4>
+      <p class="aide">Dossier « notask — sauvegardes », créé à la racine de votre Drive. L'archive part chiffrée si vous avez saisi un mot de passe ci-dessus : le serveur ne fait que la transporter, il ne peut pas la lire.</p>
+      <div class="outil-actions">
+        <button class="btn ghost" id="drive-export" type="button">Envoyer vers Drive</button>
+        <button class="btn ghost" id="drive-import" type="button">Importer depuis Drive</button>
+      </div>
+      <div id="drive-liste" class="drive-liste" hidden></div>
+    </div>
   </section>
 
   <!-- Journal : une ligne dédiée, le détail vit dans sa propre fenêtre

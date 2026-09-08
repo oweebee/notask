@@ -22,11 +22,14 @@ HTTP avec Google) :
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status,
+)
+from fastapi.responses import RedirectResponse, Response
 from sqlmodel import Session, select
 
 from app import google_calendar as gcal
+from app import google_drive as gdrive
 from app.db import get_session
 from app.deps import get_current_admin, get_current_user
 from app.models import (
@@ -36,6 +39,7 @@ from app.models import (
     GoogleAdminConfigOut,
     GoogleAppConfig,
     GoogleCalendarIn,
+    GoogleFeaturesIn,
     GoogleOAuthState,
     Note,
     NoteItem,
@@ -79,7 +83,13 @@ def status_(
     account = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
     if account is None:
         return GoogleAccountStatus(connected=False)
-    return GoogleAccountStatus(connected=True, email=account.email, needs_reauth=account.needs_reauth)
+    return GoogleAccountStatus(
+        connected=True,
+        email=account.email,
+        needs_reauth=account.needs_reauth,
+        calendar_enabled=account.calendar_enabled,
+        drive_enabled=account.drive_enabled,
+    )
 
 
 @router.get("/connect")
@@ -298,3 +308,110 @@ def clear_admin_config(
     if row is not None:
         session.delete(row)
         session.commit()
+
+
+# ----------------------- Sauvegardes sur Google Drive -----------------------
+# Le serveur n'est qu'un RELAIS : l'archive est construite et chiffrée par le
+# navigateur (voir #export-run dans app.js), elle traverse ici sous forme
+# d'octets opaques. Ce détour par le serveur est nécessaire parce que le
+# refresh_token Google ne quitte jamais la base — le navigateur n'a aucun
+# moyen d'appeler Drive directement, et lui confier ce jeton reviendrait à
+# l'exposer à toute extension installée chez l'utilisateur.
+
+
+def _compte_google(user: User, session: Session) -> GoogleAccount:
+    """Compte utilisable POUR DRIVE. Pendant de _account_for() côté agenda :
+    l'interrupteur `drive_enabled` est vérifié ici, seul passage des quatre
+    routes Drive, plutôt que répété dans chacune."""
+    compte = session.exec(
+        select(GoogleAccount).where(GoogleAccount.user_id == user.id)
+    ).first()
+    if compte is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Aucun compte Google connecté. Connectez-le depuis Profil.",
+        )
+    if not compte.drive_enabled:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Les sauvegardes Google Drive sont désactivées. Activez-les depuis Profil.",
+        )
+    return compte
+
+
+@router.put("/features", status_code=status.HTTP_204_NO_CONTENT)
+def maj_fonctions(
+    payload: GoogleFeaturesIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Active ou désactive l'agenda et les sauvegardes Drive, séparément.
+
+    Ne touche NI au jeton NI au compte lui-même : désactiver les deux
+    fonctions laisse le compte relié, prêt à resservir. Pour couper l'accès
+    pour de bon, c'est « Déconnecter » qui révoque le jeton côté Google."""
+    compte = session.exec(
+        select(GoogleAccount).where(GoogleAccount.user_id == user.id)
+    ).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    compte.calendar_enabled = payload.calendar_enabled
+    compte.drive_enabled = payload.drive_enabled
+    session.add(compte)
+    session.commit()
+
+
+@router.get("/drive/backups")
+def drive_lister(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Sauvegardes déjà déposées, la plus récente en premier."""
+    try:
+        return gdrive.lister(_compte_google(user, session), session)
+    except gdrive.DriveIndisponible as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+
+
+@router.post("/drive/backups", status_code=status.HTTP_201_CREATED)
+async def drive_deposer(
+    fichier: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Dépose une archive produite par le navigateur."""
+    donnees = await fichier.read()
+    if not donnees:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Archive vide.")
+    nom = fichier.filename or "notask.notask"
+    try:
+        return gdrive.televerser(_compte_google(user, session), session, nom, donnees)
+    except gdrive.DriveIndisponible as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+
+
+@router.get("/drive/backups/{file_id}")
+def drive_recuperer(
+    file_id: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Rapporte une archive telle quelle, au navigateur qui la déchiffrera."""
+    try:
+        donnees = gdrive.telecharger(_compte_google(user, session), session, file_id)
+    except gdrive.DriveIndisponible as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    return Response(content=donnees, media_type="application/octet-stream")
+
+
+@router.delete("/drive/backups/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def drive_supprimer(
+    file_id: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Met l'archive à la corbeille Drive (jamais de suppression définitive)."""
+    try:
+        gdrive.supprimer(_compte_google(user, session), session, file_id)
+    except gdrive.DriveIndisponible as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
