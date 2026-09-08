@@ -210,6 +210,19 @@ def set_done(
             session.refresh(note)
             gcal.sync_note(note, session)
 
+        # Archivage automatique d'une notask DATÉE cochée depuis la vue des
+        # échéances (ou depuis le widget Android, qui passe par ici aussi) —
+        # même règle et même endroit que pour une ligne, voir
+        # archiver_si_tout_coche dans routers/notes.py.
+        #
+        # Placé APRÈS le bloc de récurrence ci-dessus, volontairement : une
+        # notask répétée y est décochée et reprogrammée à la date suivante,
+        # elle n'est donc justement PAS terminée. Appeler l'archivage avant
+        # l'aurait rangée aux archives pour l'en ressortir aussitôt.
+        if archiver_si_tout_coche(note, session):
+            session.commit()
+            session.refresh(note)
+
         return TaskOut(
             kind="note", id=note.id, note_id=note.id, note_title=note.title,
             text=note.title, due_at=note.due_at, due_end_at=note.due_end_at, all_day=note.all_day,

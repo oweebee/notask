@@ -383,6 +383,20 @@ class NoteBase(SQLModel):
     # plus : le contenu part et revient en clair comme n'importe quel autre,
     # et reste lisible dès qu'on ouvre la notask.
     masked: bool = False
+    # Masque, dans la MOSAÏQUE seulement, les lignes déjà cochées. Purement
+    # d'affichage, contrairement à NoteItem.archived qui met une ligne de
+    # côté pour de bon : les lignes cochées restent présentes, dans la notask
+    # comme dans les tâches, et la boîte d'édition les montre toujours — sans
+    # quoi on ne pourrait plus les décocher.
+    #
+    # TROIS états, et non un simple booléen :
+    #   None  -> pas de choix explicite, on suit le défaut de la VUE
+    #   True  -> masquées, False -> visibles (choix de l'utilisateur)
+    # Le défaut dépend de la vue parce qu'il s'inverse : sur l'accueil une
+    # ligne cochée disparaît (ménage au fil de l'eau), mais dans les Archives
+    # elle doit rester visible — une notask s'archivant justement quand
+    # TOUTES ses lignes sont cochées, les y masquer la ferait paraître vide.
+    hide_checked: Optional[bool] = None
 
     # Cf. _due_at_utc() en tête de fichier — rétablit l'étiquette UTC perdue
     # par SQLite/SQLAlchemy à la lecture, pour toute classe héritant de
@@ -600,6 +614,7 @@ class NoteUpdate(SQLModel):
     label_ids: Optional[List[int]] = None
     icon: Optional[str] = None
     masked: Optional[bool] = None
+    hide_checked: Optional[bool] = None
     # Nouvelle position manuelle (glisser-déposer) ; voir Note.position.
     position: Optional[float] = None
     # Cf. Note.calendar_title.

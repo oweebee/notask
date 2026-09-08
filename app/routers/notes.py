@@ -281,8 +281,15 @@ def _purge_note(note: Note, session: Session) -> None:
 
 
 def archiver_si_tout_coche(note: Note, session: Session) -> bool:
-    """Archive une liste à cocher dont TOUTES les lignes sont cochées, et la
-    désarchive dès qu'une ligne est décochée.
+    """Archive une notask TERMINÉE, et la désarchive dès qu'elle ne l'est plus.
+
+    Une notask est « terminée » de deux façons, l'une OU l'autre suffisant :
+      - toutes ses lignes à cocher le sont (règle d'origine) ;
+      - ou elle porte une ÉCHÉANCE SUR ELLE-MÊME et sa propre case a été
+        cochée dans la vue des échéances (Note.done). Ce second cas vaut
+        pour une notask sans aucune ligne à cocher comme pour une liste
+        datée : cocher la notask entière veut dire « c'est fait », quoi
+        qu'il reste de cases dedans.
 
     Placé côté SERVEUR et non dans le client : une case peut être cochée
     depuis la mosaïque, depuis l'édition rapide, depuis la vue des échéances,
@@ -295,8 +302,9 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
     case cochée par erreur laisserait la notask coincée dans les archives
     sans que rien ne l'explique.
 
-    Ne fait rien pour une notask sans aucune case (elle n'a rien à terminer),
-    ni pour une notask en corbeille. Aucun commit : à la charge de l'appelant.
+    Ne fait rien pour une notask qui n'a NI case NI échéance propre (elle n'a
+    rien à terminer), ni pour une notask en corbeille. Aucun commit : à la
+    charge de l'appelant.
 
     Rien ici ne touche aux ÉCHÉANCES : une ligne datée garde son `due_at` et
     son `google_event_id`, et continue de remonter dans « Notasks prévues » et
@@ -331,14 +339,24 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
             NoteItem.trashed_at.is_(None),
         )
     ).all()
-    if not lignes:
+    # Ni case ni échéance propre : rien à terminer, donc rien à archiver.
+    # (Le `not lignes` seul ne suffit plus : une notask de texte libre AVEC
+    # échéance entre désormais dans la règle par sa propre case.)
+    if not lignes and note.due_at is None:
         return False
 
-    tout_coche = all(ligne.checked for ligne in lignes)
-    if tout_coche == note.archived:
+    # Une case cochée dans la vue des échéances sur une notask DATÉE vaut
+    # achèvement, au même titre que des lignes toutes cochées. Réversible de
+    # la même manière : décocher cette case ressort la notask des archives,
+    # exactement comme décocher une ligne.
+    finie_par_lignes = bool(lignes) and all(ligne.checked for ligne in lignes)
+    finie_par_echeance = note.due_at is not None and note.done
+    finie = finie_par_lignes or finie_par_echeance
+
+    if finie == note.archived:
         return False
 
-    note.archived = tout_coche
+    note.archived = finie
     note.updated_at = utcnow()
     session.add(note)
     return True
@@ -643,7 +661,19 @@ def update_note(
     coches_apres = {ligne.id: ligne.checked for ligne in (new_items or [])}
     coches_changees = coches_avant != coches_apres
 
-    if new_items is not None and "archived" not in data and coches_changees:
+    # Second déclencheur, de même nature : la case de la notask ELLE-MÊME
+    # (Note.done, celle de la vue des échéances) vient de bouger. Une notask
+    # datée cochée depuis la boîte d'édition doit partir aux archives comme
+    # si elle avait été cochée depuis la colonne d'échéances — la règle vaut
+    # quel que soit l'endroit d'où l'on coche, c'est tout son intérêt.
+    # Toujours une TRANSITION et jamais un état, pour la raison détaillée
+    # ci-dessus : sinon une notask terminée ressortie des archives à la main
+    # y serait renvoyée au premier enregistrement suivant.
+    done_change = note.due_at is not None and note.done != etait_done
+
+    if "archived" not in data and (
+        (new_items is not None and coches_changees) or done_change
+    ):
         if archiver_si_tout_coche(note, session):
             session.commit()
 
@@ -685,6 +715,13 @@ def update_note(
         note.updated_at = utcnow()
         session.add(note)
         session.commit()
+        # Peut faire ressortir la notask des archives, exactement comme la
+        # reprogrammation d'une LIGNE plus bas : l'archivage automatique
+        # ci-dessus vient peut-être de l'y ranger parce que sa case était
+        # cochée, mais elle vient d'être décochée et redatée — elle n'est
+        # donc pas terminée, elle est repoussée.
+        if archiver_si_tout_coche(note, session):
+            session.commit()
         session.refresh(note)
         gcal.sync_note(note, session)
 

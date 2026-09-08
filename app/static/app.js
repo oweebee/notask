@@ -709,6 +709,10 @@ const ICONS = {
 
   // Œil barré : masquage du contenu sur l'accueil.
   maskEye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>',
+  // Balai : masquer les lignes déjà cochées, « faire le ménage » dans une
+  // liste bien entamée. Même trait que ses voisines de la barre d'actions
+  // (fill none + stroke currentColor), pour ne pas jurer à côté de l'œil.
+  balai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5 11 9"/><path d="M13.5 7.5 8 13l4.5 4.5 5.5-5.5z"/><path d="m8 13-3.5 1.2a2 2 0 0 0-1.2 2.6l1.4 3.6 8.3-2.9"/><path d="M6.6 16.1 8 19.8"/><path d="M9.6 15.1 11 18.8"/></svg>',
 
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.8"/><path d="M15 6.5V5.8A1.8 1.8 0 0 0 13.2 4H5.8A1.8 1.8 0 0 0 4 5.8v7.4A1.8 1.8 0 0 0 5.8 15h.7"/></svg>',
   lien: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.3 4.3 0 0 0 6.1 0l2.5-2.5a4.3 4.3 0 1 0-6.1-6.1l-1.3 1.3"/><path d="M14 10.5a4.3 4.3 0 0 0-6.1 0L5.4 13a4.3 4.3 0 1 0 6.1 6.1l1.3-1.3"/></svg>',
@@ -3350,7 +3354,19 @@ async function loadNotes() {
   if (state.showFavoritesOnly) filtered = filtered.filter((n) => n.pinned);
   if (state.search) filtered = filtered.filter((n) => noteMatchesSearch(n, state.search));
   state.notes = filtered;
-  renderNotes();
+  /* Rendu isolé du reste du chargement. Leçon d'une panne réelle : une
+     exception levée dans renderNotes() (une seule carte mal formée suffit)
+     interrompait TOUTE la suite — la colonne d'échéances, les pastilles de
+     comptage et l'ouverture par lien profond ne s'exécutaient plus, et
+     l'application se retrouvait entièrement vide sans autre indice qu'une
+     promesse rejetée. On journalise et on continue : la mosaïque peut être
+     vide, le reste de l'interface reste debout, et le journal (Outils) dit
+     ce qui a cassé au lieu de laisser deviner. */
+  try {
+    renderNotes();
+  } catch (err) {
+    log.error('rendu', 'Échec du rendu de la mosaïque', err);
+  }
   loadArchivedItems();
   if (!$('#agenda-col').hidden) loadAgenda();
   updateTaskBadges();
@@ -4244,6 +4260,24 @@ function renderSearchHits() {
     el.className = 'note search-hit c-' + n.color;
     el.dataset.id = n.id;
 
+    /* Y a-t-il au moins une ligne à cocher ? `n.items` porte les lignes
+       aussi bien d'une liste à cocher pure que d'une notask MIXTE (cases
+       posées dans le texte, voir poserLignesDansTexte) : un seul test
+       couvre donc les deux formes. Les lignes archivées seules ne comptent
+       pas — elles ne sont déjà plus affichées ici. */
+    const aDesCases = (n.items || []).some((i) => !i.archived);
+
+    /* Une ligne cochée disparaît PAR DÉFAUT : c'est le ménage au fil de
+       l'eau, et le bouton sert alors à la faire réapparaître. Les Archives
+       prennent le parti INVERSE — une notask s'archivant justement quand
+       toutes ses lignes sont cochées, les y masquer la ferait paraître
+       vide. Le bouton reste disponible des deux côtés, et dès qu'on s'en
+       sert le choix explicite (hide_checked à true/false) l'emporte sur le
+       défaut de la vue. Cf. Note.hide_checked, tri-état côté serveur. */
+    const cacherCochees = (n.hide_checked === null || n.hide_checked === undefined)
+      ? !state.showArchived
+      : n.hide_checked;
+
     const icon = n.icon && ICON_CHOICES[n.icon] ? `<span class="note-icon">${ICON_CHOICES[n.icon]}</span>` : '';
     const nav = hits.length > 1
       ? `<div class="hit-nav">
@@ -4502,7 +4536,11 @@ function renderNotes() {
       // Une ligne archivée seule (voir NoteItem.archived) est mise de côté :
       // elle ne s'affiche plus dans sa notask, mais figure dans les Archives
       // comme une ligne à part (voir loadArchivedItems()).
-      for (const it of n.items.filter((i) => !i.archived)) {
+      /* hide_checked : les lignes cochées disparaissent de la CARTE
+         seulement. Elles ne sont ni archivées ni supprimées — la boîte
+         d'édition continue de les montrer (sinon impossible de les
+         décocher), et elles reviennent ici dès que l'option est retirée. */
+      for (const it of n.items.filter((i) => !i.archived && !(cacherCochees && i.checked))) {
         const due = it.due_at
           ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at, it.all_day)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
@@ -4537,6 +4575,9 @@ function renderNotes() {
         <button data-act="mask" class="${n.masked ? 'active-toggle' : ''}"
           title="${n.masked ? "Contenu masqué sur l'accueil — cliquer pour l'afficher" : "Masquer le contenu sur l'accueil"}"
           aria-label="${n.masked ? "Afficher le contenu" : "Masquer le contenu"}">${ICONS.maskEye}</button>
+        ${aDesCases ? `<button data-act="hide-checked" class="${cacherCochees ? 'active-toggle' : ''}"
+          title="${cacherCochees ? 'Lignes cochées masquées — cliquer pour les réafficher' : 'Lignes cochées visibles — cliquer pour les masquer'}"
+          aria-label="${cacherCochees ? 'Réafficher les lignes cochées' : 'Masquer les lignes cochées'}">${ICONS.balai}</button>` : ''}
         <span class="sep"></span>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
@@ -4569,6 +4610,17 @@ function renderNotes() {
     // Notask mixte : cases à cocher posées dans le corps du texte. Cocher
     // depuis la mosaïque part tout de suite en PATCH, comme pour une liste
     // à cocher classique (voir la boucle ul.check li plus bas).
+    /* Notask mixte : les cases posées dans le TEXTE ne passent pas par la
+       boucle <ul class="check"> filtrée plus haut — elles sont construites
+       par hydrateLignesACocher. On applique donc le même ménage ici, une
+       fois les lignes en place. `display: none` et non l'attribut `hidden` :
+       .note-ligne est en `display: flex`, qui l'emporterait sur [hidden]. */
+    if (cacherCochees) {
+      el.querySelectorAll('.note-ligne[data-ligne]').forEach((bloc) => {
+        const ligne = (n.items || []).find((i) => String(i.id) === bloc.dataset.ligne);
+        if (ligne && ligne.checked) bloc.style.display = 'none';
+      });
+    }
     hydrateLignesACocher(el, n, {
       editable: false,
       onCheck: async (itemId, coche) => {
@@ -4665,6 +4717,16 @@ function renderNotes() {
     // d'édition — même bascule que #dns-toggle-mask (voir renderBoutonMasque).
     el.querySelector('[data-act=mask]').onclick = async () => {
       await api('/notes/' + n.id, { method: 'PATCH', body: { masked: !n.masked } });
+      loadNotes();
+    };
+    // Ménage visuel : bascule d'affichage seulement (voir Note.hide_checked),
+    // rien n'est archivé ni supprimé. Absent des notasks sans case à cocher.
+    const boutonMenage = el.querySelector('[data-act=hide-checked]');
+    if (boutonMenage) boutonMenage.onclick = async () => {
+      // Bascule à partir de l'état RÉSOLU (défaut de vue compris) et non du
+      // champ brut : sur une notask encore à None, cliquer doit inverser ce
+      // que l'utilisateur a SOUS LES YEUX, pas repartir d'un false implicite.
+      await api('/notes/' + n.id, { method: 'PATCH', body: { hide_checked: !cacherCochees } });
       loadNotes();
     };
     /* Suppression en DEUX temps, sans fenêtre de confirmation : le premier

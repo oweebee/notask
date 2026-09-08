@@ -1563,6 +1563,21 @@ body.is-dragging * {
   transition: background .15s, color .15s;
 }
 .note .actions button:hover { background: rgba(0,0,0,.28); color: var(--md-on-surface); }
+
+/* Bascule ACTIVE (contenu masqué, lignes cochées masquées). Cette règle
+   MANQUAIT : .active-toggle n'était stylée que dans .fmt-toolbar, si bien
+   que le bouton œil avait exactement la même apparence actif ou non — on ne
+   pouvait pas savoir, du coin de l'œil, si une notask était masquée.
+   Un anneau interne clair + une icône en pleine opacité plutôt qu'un fond
+   éclairci : pour la raison déjà donnée plus haut, un voile clair posé sur
+   une carte saturée en décalerait la teinte perçue, alors qu'un liseré de
+   1,5px n'en couvre presque rien. */
+.note .actions button.active-toggle {
+  background: rgba(0,0,0,.42);
+  color: var(--md-on-surface);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.45);
+}
+.note .actions button.active-toggle:hover { background: rgba(0,0,0,.5); }
 .note .actions .sep { flex: 1; }
 
 /* Corbeille ARMÉE : premier clic passé, le second envoie la notask à la
