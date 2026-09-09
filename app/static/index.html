@@ -710,6 +710,19 @@
       </div>
       <div id="drive-liste" class="drive-liste" hidden></div>
     </div>
+
+    <!-- Purge : vider la base avant de réimporter une sauvegarde, sinon
+         l'import s'AJOUTE à l'existant et tout se retrouve en double. Deux
+         clics (armement, comme la corbeille d'une carte) PUIS une fenêtre de
+         confirmation : c'est le seul geste irréversible de l'application,
+         il mérite les deux. Les libellés ne sont pas touchés. -->
+    <div class="outil-purge">
+      <h4>purger les notasks</h4>
+      <p class="aide">Efface définitivement TOUTES vos notasks — actives, archivées et en corbeille — sans passage par la corbeille. Les libellés sont conservés. À faire avant de réimporter une sauvegarde, pour éviter les doublons.</p>
+      <div class="outil-actions">
+        <button class="btn danger" id="purge-run" type="button">Tout effacer</button>
+      </div>
+    </div>
   </section>
 
   <!-- Journal : une ligne dédiée, le détail vit dans sa propre fenêtre

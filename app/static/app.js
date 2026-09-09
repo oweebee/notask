@@ -10462,6 +10462,11 @@ async function collecterExport(progres) {
     notesExport.push({
       title: n.title, description: n.description, content: n.content,
       color: n.color, pinned: n.pinned, archived: n.archived,
+      // `done` : la case de la notask ELLE-MÊME (celle de la vue des
+      // échéances). Elle manquait — une notask datée cochée revenait donc
+      // décochée après import, et ressortait des échéances comme si elle
+      // restait à faire.
+      done: !!n.done,
       is_checklist: n.is_checklist, due_at: n.due_at, icon: n.icon,
       due_end_at: n.due_end_at || null, all_day: !!n.all_day, recur: n.recur || null,
       label_ids: n.label_ids || [],
@@ -10779,6 +10784,54 @@ $('#drive-export').addEventListener('click', () => {
   $('#export-run').click();
 });
 
+/* Purge complète. Deux verrous volontairement cumulés : l'armement en deux
+   clics (même geste que la corbeille d'une carte, voir armerEnDeuxClics) PUIS
+   une fenêtre de confirmation. Ailleurs dans l'application, la fenêtre a été
+   retirée au profit des deux clics parce que le geste était réversible — la
+   corbeille garde 30 jours. Ici rien n'est réversible : les deux se
+   justifient. Désarmement automatique au bout de 4 s. */
+(() => {
+  const btn = $('#purge-run');
+  if (!btn) return;
+  let minuterie = null;
+  const desarmer = () => {
+    clearTimeout(minuterie);
+    minuterie = null;
+    btn.classList.remove('arme');
+    btn.textContent = 'Tout effacer';
+  };
+
+  btn.addEventListener('click', async () => {
+    if (!btn.classList.contains('arme')) {
+      btn.classList.add('arme');
+      btn.textContent = 'Confirmer l’effacement';
+      minuterie = setTimeout(desarmer, 4000);
+      return;
+    }
+    desarmer();
+    if (!confirm(
+      'Effacer DÉFINITIVEMENT toutes vos notasks ?\n\n'
+      + 'Actives, archivées et en corbeille, avec leurs images, notes vocales '
+      + 'et historique. Les libellés sont conservés.\n\n'
+      + "Cette action est IRRÉVERSIBLE. Exportez une sauvegarde d'abord si "
+      + "vous n'en avez pas."
+    )) return;
+
+    btn.disabled = true;
+    try {
+      msg($('#outil-msg'), 'Effacement…', 'ok');
+      const r = await api('/notes/purge-all', { method: 'POST' });
+      await loadNotes();
+      updateTaskBadges();
+      msg($('#outil-msg'), `${(r && r.deleted) || 0} notask(s) effacée(s).`, 'ok');
+    } catch (err) {
+      msg($('#outil-msg'), err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+
 $('#drive-import').addEventListener('click', async () => {
   const liste = $('#drive-liste');
   liste.hidden = false;
@@ -11006,6 +11059,62 @@ $('#import-file').addEventListener('change', async () => {
             method: 'PATCH', body: { content: await encryptField(contenu) },
           });
         }
+
+        /* États que la CRÉATION ne sait pas porter — NoteCreate n'a ni
+           `done`, NoteItemIn n'a pas `archived`, et la corbeille n'est pas un
+           champ mais une route. Ils se reposent donc après coup, sinon une
+           notask cochée revient à faire, une ligne mise de côté seule
+           réapparaît dans sa liste, et la corbeille se vide à chaque import. */
+
+        // Lignes mises de côté SEULES (voir NoteItem.archived). Rapprochées
+        // par RANG, comme la table de correspondance des marqueurs ci-dessus.
+        const lignesCreees = cree.items || [];
+        let ligneArchivee = false;
+        for (let r = 0; r < lignesArchive.length; r++) {
+          if (!lignesArchive[r].archived) continue;
+          const cible = lignesCreees[r];
+          if (!cible) continue;
+          try {
+            await api(`/notes/${cree.id}/items/${cible.id}`, {
+              method: 'PATCH', body: { archived: true },
+            });
+            ligneArchivee = true;
+          } catch { /* ligne conservée telle quelle */ }
+        }
+
+        /* `archived` renvoyé DANS LA MÊME requête que `done` : côté serveur,
+           la présence d'`archived` dans le corps court-circuite l'archivage
+           automatique (voir update_note — « la décision de l'utilisateur
+           prime »). Sans ça, cocher une notask datée l'archiverait d'office
+           et l'archive ne serait pas restituée telle qu'elle a été prise.
+           Même raison après avoir archivé une ligne : le décompte des cases
+           restantes a pu déclencher la règle. */
+        if (n.done && n.due_at) {
+          try {
+            await api('/notes/' + cree.id, {
+              method: 'PATCH', body: { done: true, archived: !!n.archived },
+            });
+          } catch { /* état non restitué, notask conservée */ }
+        } else if (ligneArchivee) {
+          try {
+            await api('/notes/' + cree.id, {
+              method: 'PATCH', body: { archived: !!n.archived },
+            });
+          } catch { /* idem */ }
+        }
+
+        /* Corbeille restituée, contrairement au choix d'origine qui la
+           versait dans les notasks ordinaires. Une seule réserve, assumée :
+           `trashed_at` repart d'aujourd'hui, le compte à rebours des 30 jours
+           avant purge automatique recommence donc à l'import. Restituer la
+           date d'origine ferait disparaître à la première ouverture ce que
+           l'utilisateur venait justement de restaurer. */
+        if (n.trashed) {
+          try {
+            await api('/notes/' + cree.id, { method: 'DELETE' });
+          } catch { /* reste hors corbeille */ }
+        }
+
         faits += 1;
       } catch {
         echecs += 1;

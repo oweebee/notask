@@ -523,6 +523,42 @@ def list_trashed_items(
     ]
 
 
+@router.post("/purge-all")
+def purge_all(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Efface TOUTES les notasks du compte — actives, archivées et en
+    corbeille — avec leurs lignes, pièces jointes et historique de versions.
+    IRRÉVERSIBLE, sans passage par la corbeille.
+
+    Sert à repartir d'une base vide avant de réimporter une sauvegarde : sans
+    ça, l'import s'AJOUTE à l'existant et tout se retrouve en double.
+
+    Les LIBELLÉS sont volontairement conservés : l'import les rapproche par
+    NOM (voir nomParAncienId côté client) et ne recrée que les manquants, donc
+    les effacer ne créerait aucun doublon — mais ferait perdre leur couleur et
+    leur ordre pour rien.
+
+    Déclarée AVANT "/{note_id}" : FastAPI teste les routes dans l'ordre de
+    déclaration, et une route paramétrée absorberait sinon "purge-all".
+    """
+    notes = session.exec(select(Note).where(Note.user_id == user.id)).all()
+    for note in notes:
+        # Retire d'abord l'événement Google lié, s'il y en a un : _purge_note
+        # supprime la ligne en base sans prévenir l'agenda, et l'événement
+        # resterait orphelin côté Google. Poser trashed_at fait basculer
+        # should_have_event à faux, donc sync_note supprime l'événement.
+        if note.trashed_at is None:
+            note.trashed_at = utcnow()
+            session.add(note)
+            session.commit()
+            gcal.sync_note(note, session)
+        _purge_note(note, session)
+    session.commit()
+    return {"deleted": len(notes)}
+
+
 @router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
 def create_note(
     payload: NoteCreate,
