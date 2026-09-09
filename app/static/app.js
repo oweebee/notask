@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9053';
+const APP_VERSION = '0.9054';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -7139,13 +7139,29 @@ function activerClicDansLeVide(el) {
   el.dataset.clicVideActif = '1';
 
   el.addEventListener('mousedown', (e) => {
-    if (e.target !== el) return; // clic sur du contenu : rien à faire
     if (e.button !== 0) return;  // clic droit/milieu : pas notre affaire
-    const dernier = el.lastElementChild || el.lastChild;
-    if (!dernier) return;
-    const bas = dernier.nodeType === 1
-      ? dernier.getBoundingClientRect().bottom
-      : el.getBoundingClientRect().bottom;
+    /* `e.target !== el` a été RETIRÉ : c'était le vrai bug. renderFormatted()
+       ne pose pas de <div> par ligne — une grande partie du texte d'une
+       notask est du texte NU, enfant direct de la zone éditable (pas
+       enveloppé). Cliquer dessus met déjà `e.target === el`, exactement
+       comme un clic sous tout le contenu : le test ne distinguait donc pas
+       "clic en plein milieu du texte" de "clic dans le vide", et un simple
+       backtick isolé ou tout autre texte nu suffisait à renvoyer le curseur
+       en fin de notask (constaté avec des marqueurs de code orphelins,
+       mais le défaut touchait tout texte nu, orphelin ou pas).
+
+       On mesure maintenant le bas RÉEL du contenu rendu, via le rectangle
+       englobant d'un Range couvrant tout `el` — fiable quel que soit l'ordre
+       des nœuds, contrairement à lastElementChild/lastChild qui ignore le
+       texte nu suivant un élément et suppose à tort que le dernier NŒUD DOM
+       est le dernier contenu VISUEL. */
+    if (!el.hasChildNodes()) return;
+    const contenu = document.createRange();
+    contenu.selectNodeContents(el);
+    const rects = contenu.getClientRects();
+    const bas = rects.length
+      ? Math.max(...Array.from(rects, (r) => r.bottom))
+      : el.getBoundingClientRect().top;
     if (e.clientY <= bas) return;
 
     /* SURTOUT PAS de preventDefault() ici. Il annulait le glisser de
