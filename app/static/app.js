@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9057';
+const APP_VERSION = '0.9058';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5571,6 +5571,13 @@ activerClicDansLeVide($('#dns-content'));
 /* Interstice entre #dns-content et les labels (voir activerClicEntreChamps) :
    uniquement en édition simple, seule zone où le bug a été constaté. */
 activerClicEntreChamps($('#dlg-note-simple .dns-card'), $('#dns-content'));
+/* Ligne libre toujours prête en fin de notask (voir assurerLigneApresBloc) :
+   rappelée à CHAQUE frappe, pas seulement à l'ouverture, pour qu'écrire sur
+   cette ligne en fasse réapparaître une nouvelle juste en dessous — même
+   principe que la ligne d'attente des cases à cocher, transposé au texte
+   libre. Idempotente : ne touche rien si la ligne libre existe déjà. */
+$('#nc-content').addEventListener('input', () => assurerLigneApresBloc($('#nc-content')));
+$('#dns-content').addEventListener('input', () => assurerLigneApresBloc($('#dns-content')));
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
 
@@ -7093,34 +7100,39 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
   retablirDefilement();
 }
 
-/* Garantit qu'un bloc (code, zone d'archive) n'est jamais le DERNIER élément
-   de la zone d'édition, en laissant une ligne vide derrière lui.
+/* Garantit qu'une ligne libre existe TOUJOURS après le dernier contenu de la
+   zone d'édition — demandé explicitement : pouvoir cliquer sous la dernière
+   ligne d'une notask (quelle qu'elle soit : texte, bloc de code, case à
+   cocher, note vocale, zone d'archive...) et taper directement, sans avoir à
+   se replacer en fin de ligne précédente et faire Entrée.
 
-   Sans cette ligne, une notask qui se termine par un bloc devient un
-   cul-de-sac : cliquer sous le bloc ne place le curseur nulle part — il n'y
-   a rien à cet endroit — et il faut ruser (fin du bloc puis flèches, ou
-   sélection à la souris) pour reprendre la saisie. C'est un travers connu
-   des zones éditables : le navigateur ne crée pas de ligne d'accueil de
-   lui-même après un élément de type bloc.
+   Avant, ne s'appliquait qu'après un bloc « insécable » (PRE, case à cocher,
+   note vocale, zone d'archive) : sans ligne d'accueil derrière, une notask
+   qui s'y terminait devenait un cul-de-sac, cliquer dessous ne plaçant le
+   curseur nulle part. Généralisé à TOUT contenu, y compris du simple texte —
+   même geste que la « ligne d'attente » des cases à cocher (voir
+   majLigneAttente), transposé au texte libre.
 
    Un <br> plutôt qu'un paragraphe vide : richToText() le traduit en simple
    saut de ligne, donc rien ne s'ajoute au contenu enregistré si l'on n'écrit
-   pas dedans. */
+   pas dedans.
+
+   Idempotent à dessein : rappelée après CHAQUE frappe (voir le listener
+   'input' branché plus bas) pour qu'une ligne libre soit toujours prête
+   sous ce qu'on vient de taper — mais elle ne doit RIEN ajouter si la ligne
+   libre existe déjà, sous peine de contenu qui DÉRIVE en gagnant une ligne
+   vide à chaque frappe ou à chaque ouverture/fermeture (piège déjà rencontré
+   deux fois, voir CONTEXT.md). */
 function assurerLigneApresBloc(el) {
   if (!el) return;
   const dernier = el.lastChild;
   if (!dernier) return;
 
-  // .note-ligne et .note-audio sont aussi des blocs insécables
-  // (contenteditable="false") : sans ligne d'accueil derrière, une notask qui
-  // se termine par une case à cocher ou une note vocale ne se laisse plus
-  // compléter — le curseur n'a nulle part où se poser.
-  const estBloc = dernier.nodeType === 1
-    && (dernier.tagName === 'PRE'
-      || dernier.classList?.contains('note-archive-block')
-      || dernier.classList?.contains('note-ligne')
-      || dernier.classList?.contains('note-audio'));
-  if (!estBloc) return;
+  // Déjà une ligne libre : un <br> final, ou un texte se terminant déjà par
+  // un saut de ligne (une zone en white-space: pre-wrap affiche alors déjà
+  // une ligne vide après lui, sans qu'il soit besoin d'un <br>).
+  if (dernier.nodeType === Node.ELEMENT_NODE && dernier.tagName === 'BR') return;
+  if (dernier.nodeType === Node.TEXT_NODE && /\n\s*$/.test(dernier.textContent)) return;
 
   el.appendChild(document.createElement('br'));
 }
