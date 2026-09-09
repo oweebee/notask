@@ -2782,7 +2782,21 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   margin: 0 calc(var(--marge-bloc) * -1);
   padding: 0 var(--marge-bloc);
 }
-#dns-content { flex: 1; resize: none; }
+/* flex: 1 (= flex: 1 1 0%) laissait le navigateur COMPRESSER la boîte réelle
+   de la zone éditable en dessous de la taille de son propre contenu — une
+   notask longue rendait alors une grande partie de son texte HORS de la
+   boîte de #dns-content (overflow visible, mais la boîte elle-même restait
+   petite). Le clic y était hasardeux (parfois capté ailleurs, curseur
+   souris au lieu du curseur texte), aussi bien au milieu qu'en bas de la
+   notask — trouvé en mesurant la boîte réelle (~368px) contre son contenu
+   (~1200px) sur une longue notask.
+   flex-shrink: 0 + flex-basis: auto (au lieu de 0%) empêchent cette
+   compression : la boîte fait maintenant toujours AU MOINS la taille de son
+   contenu, quitte à dépasser le champ — c'est alors #dns-content-field
+   (overflow-y: auto) qui absorbe le surplus par défilement, comme prévu.
+   flex-grow: 1 reste : une notask courte remplit toujours tout l'espace
+   disponible (nécessaire à activerClicDansLeVide/activerClicEntreChamps). */
+#dns-content { flex: 1 0 auto; min-height: 100%; resize: none; }
 #dns-items-field #dns-items { flex: 1; overflow-y: auto; }
 
 /* Barre d'outils de mise en forme, sous le texte, uniquement en édition
