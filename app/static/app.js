@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9059';
+const APP_VERSION = '0.9060';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -7125,11 +7125,14 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
    deux fois, voir CONTEXT.md). */
 function assurerLigneApresBloc(el) {
   if (!el) return;
-  const dernier = el.lastChild;
+  // Un nœud texte VIDE en bout de zone (reliquat d'une frappe effacée au
+  // backspace) ne doit pas fausser le raisonnement sur les <br> ci-dessous :
+  // il ne contribue rien au contenu enregistré, autant le retirer.
+  while (el.lastChild && el.lastChild.nodeType === Node.TEXT_NODE && el.lastChild.textContent === '') {
+    el.removeChild(el.lastChild);
+  }
+  let dernier = el.lastChild;
   if (!dernier) return;
-
-  // Déjà une vraie ligne libre : un <br> final. RIEN à faire.
-  if (dernier.nodeType === Node.ELEMENT_NODE && dernier.tagName === 'BR') return;
 
   /* Un texte se terminant par \n ne montre PAS forcément de ligne vide à
      l'écran : Chrome ne lui donne pas toujours sa propre boîte de ligne
@@ -7143,9 +7146,29 @@ function assurerLigneApresBloc(el) {
   if (dernier.nodeType === Node.TEXT_NODE && /\n$/.test(dernier.textContent)) {
     dernier.textContent = dernier.textContent.replace(/\n$/, '');
     el.appendChild(document.createElement('br'));
-    return;
+    dernier = el.lastChild;
   }
 
+  /* Un SEUL <br> terminal ne suffit PAS à faire de la ligne d'en dessous une
+     ligne où l'on puisse réellement taper : constaté en direct — avec un
+     seul <br> final, Chrome insère le texte tapé AVANT lui (donc sur la
+     ligne du DESSUS, collé au contenu précédent), jamais après. Un clic là
+     plaçait bien le curseur (voir activerClicDansLeVide), mais la première
+     frappe retombait sur la mauvaise ligne — d'où l'impression, réelle,
+     qu'aucune ligne libre n'existait pour les notasks finissant en texte
+     simple. Deux <br> terminaux font atterrir la frappe exactement ENTRE
+     eux, sur une ligne vide à part : le premier clôt la dernière ligne de
+     contenu, le second est la ligne libre elle-même — celle sur laquelle on
+     clique et on tape. richToText() retire ce doublon avant l'enregistrement
+     (voir plus haut), il ne grossit donc jamais le contenu réel. */
+  const dernierEstBr = dernier.nodeType === Node.ELEMENT_NODE && dernier.tagName === 'BR';
+  const avantDernier = dernierEstBr ? dernier.previousSibling : null;
+  const avantDernierEstBr = !!avantDernier
+    && avantDernier.nodeType === Node.ELEMENT_NODE && avantDernier.tagName === 'BR';
+
+  if (dernierEstBr && avantDernierEstBr) return; // déjà les deux <br> : rien à faire
+
+  if (!dernierEstBr) el.appendChild(document.createElement('br'));
   el.appendChild(document.createElement('br'));
 }
 
@@ -7428,6 +7451,38 @@ brancherBarreFormat('#dns-fmt-toolbar', '#dns-content', '#dns-text-colors', '#dn
 /* Inverse de renderFormatted() : reconvertit le HTML de la zone
    contenteditable en texte façon markdown pour l'enregistrement. */
 function richToText(root) {
+  /* Ligne libre en fin de zone (voir assurerLigneApresBloc) : en édition, la
+     zone se termine TOUJOURS par DEUX <br> — un seul ne suffit pas pour que
+     Chrome pose le curseur/le texte tapé SUR la ligne libre plutôt qu'avant
+     elle (constaté). Ce doublon est un pur besoin de saisie, jamais du
+     contenu : on ne garde ici que le PREMIER des <br> terminaux (le plus
+     proche du vrai contenu, qui clôt sa dernière ligne) et on retire les
+     autres avant de convertir — sans ça, chaque enregistrement ajouterait un
+     saut de ligne de plus au texte sauvegardé (dérive de contenu).
+     Opère directement sur `root` : sans conséquence, richToText() n'est
+     appelé qu'au moment d'enregistrer/créer, jamais pendant la frappe. */
+  {
+    const finaux = [];
+    let n = root.lastChild;
+    while (n) {
+      if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') {
+        finaux.push(n);
+        n = n.previousSibling;
+        continue;
+      }
+      // Nœud texte vide (reliquat d'une frappe effacée) : transparent, ne
+      // casse pas la série de <br> terminaux, mais ne compte pas dedans.
+      if (n.nodeType === Node.TEXT_NODE && n.textContent === '') {
+        n = n.previousSibling;
+        continue;
+      }
+      break;
+    }
+    // finaux[0] = le tout dernier <br> (le plus externe) … finaux[last] =
+    // celui collé au vrai contenu, à garder. On retire tous les autres.
+    for (let i = 0; i < finaux.length - 1; i++) finaux[i].remove();
+  }
+
   function walk(node) {
     // \u00c9chappement des d\u00e9limiteurs : un * / _ / ` tap\u00e9 comme texte normal
     // (\u00ab vitesse * 2 \u00bb, \u00ab fichier_important \u00bb, un backtick isol\u00e9\u2026) est
