@@ -536,8 +536,18 @@
 <!-- Profil : informations de base et sortie de session. -->
 <dialog id="dlg-profil">
   <h2>Profil</h2>
-  <dl class="profil-infos" id="profil-infos"></dl>
 
+  <!-- Profil réorganisé par thème : chaque groupe vit dans sa propre carte
+       (.profil-carte) — fond légèrement plus sombre que la boîte, sans
+       bordure, coins arrondis. Les IDs et la logique JS sont inchangés :
+       seules des enveloppes de présentation ont été ajoutées autour des
+       blocs existants. -->
+  <section class="profil-carte">
+    <h3>Compte</h3>
+    <dl class="profil-infos" id="profil-infos"></dl>
+  </section>
+
+  <section class="profil-carte">
   <!-- Identifiants OAuth Google (Client ID/Secret) pour toute l'installation
        — voir /api/google/admin-config. Réservés aux administrateurs côté
        serveur (get_current_admin) ; masqué en entier ici pour un compte non
@@ -546,8 +556,9 @@
        (Coolify), pour ne pas avoir à en sortir de l'appli. Placé avant la
        connexion personnelle ci-dessous : il faut ces identifiants avant de
        pouvoir connecter quoi que ce soit. -->
-  <div class="admin-google" id="admin-google" hidden>
-    <h3>API Google — identifiants de l'installation</h3>
+    <h3>Google</h3>
+    <div class="admin-google" id="admin-google" hidden>
+    <h4>API Google — identifiants de l'installation</h4>
     <p class="aide">Créés dans Google Cloud Console. Communs à tous les comptes.</p>
     <p class="admin-google-hint" id="admin-google-source"></p>
     <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
@@ -616,6 +627,7 @@
       <p class="profil-google-cal-hint" id="profil-google-cal-hint" hidden></p>
     </div>
   </div>
+  </section>
 
   <!-- Rappels d'échéance dans le navigateur. Volontairement placé ICI, dans
        le Profil, et derrière un bouton : demander l'autorisation dès
@@ -623,14 +635,31 @@
        refuser définitivement, et les navigateurs exigent de toute façon un
        geste de l'utilisateur pour la boîte de dialogue. Voir
        majEtatRappels()/activerRappels() dans app.js. -->
-  <div class="profil-google" id="profil-rappels">
-    <p class="aide">Un rappel s'affiche à l'heure de l'échéance, et la veille au soir pour une journée complète. Ne fonctionne que si une fenêtre notask est ouverte, même en arrière-plan.</p>
-    <div class="profil-google-row">
-      <span class="profil-google-dot" id="profil-rappels-dot"></span>
-      <span id="profil-rappels-label">Rappels : vérification…</span>
+  <section class="profil-carte">
+    <h3>Rappels</h3>
+    <div class="profil-google profil-carte-bloc" id="profil-rappels">
+      <p class="aide">Un rappel s'affiche à l'heure de l'échéance, et la veille au soir pour une journée complète. Ne fonctionne que si une fenêtre notask est ouverte, même en arrière-plan.</p>
+      <div class="profil-google-row">
+        <span class="profil-google-dot" id="profil-rappels-dot"></span>
+        <span id="profil-rappels-label">Rappels : vérification…</span>
+      </div>
+      <button class="btn ghost" id="profil-rappels-activer" type="button" hidden>Activer les rappels</button>
     </div>
-    <button class="btn ghost" id="profil-rappels-activer" type="button" hidden>Activer les rappels</button>
-  </div>
+  </section>
+
+  <!-- Zoom d'affichage. Persistant au NAVIGATEUR (localStorage), pas au
+       compte : c'est un confort propre à cet écran-ci, un même compte ouvert
+       sur un portable et sur un grand moniteur ne veut pas le même niveau.
+       Voir appliquerZoom()/chargerZoom() dans app.js. -->
+  <section class="profil-carte">
+    <h3>Affichage</h3>
+    <p class="aide">Réduit la taille de toute l'application, utile sur un écran à haute résolution. Réglage propre à ce navigateur.</p>
+    <div class="profil-zoom-row">
+      <input type="range" id="profil-zoom" min="70" max="100" step="5" value="100"
+             aria-label="Taille de l'affichage">
+      <span class="profil-zoom-val" id="profil-zoom-val">100 %</span>
+    </div>
+  </section>
 
   <div class="dialog-actions">
     <button class="btn ghost" id="profil-password" type="button">Changer de mot de passe</button>

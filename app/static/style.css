@@ -301,11 +301,36 @@ header.topbar .who {
 .mobile-menu-btn svg { width: 22px; height: 22px; display: block; }
 
 /* ---- Boîtes Profil et Outils ---- */
+
+/* Carte de thème dans le Profil : fond un cran plus sombre que la boîte
+   (surface-1 sous la surface-3 du dialogue), aucune bordure, coins arrondis.
+   Discrète — c'est le fond seul qui délimite le groupe, pas un trait. */
+.profil-carte {
+  background: var(--md-surface-1);
+  border-radius: var(--shape-md, 12px);
+  padding: 1rem 1.125rem;
+  margin-bottom: .75rem;
+}
+.profil-carte > h3 {
+  margin: 0 0 .75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.profil-carte h4 {
+  margin: 0 0 .5rem;
+  font-size: .9375rem;
+  font-weight: 600;
+  color: var(--md-on-surface);
+}
+/* Dernier enfant d'une carte : pas de marge basse résiduelle qui
+   déséquilibrerait le rembourrage de la carte. */
+.profil-carte > :last-child { margin-bottom: 0; }
+
 .profil-infos {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: .4rem 1rem;
-  margin: 0 0 1.5rem;
+  margin: 0;
   font-size: .875rem;
 }
 .profil-infos dt { color: var(--md-on-surface-variant); }
@@ -314,11 +339,16 @@ header.topbar .who {
 /* Repère visuel connecté/déconnecté demandé pour Google Calendar : pastille
    grise (non connecté), verte (connecté), orange (jeton révoqué/expiré côté
    Google — reconnexion nécessaire, voir GoogleAccount.needs_reauth). */
+/* Bloc Google/Rappels : les traits de séparation d'origine (border-top/bottom)
+   ne sont plus nécessaires — c'est la carte .profil-carte qui délimite
+   désormais chaque thème. Reste un simple espacement au-dessus quand ce bloc
+   suit d'autres éléments dans la même carte (les identifiants admin). */
 .profil-google {
-  padding: 1rem 0;
-  margin-bottom: .5rem;
-  border-top: 1px solid var(--md-outline-variant);
-  border-bottom: 1px solid var(--md-outline-variant);
+  margin: 0;
+}
+.profil-carte .admin-google + .dialog-actions + .profil-google,
+.profil-carte .admin-google + .profil-google {
+  margin-top: 1rem;
 }
 .profil-google-row {
   display: flex;
@@ -4315,3 +4345,22 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   cursor: pointer;
 }
 .profil-google-case input { margin-top: .15rem; flex: none; cursor: pointer; }
+
+/* ---- Zoom d'affichage (Profil > Affichage) ---- */
+.profil-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: .875rem;
+}
+.profil-zoom-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--md-primary, #d0bcff);
+  cursor: pointer;
+}
+.profil-zoom-val {
+  font-size: .875rem;
+  font-variant-numeric: tabular-nums;  /* la largeur ne saute pas de 70 à 100 */
+  min-width: 3.5ch;
+  text-align: right;
+  color: var(--md-on-surface-variant);
+}

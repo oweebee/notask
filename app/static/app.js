@@ -135,6 +135,29 @@ if (window.visualViewport) {
 }
 
 const TOKEN_KEY = 'notask_token';
+
+/* Zoom d'affichage, persistant au NAVIGATEUR (pas au compte, cf. index.html).
+   La propriété CSS `zoom` plutôt que `transform: scale()` : elle reflow
+   réellement la page (pas de bande vide sur les bords) et les coordonnées
+   rendues par getBoundingClientRect restent cohérentes, ce dont dépendent les
+   animations d'aspiration. 100 % => on efface la propriété, pour ne rien
+   imposer au rendu par défaut. Bornes 70–100 appliquées ici aussi, jamais
+   seulement dans l'IHM : une valeur aberrante lue d'un localStorage trafiqué
+   ne doit pas pouvoir rendre l'app minuscule. */
+const ZOOM_KEY = 'notask_zoom';
+function appliquerZoom(pct) {
+  const v = Math.min(100, Math.max(70, Math.round(Number(pct) || 100)));
+  document.documentElement.style.zoom = v === 100 ? '' : String(v / 100);
+  return v;
+}
+function chargerZoom() {
+  let pct = 100;
+  try { pct = Number(localStorage.getItem(ZOOM_KEY)) || 100; } catch { /* stockage refusé */ }
+  return appliquerZoom(pct);
+}
+// Appliqué DÈS le chargement du script, avant tout rendu : éviter le flash
+// d'une page d'abord affichée à 100 % puis rapetissée sous les yeux.
+chargerZoom();
 /* 24 teintes = deux rangées pleines de 12 dans le sélecteur. Trois listes à
    garder synchronisées : celle-ci, LABEL_COLOR_HEX juste en dessous, les
    classes .c-* de style.css, et l'ensemble COLORS de app/routers/notes.py
@@ -2850,6 +2873,11 @@ $('#btn-profil').addEventListener('click', () => {
     box.append(dt, dd);
   }
   majEtatRappels();   // état de l'autorisation de notification, relu à chaque ouverture
+  // Curseur de zoom recalé sur la valeur réellement appliquée : lue du
+  // localStorage et bornée par chargerZoom(), pas supposée depuis le HTML.
+  const zoomActuel = chargerZoom();
+  $('#profil-zoom').value = String(zoomActuel);
+  $('#profil-zoom-val').textContent = zoomActuel + ' %';
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
   // Identifiants OAuth de l'installation : réservés aux administrateurs
@@ -3043,6 +3071,15 @@ $('#dlg-profil').addEventListener('cancel', (e) => {
   fermerAvecAnimation($('#dlg-profil'));
 });
 $('#profil-rappels-activer').addEventListener('click', activerRappels);
+
+/* Zoom : appliqué et affiché EN DIRECT au glissement (input), puis persisté.
+   `input` et non `change` pour que la page rapetisse sous le doigt pendant
+   qu'on cherche la bonne taille, au lieu de sauter à la valeur finale. */
+$('#profil-zoom').addEventListener('input', () => {
+  const v = appliquerZoom($('#profil-zoom').value);
+  $('#profil-zoom-val').textContent = v + ' %';
+  try { localStorage.setItem(ZOOM_KEY, String(v)); } catch { /* stockage refusé : le zoom reste actif pour la session, simplement pas mémorisé */ }
+});
 $('#profil-logout').addEventListener('click', seDeconnecter);
 $('#profil-password').addEventListener('click', () => {
   $('#dlg-profil').close();
