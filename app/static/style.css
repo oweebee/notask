@@ -618,15 +618,14 @@ header.topbar .who {
   padding: .75rem .75rem 2rem 0;
   position: sticky;
   top: 64px;
-  max-height: calc(100dvh - 66px);
-  overflow-y: auto;
-  /* Barre de défilement masquée : sous `zoom` la division de la hauteur du
-     viewport produit un débordement sous-pixel qui fait apparaître une barre
-     alors que le menu tient largement. Le scroll reste fonctionnel (molette)
-     si le menu devient réellement plus haut que l'écran. */
-  scrollbar-width: none;
+  /* Pas de scroll interne : le menu prend la hauteur de son contenu. Un
+     max-height en vh/dvh + overflow-y:auto produisait, sous `zoom`, un
+     débordement sous-pixel — barre parasite puis scroll molette alors que
+     le menu tient largement. S'il devenait plus haut que l'écran, c'est la
+     page qui défile (le menu reste sticky). */
+  max-height: none;
+  overflow-y: visible;
 }
-.drawer::-webkit-scrollbar { width: 0; height: 0; }
 
 /* Comme les autres titres de section : casse respectée, pas de majuscules
    forcées (voir .agenda-group h2). */
