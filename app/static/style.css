@@ -620,7 +620,13 @@ header.topbar .who {
   top: 64px;
   max-height: calc(100dvh - 66px);
   overflow-y: auto;
+  /* Barre de défilement masquée : sous `zoom` la division de la hauteur du
+     viewport produit un débordement sous-pixel qui fait apparaître une barre
+     alors que le menu tient largement. Le scroll reste fonctionnel (molette)
+     si le menu devient réellement plus haut que l'écran. */
+  scrollbar-width: none;
 }
+.drawer::-webkit-scrollbar { width: 0; height: 0; }
 
 /* Comme les autres titres de section : casse respectée, pas de majuscules
    forcées (voir .agenda-group h2). */
@@ -2924,7 +2930,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* 16px : taille native de la grille 8x16, seule à rendre la police nette
      (voir @font-face en tête de fichier). */
-  font-size: 1rem;
+  font-size: 1.125rem;
   background: rgba(230,224,233,.10);
   padding: .05rem .3rem;
   border-radius: 4px;
@@ -3066,7 +3072,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-code-block {
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Cf. .note-code-inline : 16px, taille native de la grille 8x16. */
-  font-size: 1rem;
+  font-size: 1.125rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;

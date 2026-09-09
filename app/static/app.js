@@ -7805,16 +7805,6 @@ function ajouterBoutonsCopieCode(root) {
     // Un <code> situé à l'intérieur d'un bloc est déjà couvert par le
     // bouton du bloc : pas de second bouton imbriqué.
     if (zone.tagName === 'CODE' && zone.closest('pre.note-code-block')) return;
-    /* JAMAIS dans une zone en cours d'édition. Le bouton est
-       contentEditable="false" (il le faut, sinon le curseur entrerait
-       dedans) : or un îlot non éditable au milieu d'un contenteditable est
-       une BARRIÈRE de sélection dans les navigateurs Chromium — impossible
-       d'étendre une sélection à la souris au travers, en particulier en
-       remontant depuis la fin, et un double-clic sur un mot devient le seul
-       geste qui réponde. En édition, le texte se sélectionne et se copie à
-       la main ; la pastille reste sur les cartes, l'historique et tout ce
-       qui est en lecture seule, là où elle sert vraiment. */
-    if (zone.closest('[contenteditable="true"]')) return;
     if (zone.querySelector('.code-copy-btn')) return;
 
     const btn = document.createElement('button');
