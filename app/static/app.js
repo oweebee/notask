@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9058';
+const APP_VERSION = '0.9059';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -7128,11 +7128,23 @@ function assurerLigneApresBloc(el) {
   const dernier = el.lastChild;
   if (!dernier) return;
 
-  // Déjà une ligne libre : un <br> final, ou un texte se terminant déjà par
-  // un saut de ligne (une zone en white-space: pre-wrap affiche alors déjà
-  // une ligne vide après lui, sans qu'il soit besoin d'un <br>).
+  // Déjà une vraie ligne libre : un <br> final. RIEN à faire.
   if (dernier.nodeType === Node.ELEMENT_NODE && dernier.tagName === 'BR') return;
-  if (dernier.nodeType === Node.TEXT_NODE && /\n\s*$/.test(dernier.textContent)) return;
+
+  /* Un texte se terminant par \n ne montre PAS forcément de ligne vide à
+     l'écran : Chrome ne lui donne pas toujours sa propre boîte de ligne
+     quand c'est le tout dernier caractère de la zone (constaté : une
+     notask ancienne dont le contenu enregistré finissait par \n n'affichait
+     aucune ligne cliquable en dessous). On matérialise donc ce dernier \n
+     en un VRAI <br> — en le retirant du texte au passage, pour ne pas
+     DOUBLER le saut de ligne à l'enregistrement (richToText traduit un <br>
+     en '\n', donc retirer le \n texte et ajouter le <br> revient exactement
+     au même contenu, pas un caractère de plus). */
+  if (dernier.nodeType === Node.TEXT_NODE && /\n$/.test(dernier.textContent)) {
+    dernier.textContent = dernier.textContent.replace(/\n$/, '');
+    el.appendChild(document.createElement('br'));
+    return;
+  }
 
   el.appendChild(document.createElement('br'));
 }
