@@ -2924,33 +2924,25 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 }
 .note-url .code-copy-btn svg { width: 11px; height: 11px; }
 
-/* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte. */
+/* Rendu des marqueurs de mise en forme (voir renderFormatted()) sur la carte.
+   Harmonisé sur demande explicite avec .note-code-block : code en ligne ET
+   bloc rendent tous les deux en barre pleine largeur, plus de petit pill
+   inline-flex. Le bouton de copie suit donc le même comportement (sticky +
+   float droite) que celui des blocs — voir .code-copy-btn plus bas, qui
+   s'applique maintenant sans override ici. */
 .note-code-inline {
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* 16px : taille native de la grille 8x16, seule à rendre la police nette
      (voir @font-face en tête de fichier). */
   font-size: 1.125rem;
+  line-height: 1.5;
   background: rgba(230,224,233,.10);
-  padding: .05rem .3rem;
-  border-radius: 4px;
-  /* Pastille de copie posée à la suite du texte, dans le flux : sur du
-     code EN LIGNE (souvent un mot de passe ou une clé), un bouton en
-     surimpression masquerait justement les caractères qu'on veut lire. */
-  display: inline-flex;
-  align-items: center;
-  gap: .25rem;
+  padding: .5rem .625rem;
+  border-radius: var(--shape-xs);
+  display: block;
+  margin: .375rem 0;
+  white-space: pre-wrap;
 }
-.note-code-inline .code-copy-btn {
-  /* Annule le sticky/float du bouton des BLOCS : sur du code en ligne il
-     suit simplement le texte, dans le flux. */
-  position: static;
-  float: none;
-  margin-left: 0;
-  width: 18px;
-  height: 18px;
-  flex: none;
-}
-.note-code-inline .code-copy-btn svg { width: 11px; height: 11px; }
 /* Zone d'archive : repère purement VISUEL pour mettre un passage de côté.
    Aucun rapport avec les notasks archivées (vue Archives) — c'est une mise
    en forme du texte, comme le gras ou le code.
