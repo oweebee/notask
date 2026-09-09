@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9054';
+const APP_VERSION = '0.9055';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -7150,18 +7150,33 @@ function activerClicDansLeVide(el) {
        en fin de notask (constaté avec des marqueurs de code orphelins,
        mais le défaut touchait tout texte nu, orphelin ou pas).
 
-       On mesure maintenant le bas RÉEL du contenu rendu, via le rectangle
-       englobant d'un Range couvrant tout `el` — fiable quel que soit l'ordre
-       des nœuds, contrairement à lastElementChild/lastChild qui ignore le
-       texte nu suivant un élément et suppose à tort que le dernier NŒUD DOM
-       est le dernier contenu VISUEL. */
+       On mesure maintenant le bas RÉEL du contenu en prenant le MAX des
+       rectangles de CHAQUE enfant direct de `el` (élément ou texte), plutôt
+       que de deviner via lastElementChild/lastChild (qui ignore le texte nu
+       suivant un élément et suppose à tort que le dernier NŒUD DOM est le
+       dernier contenu VISUEL).
+       Un Range unique couvrant tout `el` a été essayé puis abandonné : sur
+       du contenu mixte (blocs + texte nu), son rectangle englobant peut
+       s'étirer jusqu'au bas de la boîte `el` elle-même (qui remplit toute la
+       hauteur disponible, voir .ta-wrap) — rendant alors le clic dans le
+       vide impossible à détecter, puisque plus aucun point n'est en dessous
+       de `bas`. Mesurer enfant par enfant reste précis même quand `el` est
+       plus grand que son contenu. */
     if (!el.hasChildNodes()) return;
-    const contenu = document.createRange();
-    contenu.selectNodeContents(el);
-    const rects = contenu.getClientRects();
-    const bas = rects.length
-      ? Math.max(...Array.from(rects, (r) => r.bottom))
-      : el.getBoundingClientRect().top;
+    let bas = -Infinity;
+    el.childNodes.forEach((n) => {
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const r = n.getBoundingClientRect();
+        if (r.bottom > bas) bas = r.bottom;
+      } else if (n.nodeType === Node.TEXT_NODE && n.textContent.trim()) {
+        const rTexte = document.createRange();
+        rTexte.selectNodeContents(n);
+        for (const r of rTexte.getClientRects()) {
+          if (r.bottom > bas) bas = r.bottom;
+        }
+      }
+    });
+    if (bas === -Infinity) bas = el.getBoundingClientRect().top;
     if (e.clientY <= bas) return;
 
     /* SURTOUT PAS de preventDefault() ici. Il annulait le glisser de
