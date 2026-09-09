@@ -618,7 +618,7 @@ header.topbar .who {
   padding: .75rem .75rem 2rem 0;
   position: sticky;
   top: 64px;
-  max-height: calc(100dvh - 64px);
+  max-height: calc(100dvh - 66px);
   overflow-y: auto;
 }
 
@@ -820,7 +820,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .agenda-col {
   position: sticky;
   top: 64px;
-  max-height: calc(100dvh - 64px);
+  max-height: calc(100dvh - 66px);
   overflow-y: auto;
   /* Pas de padding à droite : la colonne doit toucher le bord de l'écran
      (voir le commentaire sur .agenda-item juste en dessous — coin arrondi
