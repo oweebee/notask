@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9047';
+const APP_VERSION = '0.9052';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -8521,14 +8521,14 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
     const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${archivesDepliees ? '' : ' is-closed'}`;
     return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
   });
-  /* Rattrapage des notasks enregistrées AVANT la correction de richToText :
-     un code en ligne ayant gagné un saut de ligne y a été écrit `…\n…`,
-     que ni la règle de bloc (3 backticks) ni celle du code en ligne (qui
-     refuse \n) ne savent lire — le texte s'affichait alors en clair entre
-     deux backticks. On le promeut en bloc avant les deux règles. Les gardes
-     (?<!`)/(?!`) évitent de mordre sur un vrai ``` ; (?<!\\) laisse
-     tranquille un backtick échappé par richToText. */
-  html = html.replace(/(?<!\\)(?<!`)`([^`]*\n[^`]*?)(?<!\\)`(?!`)/g, (m, code) => '```' + code + '```');
+  /* Rattrapage RETIRÉ : la version précédente promeut en bloc TOUTE paire
+     de `…` séparée par un \n sans backtick entre — donc deux codes en ligne
+     légitimes sur des lignes différentes se retrouvaient fusionnés dans un
+     seul <pre> englobant le texte entre eux ("la partie du dessus en code").
+     Effet secondaire : les \n de ce texte étaient consommés par le <pre>,
+     donc les retours à la ligne autour disparaissaient.
+     Le contenu ancien buggé (`…\n…`) reste lisible en clair (backticks
+     visibles) — moindre mal comparé à la corruption des notasks courantes. */
   html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
   // Garde (?<!\\) sur le code EN LIGNE et l'italique : ce sont les deux
   // seuls délimiteurs d'UN SEUL caractère. Un */_/` échappé par
