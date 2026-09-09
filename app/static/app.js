@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9055';
+const APP_VERSION = '0.9056';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5568,6 +5568,9 @@ brancherBarreFormat('#nc-fmt-group', '#nc-content', '#nc-text-colors', '#nc-colo
    index.html comme dans quick.html, seule leur visibilité change. */
 activerClicDansLeVide($('#nc-content'));
 activerClicDansLeVide($('#dns-content'));
+/* Interstice entre #dns-content et les labels (voir activerClicEntreChamps) :
+   uniquement en édition simple, seule zone où le bug a été constaté. */
+activerClicEntreChamps($('#dlg-note-simple .dns-card'), $('#dns-content'));
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
 
@@ -7134,6 +7137,22 @@ function assurerLigneApresBloc(el) {
    On ne réagit qu'aux clics tombant SOUS le dernier élément : ailleurs, le
    navigateur sait très bien placer le curseur, et intervenir casserait la
    sélection à la souris. */
+/* Place le curseur à la fin d'une zone éditable, en s'assurant qu'il y a une
+   position d'accueil derrière un dernier bloc (voir assurerLigneApresBloc).
+   Factorisé entre activerClicDansLeVide (vide DANS la zone) et
+   activerClicEntreChamps (vide ENTRE deux champs de la carte, ex. entre
+   #dns-content et les labels — voir plus bas). */
+function placerCurseurFinDeZone(editable) {
+  assurerLigneApresBloc(editable);
+  const range = document.createRange();
+  range.selectNodeContents(editable);
+  range.collapse(false); // repliée sur la toute fin
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editable.focus();
+}
+
 function activerClicDansLeVide(el) {
   if (!el || el.dataset.clicVideActif) return;
   el.dataset.clicVideActif = '1';
@@ -7199,13 +7218,50 @@ function activerClicDansLeVide(el) {
         || Math.abs(up.clientY - departY) > 3;
       const sel = window.getSelection();
       if (aBouge || (sel && !sel.isCollapsed)) return; // glisser : on laisse faire
-      assurerLigneApresBloc(el);
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      range.collapse(false); // repliée sur la toute fin
-      sel.removeAllRanges();
-      sel.addRange(range);
-      el.focus();
+      placerCurseurFinDeZone(el);
+    };
+    document.addEventListener('mouseup', onUp, true);
+  });
+}
+
+/* Vide ENTRE deux champs de la carte (ex. l'interstice sous #dns-content,
+   avant les pastilles de labels) : hors de la zone éditable elle-même, donc
+   invisible pour activerClicDansLeVide() ci-dessus, qui n'est branché QUE
+   sur #dns-content. Constaté sur demande explicite : l'utilisateur y voyait
+   un curseur souris (flèche) au lieu du curseur texte, juste au-dessus des
+   labels — un clic là ne faisait rien.
+
+   `carte` est l'ancêtre commun le plus proche qui reçoit forcément ces
+   clics (aucun champ ne le recouvre à cet endroit) ; `editable` est la zone
+   où reprendre la saisie. Même geste que activerClicDansLeVide (attendre le
+   relâchement pour ne pas casser un glisser de sélection). */
+function activerClicEntreChamps(carte, editable) {
+  if (!carte || !editable || carte.dataset.clicEntreChampsActif) return;
+  carte.dataset.clicEntreChampsActif = '1';
+
+  carte.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    /* On ne peut pas se contenter de `e.target === carte` : l'interstice
+       visible sous #dns-content appartient en réalité à #dns-content-field
+       (le conteneur flex du champ), pas à la carte elle-même — un clic dessus
+       donne e.target === #dns-content-field, pas === carte. On rejette donc
+       plutôt les clics tombant sur un champ RÉEL (la zone éditable, gérée
+       par son propre geste ; les labels, pièces jointes, boutons...), et on
+       traite tout le reste comme un vide entre deux champs. */
+    if (editable.contains(e.target)) return; // zone éditable : activerClicDansLeVide s'en charge
+    const champReel = e.target.closest(
+      '.label-chips, .dns-attachments, .label-add-picker, input, button, a, [contenteditable]'
+    );
+    if (champReel && champReel !== carte) return;
+    const departX = e.clientX;
+    const departY = e.clientY;
+    const onUp = (up) => {
+      document.removeEventListener('mouseup', onUp, true);
+      const aBouge = Math.abs(up.clientX - departX) > 3
+        || Math.abs(up.clientY - departY) > 3;
+      const sel = window.getSelection();
+      if (aBouge || (sel && !sel.isCollapsed)) return;
+      placerCurseurFinDeZone(editable);
     };
     document.addEventListener('mouseup', onUp, true);
   });
