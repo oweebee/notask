@@ -1529,6 +1529,12 @@ body.is-dragging * {
   padding: 0 var(--marge-bloc);
 }
 
+/* La première échéance dépasse de moitié au-dessus du premier bloc. Cette
+   réserve la garde visible malgré le overflow:hidden utilisé pour limiter la
+   carte à dix lignes. Elle s'applique à toute liste, datée ou non, afin que
+   l'espacement ne change jamais quand une échéance est ajoutée ou retirée. */
+.note .body:has(.note-ligne) { padding-top: .75rem; }
+
 /* Même plafond pour une liste à cocher : au-delà de 10 lignes, le reste
    est simplement masqué (la carte ne s'étire pas indéfiniment).
    Le padding (+ marge négative pour ne pas décaler la liste à l'écran)
