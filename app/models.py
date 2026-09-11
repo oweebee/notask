@@ -410,19 +410,15 @@ class NoteBase(SQLModel):
     # plus : le contenu part et revient en clair comme n'importe quel autre,
     # et reste lisible dès qu'on ouvre la notask.
     masked: bool = False
-    # Masque, dans la MOSAÏQUE seulement, les lignes déjà cochées. Purement
-    # d'affichage, contrairement à NoteItem.archived qui met une ligne de
-    # côté pour de bon : les lignes cochées restent présentes, dans la notask
-    # comme dans les tâches, et la boîte d'édition les montre toujours — sans
-    # quoi on ne pourrait plus les décocher.
+    # Ancienne préférence persistante de masquage des lignes cochées. Gardée
+    # pour compatibilité des données ; l'interface les masque désormais par
+    # défaut et la réapparition est volontairement temporaire.
     #
     # TROIS états, et non un simple booléen :
     #   None  -> pas de choix explicite, on suit le défaut de la VUE
     #   True  -> masquées, False -> visibles (choix de l'utilisateur)
-    # Le défaut dépend de la vue parce qu'il s'inverse : sur l'accueil une
-    # ligne cochée disparaît (ménage au fil de l'eau), mais dans les Archives
-    # elle doit rester visible — une notask s'archivant justement quand
-    # TOUTES ses lignes sont cochées, les y masquer la ferait paraître vide.
+    # Aucun nouvel usage côté interface : l'état temporaire est réinitialisé
+    # à chaque ouverture ou rechargement de la mosaïque.
     hide_checked: Optional[bool] = None
 
     # Cf. _due_at_utc() en tête de fichier — rétablit l'étiquette UTC perdue

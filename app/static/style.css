@@ -3505,6 +3505,13 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    là (le fond est continu d'une case à l'autre). */
 .note-ligne[data-due]:not([data-due=""]) { padding-top: 1.5rem; }
 
+/* Deux lignes datées qui se suivent n'ont pas besoin de réserver deux fois
+   toute la hauteur d'une pastille : la seconde garde assez d'air pour son
+   échéance, sans créer le grand trou vertical entre les deux lignes. */
+.note-ligne[data-due]:not([data-due=""]) + .note-ligne[data-due]:not([data-due=""]) {
+  padding-top: .8rem;
+}
+
 /* Case datée en TÊTE de bloc : la pastille chevauche le bord haut du cadre,
    moitié dehors moitié dedans. La moitié qui sort a besoin de place EN
    DEHORS du cadre — d'où la marge haute, qui écarte le cadre de ce qui le

@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9060';
+const APP_VERSION = '0.9061';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -469,6 +469,9 @@ let state = {
   editingColor: 'default',
   // Masquage du contenu sur l'accueil, en cours d'édition.
   editingMasked: false,
+  // Affichage temporaire dans la notask ouverte : repasse toujours à true
+  // à chaque ouverture, donc rien n'est enregistré par ce bouton.
+  editingHideChecked: true,
   composerIcon: null,
   editingIcon: null,
 };
@@ -736,6 +739,10 @@ const ICONS = {
 
   // Œil barré : masquage du contenu sur l'accueil.
   maskEye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>',
+  // Case cochée barrée : masque les lignes terminées. Sans la barre, elles
+  // sont affichées temporairement, comme avec l'œil voisin.
+  checkedBox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="m8 12 2.6 2.6L16.5 9"/></svg>',
+  checkedBoxMasked: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="m8 12 2.6 2.6L16.5 9"/><path d="M4 20 20 4"/></svg>',
   // Balai : masquer les lignes déjà cochées, « faire le ménage » dans une
   // liste bien entamée. Même trait que ses voisines de la barre d'actions
   // (fill none + stroke currentColor), pour ne pas jurer à côté de l'œil.
@@ -3420,6 +3427,9 @@ function noteMatchesSearch(n, q) {
 }
 
 async function loadNotes() {
+  // Le choix d'affichage des lignes cochées est volontairement éphémère :
+  // toute nouvelle liste repart avec l'icône barrée et les lignes masquées.
+  state.visibleCheckedNoteIds.clear();
   const params = new URLSearchParams({ archived: state.showArchived });
   if (state.labelFilter) params.set('label', state.labelFilter);
   const notes = await api('/notes?' + params);
@@ -4575,16 +4585,9 @@ function renderNotes() {
        pas — elles ne sont déjà plus affichées ici. */
     const aDesCases = (n.items || []).some((i) => !i.archived);
 
-    /* Une ligne cochée disparaît PAR DÉFAUT : c'est le ménage au fil de
-       l'eau, et le bouton sert alors à la faire réapparaître. Les Archives
-       prennent le parti INVERSE — une notask s'archivant justement quand
-       toutes ses lignes sont cochées, les y masquer la ferait paraître
-       vide. Le bouton reste disponible des deux côtés, et dès qu'on s'en
-       sert le choix explicite (hide_checked à true/false) l'emporte sur le
-       défaut de la vue. Cf. Note.hide_checked, tri-état côté serveur. */
-    const cacherCochees = (n.hide_checked === null || n.hide_checked === undefined)
-      ? !state.showArchived
-      : n.hide_checked;
+    // Par défaut les lignes cochées sont rangées. L'icône ne les réaffiche
+    // que temporairement, pour cette carte et jusqu'au prochain chargement.
+    const cacherCochees = !state.visibleCheckedNoteIds.has(n.id);
 
     let inner = `<button class="pin-btn" data-act="pin"
       title="${n.pinned ? 'Désépingler' : 'Épingler'}"
@@ -4654,7 +4657,7 @@ function renderNotes() {
           aria-label="${n.masked ? "Afficher le contenu" : "Masquer le contenu"}">${ICONS.maskEye}</button>
         ${aDesCases ? `<button data-act="hide-checked" class="${cacherCochees ? 'active-toggle' : ''}"
           title="${cacherCochees ? 'Lignes cochées masquées — cliquer pour les réafficher' : 'Lignes cochées visibles — cliquer pour les masquer'}"
-          aria-label="${cacherCochees ? 'Réafficher les lignes cochées' : 'Masquer les lignes cochées'}">${ICONS.balai}</button>` : ''}
+          aria-label="${cacherCochees ? 'Réafficher les lignes cochées' : 'Masquer les lignes cochées'}">${cacherCochees ? ICONS.checkedBoxMasked : ICONS.checkedBox}</button>` : ''}
         <span class="sep"></span>
         <button data-act="archive" title="${n.archived ? 'Désarchiver' : 'Archiver'}"
           aria-label="${n.archived ? 'Désarchiver' : 'Archiver'}">${n.archived ? ICONS.unarchive : ICONS.archive}</button>
@@ -4796,15 +4799,12 @@ function renderNotes() {
       await api('/notes/' + n.id, { method: 'PATCH', body: { masked: !n.masked } });
       loadNotes();
     };
-    // Ménage visuel : bascule d'affichage seulement (voir Note.hide_checked),
-    // rien n'est archivé ni supprimé. Absent des notasks sans case à cocher.
+    // Ménage visuel temporaire : rien n'est archivé, supprimé ou enregistré.
     const boutonMenage = el.querySelector('[data-act=hide-checked]');
     if (boutonMenage) boutonMenage.onclick = async () => {
-      // Bascule à partir de l'état RÉSOLU (défaut de vue compris) et non du
-      // champ brut : sur une notask encore à None, cliquer doit inverser ce
-      // que l'utilisateur a SOUS LES YEUX, pas repartir d'un false implicite.
-      await api('/notes/' + n.id, { method: 'PATCH', body: { hide_checked: !cacherCochees } });
-      loadNotes();
+      if (cacherCochees) state.visibleCheckedNoteIds.add(n.id);
+      else state.visibleCheckedNoteIds.delete(n.id);
+      renderNotes();
     };
     /* Suppression en DEUX temps, sans fenêtre de confirmation : le premier
        clic arme le bouton (il devient rouge), le second envoie la notask à la
@@ -6578,9 +6578,36 @@ function renderBoutonMasque(btnSel, actif) {
   btn.setAttribute('aria-label', label);
 }
 
+function appliquerVisibiliteLignesCochees(root, cacher) {
+  if (!root) return;
+  root.querySelectorAll('.note-ligne').forEach((bloc) => {
+    const case_ = bloc.querySelector('.note-ligne-case');
+    // display:none, pas hidden : .note-ligne est en display:flex.
+    bloc.style.display = cacher && case_ && case_.checked ? 'none' : '';
+  });
+}
+
+function renderBoutonLignesCochees(btnSel, cacher) {
+  const btn = $(btnSel);
+  if (!btn) return;
+  btn.innerHTML = cacher ? ICONS.checkedBoxMasked : ICONS.checkedBox;
+  btn.classList.toggle('active-toggle', !!cacher);
+  const label = cacher
+    ? 'Lignes cochées masquées — cliquer pour les réafficher'
+    : 'Lignes cochées visibles — cliquer pour les masquer';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
 $('#dns-toggle-mask').addEventListener('click', () => {
   state.editingMasked = !state.editingMasked;
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
+});
+
+$('#dns-toggle-hide-checked').addEventListener('click', () => {
+  state.editingHideChecked = !state.editingHideChecked;
+  renderBoutonLignesCochees('#dns-toggle-hide-checked', state.editingHideChecked);
+  appliquerVisibiliteLignesCochees($('#dns-content'), state.editingHideChecked);
 });
 
 /* Sous-menu du bouton « zone d'archive » : laisser le curseur dessus, sans
@@ -6697,6 +6724,12 @@ function openNoteSimpleDialog(note) {
   state.editingColor = note.color || 'default';
   state.editingMasked = !!note.masked;
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
+  // Toujours repartir barré : l'affichage des lignes cochées n'est jamais
+  // mémorisé quand la notask est refermée.
+  state.editingHideChecked = true;
+  const boutonLignesCochees = $('#dns-toggle-hide-checked');
+  boutonLignesCochees.hidden = !(note.items || []).some((i) => !i.archived);
+  renderBoutonLignesCochees('#dns-toggle-hide-checked', state.editingHideChecked);
   state.editingPinned = !!note.pinned;
   renderBoutonEpingle();
   $('#dns-colors').hidden = true;
@@ -6742,6 +6775,8 @@ function openNoteSimpleDialog(note) {
   if (note.items.length && !$('#dns-content').querySelector('.note-ligne')) {
     poserLignesDansTexte(note.items, $('#dns-content'));
   }
+
+  appliquerVisibiliteLignesCochees($('#dns-content'), state.editingHideChecked);
 
   ajouterBoutonsCopieCode($('#dns-content'));
   // Une notask déjà enregistrée peut elle aussi se terminer par un bloc :
@@ -8214,6 +8249,11 @@ function brancherLigneEditable(bloc) {
 
   case_.addEventListener('change', () => {
     bloc.classList.toggle('done', case_.checked);
+    if (case_.checked && state.editingHideChecked && bloc.closest('#dns-content')) {
+      // Effet identique pendant l'édition : l'icône peut aussitôt rappeler
+      // la ligne si l'on veut la décocher.
+      bloc.style.display = 'none';
+    }
   });
 
   if (cal) {
