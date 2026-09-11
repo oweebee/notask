@@ -3383,12 +3383,11 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
      potentiellement toute la zone de saisie. */
   position: relative;
 
-  /* Rythme vertical en PADDING et non en marge : deux cases voisines doivent
-     se toucher, sinon le fond du bloc actif (voir .bloc-actif plus bas) se
-     retrouverait troué entre chaque ligne — les marges verticales de deux
-     frères se fondent en une seule, et rien ne peint cet intervalle. */
+  /* Chaque ligne réserve le même en-tête, qu'elle porte une échéance ou non.
+     La date peut ainsi rester au même endroit en haut à droite sans jamais
+     chevaucher le texte, et le rythme ne change plus entre les lignes. */
   margin: 0 calc(var(--marge-bloc, 0px) * -1);
-  padding: .22rem var(--marge-bloc, 0px);
+  padding: 1.85rem var(--marge-bloc, 0px) .22rem;
 }
 
 /* Débord horizontal du fond du bloc : il commence à MI-DISTANCE entre le bord
@@ -3470,9 +3469,9 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
-/* Échéance (+ bouton calendrier) : au-dessus du texte, à droite. La date
-   garde donc son emplacement habituel ; seule sa réserve verticale est
-   resserrée pour réduire l'écart entre deux lignes datées. */
+/* Échéance (+ bouton calendrier) : toujours au même endroit dans l'en-tête
+   réservé par TOUTES les lignes, indépendamment de leur position dans le
+   bloc et de la présence effective d'une date. */
 .note-ligne-due-wrap {
   position: absolute;
   top: .18rem;
@@ -3481,23 +3480,6 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
   align-items: center;
   gap: .2rem;
   z-index: 1;
-}
-/* Réserve réduite pour la pastille : elle reste au-dessus du texte, sans
-   créer le grand espace entre deux lignes à échéance. */
-.note-ligne[data-due]:not([data-due=""]) {
-  padding-top: .8rem;
-}
-.note-ligne[data-due]:not([data-due=""]) + .note-ligne[data-due]:not([data-due=""]) {
-  padding-top: .5rem;
-}
-.note-ligne.bloc-debut[data-due]:not([data-due=""]) {
-  margin-top: .55rem;
-  padding-top: .3rem;
-  padding-bottom: .3rem;
-}
-.note-ligne.bloc-debut[data-due]:not([data-due=""]) .note-ligne-due-wrap {
-  top: 0;
-  transform: translateY(-50%);
 }
 .note-ligne-due {
   flex: none;
