@@ -3470,23 +3470,34 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
-/* Échéance (+ bouton calendrier) : à droite, centrée sur sa ligne. La place
-   est réservée horizontalement, jamais verticalement : une ligne datée garde
-   exactement le même espacement qu'une ligne sans échéance. */
+/* Échéance (+ bouton calendrier) : au-dessus du texte, à droite. La date
+   garde donc son emplacement habituel ; seule sa réserve verticale est
+   resserrée pour réduire l'écart entre deux lignes datées. */
 .note-ligne-due-wrap {
   position: absolute;
-  top: 50%;
-  right: calc(var(--marge-bloc, 0px) + .5rem);
-  transform: translateY(-50%);
+  top: .18rem;
+  right: .5rem;
   display: flex;
   align-items: center;
   gap: .2rem;
   z-index: 1;
 }
-/* Réserve pour la pastille, le bouton calendrier et leur écart. Même padding
-   vertical que .note-ligne : seule la largeur utile du texte diminue. */
+/* Réserve réduite pour la pastille : elle reste au-dessus du texte, sans
+   créer le grand espace entre deux lignes à échéance. */
 .note-ligne[data-due]:not([data-due=""]) {
-  padding-right: calc(var(--marge-bloc, 0px) + 9rem);
+  padding-top: .8rem;
+}
+.note-ligne[data-due]:not([data-due=""]) + .note-ligne[data-due]:not([data-due=""]) {
+  padding-top: .5rem;
+}
+.note-ligne.bloc-debut[data-due]:not([data-due=""]) {
+  margin-top: .55rem;
+  padding-top: .3rem;
+  padding-bottom: .3rem;
+}
+.note-ligne.bloc-debut[data-due]:not([data-due=""]) .note-ligne-due-wrap {
+  top: 0;
+  transform: translateY(-50%);
 }
 .note-ligne-due {
   flex: none;
