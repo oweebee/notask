@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9061';
+const APP_VERSION = '0.9062';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -472,6 +472,9 @@ let state = {
   // Affichage temporaire dans la notask ouverte : repasse toujours à true
   // à chaque ouverture, donc rien n'est enregistré par ce bouton.
   editingHideChecked: true,
+  // Cartes ayant temporairement réaffiché leurs lignes cochées. Réinitialisé
+  // à chaque chargement de mosaïque, donc jamais enregistré.
+  visibleCheckedNoteIds: new Set(),
   composerIcon: null,
   editingIcon: null,
 };
