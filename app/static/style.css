@@ -3470,73 +3470,23 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 /* Case mise de côté seule (NoteItem.archived) : gardée dans l'éditeur pour ne
    pas perdre sa place dans le texte, mais visiblement en retrait. */
 .note-ligne.est-archivee { opacity: .45; }
-/* Échéance (+ bouton calendrier) : au-dessus du texte de la case, calées à
-   droite. Trois essais ratés avant celui-ci, qui valent d'être écrits pour
-   ne pas les refaire :
-
-   - dans le fil du texte (d'origine) : la pastille prenait de la largeur au
-     texte, qui se retrouvait rétréci sur 3-4 lignes très étroites ;
-   - `translateY(-50%)`, à cheval sur le bord (0.9024) : la moitié haute
-     sortait de la boîte de la notask et se faisait rogner ;
-   - `bottom: 100%`, entièrement au-dessus (0.9026) : TOUT sortait de la
-     boîte, la pastille devenait carrément invisible.
-
-   La leçon : sortir du flux ne crée pas de place, ça déplace juste le
-   problème hors de la boîte, là où overflow rogne. Il faut donc RÉSERVER la
-   place — d'où le padding-top posé sur la case elle-même juste en dessous,
-   dans lequel la pastille vient se loger. Elle reste ainsi strictement à
-   l'intérieur (jamais rognée), au-dessus du texte (jamais superposée), et
-   hors du flux horizontal (le texte garde toute sa largeur). */
+/* Échéance (+ bouton calendrier) : à droite, centrée sur sa ligne. La place
+   est réservée horizontalement, jamais verticalement : une ligne datée garde
+   exactement le même espacement qu'une ligne sans échéance. */
 .note-ligne-due-wrap {
   position: absolute;
-  top: .18rem;
-  right: .5rem;
+  top: 50%;
+  right: calc(var(--marge-bloc, 0px) + .5rem);
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: .2rem;
   z-index: 1;
 }
-/* Place réservée à la pastille, UNIQUEMENT sur les cases qui en portent une
-   (data-due est vidé, pas retiré, quand l'échéance est effacée — voir
-   majEcheanceLigne dans app.js, d'où le :not([data-due=""])). Sans cette
-   réserve, la pastille se superposerait au texte d'une case d'une seule
-   ligne. Cas d'une case datée AU MILIEU d'un bloc : elle se loge à
-   l'intérieur du cadre, faute de pouvoir chevaucher un bord qui n'existe pas
-   là (le fond est continu d'une case à l'autre). */
-.note-ligne[data-due]:not([data-due=""]) { padding-top: 1.5rem; }
-
-/* Deux lignes datées qui se suivent n'ont pas besoin de réserver deux fois
-   toute la hauteur d'une pastille : la seconde garde assez d'air pour son
-   échéance, sans créer le grand trou vertical entre les deux lignes. */
-.note-ligne[data-due]:not([data-due=""]) + .note-ligne[data-due]:not([data-due=""]) {
-  padding-top: .8rem;
-}
-
-/* Case datée en TÊTE de bloc : la pastille chevauche le bord haut du cadre,
-   moitié dehors moitié dedans. La moitié qui sort a besoin de place EN
-   DEHORS du cadre — d'où la marge haute, qui écarte le cadre de ce qui le
-   précède sans être peinte par le fond du bloc (une marge n'est jamais
-   peinte). C'est cette réserve qui manquait aux essais précédents : sans
-   elle, la moitié haute sortait de la boîte de la notask et se faisait
-   rogner (0.9024), ou disparaissait tout à fait (0.9026).
-
-   Réservé au début d'un bloc exprès : au milieu, une marge trouerait le fond
-   continu du bloc — d'où la règle ci-dessus, qui garde la pastille dedans. */
-.note-ligne.bloc-debut[data-due]:not([data-due=""]) {
-  /* Doit valoir AU MOINS la moitié de la hauteur de la pastille, sinon la
-     part qui dépasse sort de la boîte de la notask et se fait rogner en
-     haut — c'était encore le cas à .8rem. */
-  margin-top: 1.15rem;
-  /* Les deux paddings ensemble, et non padding-top seul : le rythme de base
-     (.22rem, voir .note-ligne) restait en bas, la case était donc plus
-     épaisse au-dessus qu'en dessous. Le fond du cadre suit ce padding, d'où
-     l'asymétrie visible autour de la case à cocher. */
-  padding-top: .45rem;
-  padding-bottom: .45rem;
-}
-.note-ligne.bloc-debut[data-due]:not([data-due=""]) .note-ligne-due-wrap {
-  top: 0;
-  transform: translateY(-50%);
+/* Réserve pour la pastille, le bouton calendrier et leur écart. Même padding
+   vertical que .note-ligne : seule la largeur utile du texte diminue. */
+.note-ligne[data-due]:not([data-due=""]) {
+  padding-right: calc(var(--marge-bloc, 0px) + 9rem);
 }
 .note-ligne-due {
   flex: none;

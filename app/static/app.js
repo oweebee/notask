@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9062';
+const APP_VERSION = '0.9064';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4658,7 +4658,7 @@ function renderNotes() {
         <button data-act="mask" class="${n.masked ? 'active-toggle' : ''}"
           title="${n.masked ? "Contenu masqué sur l'accueil — cliquer pour l'afficher" : "Masquer le contenu sur l'accueil"}"
           aria-label="${n.masked ? "Afficher le contenu" : "Masquer le contenu"}">${ICONS.maskEye}</button>
-        ${aDesCases ? `<button data-act="hide-checked" class="${cacherCochees ? 'active-toggle' : ''}"
+        ${aDesCases ? `<button data-act="hide-checked"
           title="${cacherCochees ? 'Lignes cochées masquées — cliquer pour les réafficher' : 'Lignes cochées visibles — cliquer pour les masquer'}"
           aria-label="${cacherCochees ? 'Réafficher les lignes cochées' : 'Masquer les lignes cochées'}">${cacherCochees ? ICONS.checkedBoxMasked : ICONS.checkedBox}</button>` : ''}
         <span class="sep"></span>
@@ -6594,7 +6594,9 @@ function renderBoutonLignesCochees(btnSel, cacher) {
   const btn = $(btnSel);
   if (!btn) return;
   btn.innerHTML = cacher ? ICONS.checkedBoxMasked : ICONS.checkedBox;
-  btn.classList.toggle('active-toggle', !!cacher);
+  // L'icône barrée suffit à indiquer l'état : pas de fond gris persistant,
+  // pour rester identique aux autres options au repos.
+  btn.classList.remove('active-toggle');
   const label = cacher
     ? 'Lignes cochées masquées — cliquer pour les réafficher'
     : 'Lignes cochées visibles — cliquer pour les masquer';
