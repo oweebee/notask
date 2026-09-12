@@ -4,11 +4,47 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
-/* Mode niveaux de gris — toute l'app, bouton compris (voir .mode-gris-btn
-   plus bas et le toggle dans app.js). `filter` sur <html> plutôt que
-   <body> : couvre aussi les dialogues/overlays ajoutés en JS, tous
-   descendants de <html>. */
-html.mode-gris { filter: grayscale(1); }
+/* Mode niveaux de gris — voir le toggle dans app.js (#btn-mode-gris,
+   classe html.mode-gris). PAS un simple `filter` sur <html> : un filter
+   CSS s'applique à TOUT le sous-arbre d'un élément et aucun filter posé
+   sur un descendant ne peut l'annuler (limitation CSS, pas un bug d'ici) —
+   impossible dans ce modèle de garder un enfant en couleur si un ancêtre
+   est grisé. Le gris est donc posé BRANCHE PAR BRANCHE, en excluant à
+   chaque niveau l'ancêtre direct de ce qui doit rester en couleur (logo/
+   titre, icônes du menu, icône de chaque notask) plutôt que sur <html>
+   entier. Étendre cette liste à un nouvel élément à garder en couleur
+   veut dire remonter sa chaîne de parents et exclure chacun d'eux ici,
+   pas juste ajouter une règle sur l'élément lui-même. */
+
+/* En-tête : logo (cuillères) et titre "notask" restent en couleur ; le
+   reste (pseudo, bouton bascule, Options, Outils) grisé directement. */
+html.mode-gris header.topbar > *:not(.logo):not(.brand) { filter: grayscale(1); }
+
+/* Menu latéral : icônes SVG des entrées (Notasks, Prévues, Favoris,
+   Archives, Corbeille) restent en couleur ; leur texte, les libellés et
+   séparateurs sont grisés. .drawer et .drawer-notes-group eux-mêmes ne
+   reçoivent JAMAIS le filter (ce sont des ancêtres des icônes protégées),
+   seuls leurs autres enfants directs le reçoivent. */
+html.mode-gris .drawer > *:not(.drawer-notes-group) { filter: grayscale(1); }
+html.mode-gris .drawer-item > *:not(svg) { filter: grayscale(1); }
+
+/* Reste de la coquille (fond du menu mobile, colonne d'échéances) : grisé
+   en bloc, .shell et main ne reçoivent pas le filter (ancêtres du menu et
+   de la mosaïque de notasks protégés ci-dessus/ci-dessous). */
+html.mode-gris .shell > *:not(aside.drawer):not(main) { filter: grayscale(1); }
+html.mode-gris main > *:not(#view-notes) { filter: grayscale(1); }
+html.mode-gris #view-notes > *:not(.notes-grid) { filter: grayscale(1); }
+html.mode-gris .notes-grid > *:not(.note) { filter: grayscale(1); }
+
+/* Carte de notask : seule l'icône (.note-icon) reste en couleur, tout le
+   reste de la carte (titre, description, cases, pièces jointes, pastille
+   de couleur de fond comprise) passe en gris. */
+html.mode-gris .note > *:not(.note-title-row) { filter: grayscale(1); }
+html.mode-gris .note-title-row > *:not(.note-icon) { filter: grayscale(1); }
+
+/* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
+   chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
+html.mode-gris body > dialog { filter: grayscale(1); }
 
 :root {
   /* Couleurs principales */
@@ -296,8 +332,8 @@ header.topbar .who {
    distingue encore l'état une fois le filtre appliqué. */
 .mode-gris-btn {
   flex: none;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.35rem;
+  height: 1.35rem;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -316,8 +352,8 @@ header.topbar .who {
 .mode-gris-btn .mgb-quart { flex: 1 1 50%; }
 .mgb-bleu  { background: #42a5f5; }
 .mgb-jaune { background: #ffd54f; }
-.mgb-gris1 { background: #bdbdbd; }
-.mgb-gris2 { background: #616161; }
+.mgb-gris1 { background: #eeeeee; }
+.mgb-gris2 { background: #424242; }
 /* Repos : mode couleur actif, donc côté couleur net, côté gris estompé. */
 .mode-gris-btn .mgb-gris { opacity: .35; }
 /* Mode gris actif (html.mode-gris, classe posée aussi sur le bouton) :
