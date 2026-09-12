@@ -2788,6 +2788,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   margin: 0 calc(var(--marge-bloc) * -1);
   padding: 0 var(--marge-bloc);
 }
+/* Réserve la place pour la moitié supérieure des bulles d'échéance
+   de la première .note-ligne, comme has-note-lines le fait sur la carte. */
+#dns-content-field:has(.note-ligne) { padding-top: .88rem; }
 /* flex: 1 (= flex: 1 1 0%) laissait le navigateur COMPRESSER la boîte réelle
    de la zone éditable en dessous de la taille de son propre contenu — une
    notask longue rendait alors une grande partie de son texte HORS de la
