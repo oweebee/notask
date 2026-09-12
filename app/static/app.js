@@ -7438,12 +7438,20 @@ function poserLienSurSelection(el) {
   if (range && !el.contains(range.commonAncestorContainer)) return;
   const texte = range ? range.toString() : '';
 
-  const saisie = prompt('Adresse du lien :', 'https://');
-  if (!saisie) return;
-  const url = urlSure(saisie);
+  // Le texte sélectionné EST déjà une adresse valide (collée telle quelle,
+  // ou tapée à la main) : elle sert alors directement de cible, sans
+  // repasser par le prompt pour la retaper à l'identique. `.trim()` : une
+  // sélection à la souris déborde facilement d'un espace en début/fin sans
+  // que ce ne soit une adresse différente pour autant.
+  let url = urlSure(texte.trim());
   if (!url) {
-    alert("Adresse non valide : seules les adresses http://, https:// et mailto: sont acceptées.");
-    return;
+    const saisie = prompt('Adresse du lien :', 'https://');
+    if (!saisie) return;
+    url = urlSure(saisie);
+    if (!url) {
+      alert("Adresse non valide : seules les adresses http://, https:// et mailto: sont acceptées.");
+      return;
+    }
   }
 
   el.focus();
