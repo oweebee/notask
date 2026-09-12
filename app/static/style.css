@@ -57,37 +57,37 @@ html.mode-gris .note.c-white::before,
 html.mode-gris .note.c-default::before,
 html.mode-gris .note.c-red::before,
 html.mode-gris .note.c-coral::before {
-  background: #f2f2f2;
+  background: #707070;
 }
 html.mode-gris .note.c-orange::before,
 html.mode-gris .note.c-amber::before,
 html.mode-gris .note.c-yellow::before,
 html.mode-gris .note.c-lime::before {
-  background: #c6c6c6;
+  background: #5c5c5c;
 }
 html.mode-gris .note.c-green::before,
 html.mode-gris .note.c-emerald::before,
 html.mode-gris .note.c-teal::before,
 html.mode-gris .note.c-cyan::before {
-  background: #9a9a9a;
+  background: #484848;
 }
 html.mode-gris .note.c-blue::before,
 html.mode-gris .note.c-indigo::before,
 html.mode-gris .note.c-violet::before,
 html.mode-gris .note.c-purple::before {
-  background: #6e6e6e;
+  background: #363636;
 }
 html.mode-gris .note.c-magenta::before,
 html.mode-gris .note.c-pink::before,
 html.mode-gris .note.c-rose::before,
 html.mode-gris .note.c-brown::before {
-  background: #464646;
+  background: #262626;
 }
 html.mode-gris .note.c-slate::before,
 html.mode-gris .note.c-grey::before,
 html.mode-gris .note.c-navy::before,
 html.mode-gris .note.c-olive::before {
-  background: #202020;
+  background: #161616;
 }
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
