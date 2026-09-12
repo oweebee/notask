@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=0.9071">
+<link rel="stylesheet" href="/static/style.css?v=0.9074">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -95,6 +95,15 @@
          dans app.js), puis deux entrées sans cadre reprenant les mêmes
          teintes : Profil en jaune, Outils en bleu. -->
     <span class="who" id="who"></span>
+    <!-- Bascule niveaux de gris : rond à 4 quadrants (bleu/jaune à gauche,
+         deux gris à droite, voir renderModeGris() dans app.js) — le côté
+         actif (couleur ou gris) reste net, l'autre s'estompe. Un clic passe
+         TOUTE l'app en niveaux de gris (filter sur <html>), un second clic
+         revient à la couleur. Choix mémorisé (voir GRAY_MODE_KEY). -->
+    <button class="mode-gris-btn" id="btn-mode-gris" type="button" aria-label="Niveaux de gris" title="Basculer en niveaux de gris">
+      <span class="mgb-half mgb-couleur"><span class="mgb-quart mgb-bleu"></span><span class="mgb-quart mgb-jaune"></span></span>
+      <span class="mgb-half mgb-gris"><span class="mgb-quart mgb-gris1"></span><span class="mgb-quart mgb-gris2"></span></span>
+    </button>
     <button class="top-entry top-entry-yellow" id="btn-profil" type="button">Options</button>
     <button class="top-entry top-entry-blue" id="btn-outils" type="button">Outils</button>
   </header>
@@ -765,6 +774,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9068"></script>
+<script src="/static/app.js?v=0.9074"></script>
 </body>
 </html>

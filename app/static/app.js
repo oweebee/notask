@@ -158,6 +158,27 @@ function chargerZoom() {
 // Appliqué DÈS le chargement du script, avant tout rendu : éviter le flash
 // d'une page d'abord affichée à 100 % puis rapetissée sous les yeux.
 chargerZoom();
+
+/* Mode niveaux de gris — filter grayscale sur <html>, voir style.css
+   (html.mode-gris). Même logique que le zoom ci-dessus : appliqué dès le
+   chargement du script pour éviter le flash couleur→gris à l'ouverture, et
+   mémorisé en localStorage pour survivre à un rechargement. Le bouton lui-
+   même (#btn-mode-gris) reçoit aussi la classe .actif, pour que ses deux
+   moitiés (couleur/gris) inversent laquelle est en surbrillance — voir
+   .mode-gris-btn dans style.css. */
+const GRAY_MODE_KEY = 'notask_gray_mode';
+function appliquerModeGris(actif) {
+  document.documentElement.classList.toggle('mode-gris', actif);
+  const btn = document.getElementById('btn-mode-gris');
+  if (btn) btn.classList.toggle('actif', actif);
+  return actif;
+}
+function chargerModeGris() {
+  let actif = false;
+  try { actif = localStorage.getItem(GRAY_MODE_KEY) === '1'; } catch { /* stockage refusé */ }
+  return appliquerModeGris(actif);
+}
+chargerModeGris();
 /* 24 teintes = deux rangées pleines de 12 dans le sélecteur. Trois listes à
    garder synchronisées : celle-ci, LABEL_COLOR_HEX juste en dessous, les
    classes .c-* de style.css, et l'ensemble COLORS de app/routers/notes.py
@@ -2869,6 +2890,12 @@ $('#form-login').addEventListener('submit', async (e) => {
 function seDeconnecter() { setToken(null); clearEncKey(); location.reload(); }
 
 /* ------------------------------ Profil ------------------------------ */
+
+$('#btn-mode-gris').addEventListener('click', () => {
+  const actif = !document.documentElement.classList.contains('mode-gris');
+  appliquerModeGris(actif);
+  try { localStorage.setItem(GRAY_MODE_KEY, actif ? '1' : '0'); } catch { /* stockage refusé : reste actif pour la session */ }
+});
 
 $('#btn-profil').addEventListener('click', () => {
   const u = state.user || {};

@@ -4,6 +4,12 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
+/* Mode niveaux de gris — toute l'app, bouton compris (voir .mode-gris-btn
+   plus bas et le toggle dans app.js). `filter` sur <html> plutôt que
+   <body> : couvre aussi les dialogues/overlays ajoutés en JS, tous
+   descendants de <html>. */
+html.mode-gris { filter: grayscale(1); }
+
 :root {
   /* Couleurs principales */
   --md-primary: #d0bcff;
@@ -280,6 +286,44 @@ header.topbar .who {
 .top-entry-yellow:hover { background: rgba(255, 213, 79, .45); }
 .top-entry-blue { background: rgba(66, 165, 245, .30); }
 .top-entry-blue:hover { background: rgba(66, 165, 245, .48); }
+
+/* Bascule niveaux de gris — rond à 4 quadrants : gauche = couleurs du logo
+   (bleu/jaune), droite = deux gris. Le côté qui représente l'état ACTIF
+   reste net (opacité pleine), l'autre s'estompe — voir renderModeGris()
+   dans app.js. Toute l'app (y compris ce bouton) passe en niveaux de gris
+   via `filter` sur <html> (voir plus bas, html.mode-gris) : le bouton lui-
+   même est donc concerné en mode gris, seule l'opacité de ses moitiés
+   distingue encore l'état une fois le filtre appliqué. */
+.mode-gris-btn {
+  flex: none;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+}
+.mode-gris-btn .mgb-half {
+  width: 50%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: opacity .18s;
+}
+.mode-gris-btn .mgb-quart { flex: 1 1 50%; }
+.mgb-bleu  { background: #42a5f5; }
+.mgb-jaune { background: #ffd54f; }
+.mgb-gris1 { background: #bdbdbd; }
+.mgb-gris2 { background: #616161; }
+/* Repos : mode couleur actif, donc côté couleur net, côté gris estompé. */
+.mode-gris-btn .mgb-gris { opacity: .35; }
+/* Mode gris actif (html.mode-gris, classe posée aussi sur le bouton) :
+   inversion — côté gris net, côté couleur estompé. */
+.mode-gris-btn.actif .mgb-couleur { opacity: .35; }
+.mode-gris-btn.actif .mgb-gris { opacity: 1; }
 
 /* Bouton hamburger : n'existe visuellement que sous 860px (voir le second
    bloc @media plus bas) — sur desktop le menu reste affiché en permanence
