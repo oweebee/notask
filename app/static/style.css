@@ -521,7 +521,7 @@ header.topbar .who {
      l'autre, l'oeil descend en colonne au lieu de chercher où commence
      chaque champ. Le message prend le reste. */
   grid-template-columns: auto auto auto 1fr;
-  align-items: baseline;
+  align-items: center;
   gap: .1rem .6rem;
   padding: .35rem .6rem;
   border-left: 3px solid transparent;
@@ -1533,7 +1533,7 @@ body.is-dragging * {
    réserve la garde visible malgré le overflow:hidden utilisé pour limiter la
    carte à dix lignes. Elle s'applique à toute liste, datée ou non, afin que
    l'espacement ne change jamais quand une échéance est ajoutée ou retirée. */
-.note .body:has(.note-ligne) { padding-top: .75rem; }
+.note .body.has-note-lines { padding-top: .88rem; }
 
 /* Même plafond pour une liste à cocher : au-delà de 10 lignes, le reste
    est simplement masqué (la carte ne s'étire pas indéfiniment).
@@ -3381,7 +3381,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    texte redevient explicitement sélectionnable juste en dessous. */
 .note-ligne {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: .4rem;
   user-select: none;
   /* Ancre .note-ligne-due-wrap, positionnée en absolu (voir plus bas) — sans
@@ -3393,7 +3393,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
      La date peut ainsi rester au même endroit en haut à droite sans jamais
      chevaucher le texte, et le rythme ne change plus entre les lignes. */
   margin: 0 calc(var(--marge-bloc, 0px) * -1);
-  padding: 1.85rem var(--marge-bloc, 0px) .22rem;
+  padding: .88rem var(--marge-bloc, 0px) .22rem;
 }
 
 /* Débord horizontal du fond du bloc : il commence à MI-DISTANCE entre le bord

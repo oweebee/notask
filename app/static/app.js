@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9068';
+const APP_VERSION = '0.9070';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -492,6 +492,11 @@ const RECUR_LABELS = {
   weekly: 'chaque semaine',
   monthly: 'chaque mois',
   yearly: 'chaque année',
+};
+const RECUR_ICONES = {
+  weekly: '↻ semaine',
+  monthly: '↻ mois',
+  yearly: '↻ année',
 };
 
 /* Forme courte, réservée à la COLONNE D'ÉCHÉANCES (voir creerLigneAgenda).
@@ -4637,7 +4642,7 @@ function renderNotes() {
       // plus bas une fois la carte dans le DOM.
       // Archives dépliées uniquement quand une recherche est en cours :
       // c'est peut-être un mot d'archive qui a fait ressortir cette notask.
-      inner += `<div class="body">${renderFormatted(n.content, !!(state.search || state.deepSearch))}</div>`;
+      inner += `<div class="body${(n.items || []).length ? ' has-note-lines' : ''}">${renderFormatted(n.content, !!(state.search || state.deepSearch))}</div>`;
     }
 
     // Sous le trait : aucun rendu visuel (plus de vignettes d'images). Le
@@ -6226,7 +6231,7 @@ function renderDueBtn(btnSel, labelSel, iso, isoEnd = null, allDay = false, recu
   if (!btn.innerHTML) btn.innerHTML = ICONS.calendar;
   btn.classList.toggle('has-due', !!iso);
   const base = iso ? formatDueRange(iso, isoEnd, allDay) : 'Aucune échéance';
-  $(labelSel).textContent = base + (iso && recur ? ` · ${RECUR_LABELS[recur] || recur}` : '');
+  $(labelSel).textContent = base + (iso && recur ? ` · ${RECUR_ICONES[recur] || recur}` : '');
 }
 
 function renderNoteDueBtnSimple() {
@@ -8147,7 +8152,7 @@ function majEcheanceLigne(bloc, iso, finIso, allDay = false, recur = null) {
   const tag = bloc.querySelector('.note-ligne-due');
   if (tag) {
     tag.hidden = !iso;
-    tag.textContent = (iso ? formatDueRange(iso, finIso, allDay) : '') + (iso && recur ? ` · ${RECUR_LABELS[recur] || recur}` : '');
+    tag.textContent = (iso ? formatDueRange(iso, finIso, allDay) : '') + (iso && recur ? ` · ${RECUR_ICONES[recur] || recur}` : '');
   }
   const cal = bloc.querySelector('.note-ligne-cal');
   if (cal) {
