@@ -46,7 +46,49 @@ html.mode-gris .note-title-row > *:not(.note-icon) { filter: grayscale(1); }
    — .note reste un ancêtre protégé de .note-icon. ::before, lui, n'a
    aucun descendant : le griser ne touche à rien d'autre. Voir la règle
    .note::before plus bas (hors bloc mode-gris) pour la mise en place. */
-html.mode-gris .note::before { filter: grayscale(1); }
+/* Un simple grayscale() donnait des gris quasi identiques pour toutes
+   les catégories : la palette est volontairement construite avec des
+   luminances proches entre couleurs (voir le commentaire au-dessus de
+   .c-default plus bas), pour un contraste de texte homogène — un
+   filtre fondé sur la luminance ne peut donc pas les distinguer.
+   Remplacé par un fond gris EXPLICITE par catégorie, réparti en 6
+   paliers du plus clair au plus foncé, 4 catégories par palier. */
+html.mode-gris .note.c-white::before,
+html.mode-gris .note.c-default::before,
+html.mode-gris .note.c-red::before,
+html.mode-gris .note.c-coral::before {
+  background: #f2f2f2;
+}
+html.mode-gris .note.c-orange::before,
+html.mode-gris .note.c-amber::before,
+html.mode-gris .note.c-yellow::before,
+html.mode-gris .note.c-lime::before {
+  background: #c6c6c6;
+}
+html.mode-gris .note.c-green::before,
+html.mode-gris .note.c-emerald::before,
+html.mode-gris .note.c-teal::before,
+html.mode-gris .note.c-cyan::before {
+  background: #9a9a9a;
+}
+html.mode-gris .note.c-blue::before,
+html.mode-gris .note.c-indigo::before,
+html.mode-gris .note.c-violet::before,
+html.mode-gris .note.c-purple::before {
+  background: #6e6e6e;
+}
+html.mode-gris .note.c-magenta::before,
+html.mode-gris .note.c-pink::before,
+html.mode-gris .note.c-rose::before,
+html.mode-gris .note.c-brown::before {
+  background: #464646;
+}
+html.mode-gris .note.c-slate::before,
+html.mode-gris .note.c-grey::before,
+html.mode-gris .note.c-navy::before,
+html.mode-gris .note.c-olive::before {
+  background: #202020;
+}
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
    chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
