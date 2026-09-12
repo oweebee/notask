@@ -259,7 +259,17 @@ def _replace_items(
             continue
         if row.google_event_id:
             orphelins.append(row.google_event_id)
-        session.delete(row)
+        # Retirer de la collection `note.items` (cascade delete-orphan) plutôt
+        # que session.delete(row) direct : si cette collection a déjà été
+        # chargée en mémoire ailleurs (ex. coches_avant dans update_note), un
+        # flush ultérieur la recascade et tombe sur une instance déjà
+        # supprimée -> InvalidRequestError "has been deleted, use
+        # make_transient()". La retirer de la collection synchronise l'état
+        # ORM et laisse delete-orphan faire la suppression en base.
+        if row in note.items:
+            note.items.remove(row)
+        else:
+            session.delete(row)
 
     session.flush()
     return finales, orphelins
