@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9071';
+const APP_VERSION = '0.9072';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -8814,6 +8814,7 @@ async function saveNoteSimpleDialog() {
   // commentaire sur pendingAttachmentUploads plus haut.
   await Promise.allSettled(pendingAttachmentUploads);
   pendingAttachmentUploads = [];
+  const contenuClair = richToText($('#dns-content'));
   try {
     // Instantané seulement si quelque chose a réellement changé — l'icône
     // est éditable depuis cette boîte (#dns-icon-btn) depuis le retrait de
@@ -8825,7 +8826,6 @@ async function saveNoteSimpleDialog() {
     // titre que le reste — sans ça, cocher une case ou dater une ligne ne
     // créerait aucun point d'historique.
     const lignesMixtes = lignesDepuisZone($('#dns-content'));
-    const contenuClair = richToText($('#dns-content'));
     const currentItemsForDiff = lignesMixtes
       .map((i) => ({ text: i.text, checked: i.checked, due_at: i.due_at || null }));
     const currentForDiff = {
