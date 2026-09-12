@@ -5613,6 +5613,10 @@ activerClicEntreChamps($('#dlg-note-simple .dns-card'), $('#dns-content'));
    libre. Idempotente : ne touche rien si la ligne libre existe déjà. */
 $('#nc-content').addEventListener('input', () => assurerLigneApresBloc($('#nc-content')));
 $('#dns-content').addEventListener('input', () => assurerLigneApresBloc($('#dns-content')));
+// Voir protegerCopieCodeBackspace() : empêche Backspace d'effacer la
+// pastille de copie d'un bloc de code au lieu de la ligne vide de tête.
+$('#nc-content').addEventListener('keydown', protegerCopieCodeBackspace);
+$('#dns-content').addEventListener('keydown', protegerCopieCodeBackspace);
 /* Même geste en mode liste à cocher, où la zone de texte est masquée : le
    clic dans le vide renvoie vers la ligne vierge en attente. */
 
@@ -7036,20 +7040,36 @@ function clonerEnveloppe(source, texte) {
    le milieu d'un bloc de code et recliquer sur "code" donne donc bien deux
    blocs séparés encadrant du texte redevenu normal.
    Retourne le nœud de texte mis à nu, pour y reposer la sélection. */
+/* Texte d'un Range, <br> convertis en vrais \n et pastille de copie
+   retirée — Range.toString() ignore purement et simplement les <br> (à la
+   différence de textContent sur un <pre> en pre-wrap qui, lui, écrit
+   souvent un vrai \n) et inclurait le bouton de copie s'il tombe dans la
+   plage. Sans cette conversion, retirerEnveloppe() perdait les sauts de
+   ligne du bloc de code coupé en deux : les lignes se retrouvaient
+   recollées bout à bout, d'où l'impression que le nouveau texte « passait
+   par-dessus » l'ancien. Même logique que texteCodeSansBouton() plus haut,
+   appliquée ici à un simple Range plutôt qu'à un noeud déjà en place. */
+function texteDeRange(range) {
+  const frag = range.cloneContents();
+  frag.querySelectorAll('.code-copy-btn').forEach((b) => b.remove());
+  frag.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  return (frag.textContent || '').replace(/​/g, '');
+}
+
 function retirerEnveloppe(range, enveloppe) {
   const avant = document.createRange();
   avant.selectNodeContents(enveloppe);
   avant.setEnd(range.startContainer, range.startOffset);
-  const texteAvant = avant.toString();
+  const texteAvant = texteDeRange(avant);
 
   const apres = document.createRange();
   apres.selectNodeContents(enveloppe);
   apres.setStart(range.endContainer, range.endOffset);
-  const texteApres = apres.toString();
+  const texteApres = texteDeRange(apres);
 
   const morceau = document.createDocumentFragment();
   if (texteAvant) morceau.appendChild(clonerEnveloppe(enveloppe, texteAvant));
-  const nu = document.createTextNode(range.toString());
+  const nu = document.createTextNode(texteDeRange(range));
   morceau.appendChild(nu);
   if (texteApres) morceau.appendChild(clonerEnveloppe(enveloppe, texteApres));
 
@@ -8082,6 +8102,44 @@ function ajouterBoutonsCopieCode(root) {
     if (zone.tagName === 'PRE') zone.prepend(btn);
     else zone.appendChild(btn);
   });
+}
+
+/* Backspace au tout début du texte d'un bloc de code : le bouton de copie
+   (voir ajouterBoutonsCopieCode ci-dessus) est le PREMIER enfant du <pre>,
+   juste avant le <code> — un impératif visuel (voir le commentaire
+   au-dessus de `zone.prepend(btn)`), pas un choix arbitraire. Conséquence :
+   quand le curseur est au tout début du code (rien avant lui DANS le
+   <code>), le navigateur traite le bouton, contentEditable="false" et donc
+   atomique, comme le seul élément à effacer — Backspace supprime le
+   bouton entier au lieu de rejoindre la ligne précédente. Interceptée ici
+   pour ne JAMAIS laisser le navigateur toucher au bouton : si le code
+   commence par une ligne vide (le cas signalé), ce \n de tête est retiré
+   directement dans le texte ; sinon la touche est simplement absorbée
+   (on est déjà au tout début du bloc, rien à fusionner sans risquer le
+   bouton). */
+function protegerCopieCodeBackspace(e) {
+  if (e.key !== 'Backspace') return;
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const { startContainer, startOffset } = range;
+  if (startOffset !== 0) return;
+  const code = (startContainer.nodeType === 1 ? startContainer : startContainer.parentNode)
+    ?.closest('code');
+  const bloc = code && code.closest('pre.note-code-block');
+  if (!bloc || !bloc.contains(code)) return;
+  // Rien avant le point de coupure À L'INTÉRIEUR du <code> : c'est bien le
+  // tout début du texte, la position qui menace le bouton.
+  const avant = document.createRange();
+  avant.selectNodeContents(code);
+  avant.setEnd(startContainer, startOffset);
+  if (avant.toString() !== '') return;
+
+  e.preventDefault();
+  const premier = code.firstChild;
+  if (premier && premier.nodeType === 3 && premier.textContent.startsWith('\n')) {
+    premier.textContent = premier.textContent.slice(1);
+  }
 }
 
 /* Remplace les <img data-att> d'un conteneur déjà rendu par leur vraie
