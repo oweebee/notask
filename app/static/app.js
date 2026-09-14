@@ -3139,6 +3139,10 @@ $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
     state.labelFilter = null;
     renderLabelsDrawer();
   }
+  // "Notasks" spécifiquement : une recherche en cours resterait sinon
+  // active en arrière-plan, invisible (barre repliée) mais toujours
+  // appliquée, tant qu'on ne revient pas dessus par hasard.
+  if (b.dataset.view === 'notes') viderRecherches();
   switchView(b.dataset.view);
 }));
 
@@ -5457,6 +5461,10 @@ function resetComposer() {
 function composerExpand() {
   if (composerExpanded) return;
   composerExpanded = true;
+  // Démarrer une nouvelle notask pendant qu'une recherche filtre encore la
+  // mosaïque prêtait à confusion (la notask fraîchement créée pouvait ne
+  // pas apparaître, exclue par le filtre) — voir viderRecherches().
+  viderRecherches();
   // Le composeur quitte son jaune d'appel pour prendre la teinte d'une
   // vraie carte : une fois la composition engagée, il fait partie de la
   // mosaïque et doit s'y fondre (voir appliquerCouleurComposeur).
@@ -6224,11 +6232,12 @@ $('#notes-search').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.search = e.target.value.trim(); loadNotes(); }, 250);
 });
-brancherEffacementRecherche('#notes-search', '#notes-search-clear', () => {
+function viderRechercheSimple() {
   clearTimeout(searchTimer);
   state.search = '';
   loadNotes();
-});
+}
+brancherEffacementRecherche('#notes-search', '#notes-search-clear', viderRechercheSimple);
 
 /* Seconde barre : recherche en profondeur, qui ne filtre pas la mosaïque
    mais la remplace par des cartes larges centrées sur chaque occurrence
@@ -6244,12 +6253,32 @@ $('#notes-deep-search').addEventListener('input', (e) => {
     renderNotes();
   }, 250);
 });
-brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', () => {
+function viderRechercheProfonde() {
   clearTimeout(deepSearchTimer);
   state.deepSearch = '';
   state.deepCursor = {};
   renderNotes();
-});
+}
+brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', viderRechercheProfonde);
+
+/* Efface les deux barres de recherche SANS leur redonner le focus (à la
+   différence d'un clic sur leur croix, voir brancherEffacementRecherche) —
+   utilisée quand on quitte la recherche par une autre action : revenir sur
+   "Notasks" dans le menu, ou commencer une nouvelle notask. Ne fait rien
+   si les deux champs sont déjà vides, pour ne pas relancer un rendu inutile
+   à chaque clic sur "Notasks" ou chaque frappe dans le composeur. */
+function viderRecherches() {
+  if ($('#notes-search').value || state.search) {
+    $('#notes-search').value = '';
+    $('#notes-search-clear').hidden = true;
+    viderRechercheSimple();
+  }
+  if ($('#notes-deep-search').value || state.deepSearch) {
+    $('#notes-deep-search').value = '';
+    $('#notes-deep-search-clear').hidden = true;
+    viderRechercheProfonde();
+  }
+}
 
 /* Les archives sont désormais une entrée du menu latéral, pas un bouton —
    les notasks s'ouvrent toutes via l'édition simple (openNoteSimpleDialog,
