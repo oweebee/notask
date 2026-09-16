@@ -140,6 +140,11 @@ ICON_KEYS = {
     "electrique", "plex",
     "steam", "epic", "gog", "ubisoft", "blizzard",
     "playstation", "xbox", "nintendo", "android", "apple",
+    # Cuisine
+    "fourchette", "couteau", "cuilleresoupe", "fouet", "spatule",
+    "casserole", "poele", "marmite", "four", "frigo",
+    "oeuf", "fromage", "beurre", "poulet", "steak",
+    "assiette", "sel", "huile", "tablier", "mixeur",
 }
 
 
