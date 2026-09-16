@@ -144,7 +144,7 @@ ICON_KEYS = {
     "fourchette", "couteau", "cuilleresoupe", "fouet", "spatule",
     "casserole", "poele", "marmite", "four", "frigo",
     "oeuf", "fromage", "beurre", "poulet", "steak",
-    "assiette", "sel", "huile", "tablier", "mixeur",
+    "assiette", "sel", "huile", "entrecote", "mixeur",
 }
 
 

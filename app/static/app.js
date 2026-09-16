@@ -1181,12 +1181,12 @@ const ICON_CHOICES = {
   oeuf: '<svg viewBox="0 0 24 24"><path d="M12 3c-4 0-7 4.5-7 9s2.5 8 7 8 7-3.5 7-8-3-9-7-9z" fill="#fff9c4"/><circle cx="12" cy="13" r="3.5" fill="#ffb300"/></svg>',
   fromage: '<svg viewBox="0 0 24 24"><path d="M2.5 9.5 12 5.5l9.5 4v8.5H2.5z" fill="#ffd54f"/><path d="M2.5 9.5 12 5.5l9.5 4" fill="#ffca28"/><circle cx="7" cy="14" r="1.5" fill="#f9a825"/><circle cx="13" cy="13" r="1.2" fill="#f9a825"/><circle cx="18" cy="15.5" r="1" fill="#f9a825"/></svg>',
   beurre: '<svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="9.5" rx="1.5" fill="#fff9c4"/><rect x="4" y="9" width="16" height="3.5" rx="1.5" fill="#fdd835"/><rect x="5.5" y="14" width="7" height="3.5" rx="0.8" fill="none" stroke="#fdd835" stroke-width="0.8"/></svg>',
-  poulet: '<svg viewBox="0 0 24 24"><path d="M15.5 3.5c2.5 1 3.5 3.5 2 6.5-1 2-3.5 3.5-6.5 4L10 20H8.5L7 19l1-5.5C6 12 5.5 8.5 7.5 6c2-3 5.5-3.5 8-2.5z" fill="#f9a825"/><ellipse cx="8.5" cy="20.5" rx="2" ry="1.2" fill="#efebe9"/><ellipse cx="8.5" cy="20" rx="3.2" ry="1.8" fill="#d7ccc8"/></svg>',
+  poulet: '<svg viewBox="0 0 24 24"><rect x="11" y="15" width="2" height="8" rx="1" fill="#d7ccc8"/><ellipse cx="12" cy="23" rx="2.5" ry="1.2" fill="#efebe9"/><ellipse cx="12" cy="10" rx="7" ry="7.5" fill="#f9a825"/><path d="M6 7c1.5-3.5 4.5-5 8-4 2.5.7 4.5 2.5 5 5.5-1-2.5-3-4-5-4.5-2.5-.5-6 .5-8 3z" fill="#e65100"/><path d="M8.5 5.5c-2 1.5-3.5 4-3.5 6" stroke="#ffd54f" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>',
   steak: '<svg viewBox="0 0 24 24"><path d="M4.5 10c0-3.5 3.5-6.5 8-6.5s8 2.5 8 6.5c0 4.5-3 9-8 9s-8-4-8-9z" fill="#e57373"/><path d="M5.5 10.5c0-2.5 3-5 7-5s7.5 2 7.5 5" fill="none" stroke="#c62828" stroke-width="1.2" stroke-linecap="round"/><path d="M7 15c.5-1 2.5-2 5-2s5 1.5 5.5 2.5" fill="none" stroke="#d32f2f" stroke-width="1.2" stroke-linecap="round"/></svg>',
   assiette: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="#eceff1"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="#cfd8dc" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="#e0e0e0"/></svg>',
   sel: '<svg viewBox="0 0 24 24"><rect x="8.5" y="10" width="7" height="11.5" rx="2" fill="#eceff1"/><rect x="9" y="10.5" width="6" height="2.5" rx="0.5" fill="#cfd8dc"/><ellipse cx="12" cy="7" rx="3.5" ry="3.5" fill="#b0bec5"/><circle cx="10.5" cy="14.5" r="0.8" fill="#90a4ae"/><circle cx="13.5" cy="14.5" r="0.8" fill="#90a4ae"/><circle cx="12" cy="17" r="0.8" fill="#90a4ae"/></svg>',
   huile: '<svg viewBox="0 0 24 24"><path d="M9.5 9 8 21a1.5 1.5 0 0 0 1.5 1.5h5A1.5 1.5 0 0 0 16 21L14.5 9z" fill="#ffee58"/><path d="M10 11 9 21.5h6L14 11z" fill="#fff9c4"/><rect x="9.5" y="5.5" width="5" height="4" rx="1" fill="#f9a825"/><rect x="11" y="2.5" width="2" height="3.5" rx="1" fill="#f57f17"/></svg>',
-  tablier: '<svg viewBox="0 0 24 24"><path d="M8.5 7h7v4.5c0 5-2.5 9.5-3.5 9.5S8.5 16.5 8.5 11.5z" fill="#ef9a9a"/><rect x="7" y="6" width="10" height="2" rx="1" fill="#e57373"/><rect x="5" y="4.5" width="3" height="2" rx="1" fill="#e57373"/><rect x="16" y="4.5" width="3" height="2" rx="1" fill="#e57373"/><path d="M12 9v11.5" stroke="#c62828" stroke-width="1" stroke-linecap="round" fill="none"/><path d="M9.5 13.5h5" stroke="#c62828" stroke-width="1" stroke-linecap="round" fill="none"/></svg>',
+  entrecote: '<svg viewBox="0 0 24 24"><rect x="2" y="8" width="3.5" height="10" rx="1.7" fill="#efebe9"/><circle cx="3.7" cy="8" r="2" fill="#efebe9"/><circle cx="3.7" cy="18" r="2" fill="#efebe9"/><path d="M5 6c1.5-1.5 4-2.5 8-2.5s8 1.5 8 5.5c0 5-3 9.5-8 9.5-3.5 0-8-2.5-8-9.5z" fill="#c62828"/><path d="M5.5 6.5c1.5-1.5 3.5-2.5 7.5-2.5s7.5 1.5 7.5 4" fill="#ffcdd2"/><path d="M9 11.5c2.5-.8 5 .5 7.5-.5M9.5 14.5c2-.5 4.5.8 7-.3" stroke="#ef9a9a" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>',
   mixeur: '<svg viewBox="0 0 24 24"><path d="M8 10 5.5 20.5H18.5L16 10z" fill="#78909c"/><rect x="9" y="5.5" width="6" height="5" rx="1" fill="#90a4ae"/><rect x="11" y="2" width="2" height="4" rx="1" fill="#607d8b"/><path d="M7 15h10M7.5 17.5h9" stroke="#546e7a" stroke-width="1" stroke-linecap="round" fill="none"/></svg>',
 };
 
@@ -1629,7 +1629,7 @@ const ICON_THEMES = [
   },
   {
     titre: 'Cuisine',
-    cles: ['fourchette', 'couteau', 'cuilleresoupe', 'fouet', 'spatule', 'casserole', 'poele', 'marmite', 'four', 'frigo', 'oeuf', 'fromage', 'beurre', 'poulet', 'steak', 'assiette', 'sel', 'huile', 'tablier', 'mixeur'],
+    cles: ['fourchette', 'couteau', 'cuilleresoupe', 'fouet', 'spatule', 'casserole', 'poele', 'marmite', 'four', 'frigo', 'oeuf', 'fromage', 'beurre', 'poulet', 'steak', 'assiette', 'sel', 'huile', 'entrecote', 'mixeur'],
   },
   {
     titre: 'Animaux',
@@ -1838,7 +1838,7 @@ const ICON_MOTS = {
   beurre: 'beurre graisse cuisine ingrédient', poulet: 'poulet cuisse volaille viande',
   steak: 'steak bœuf bifteck viande', assiette: 'assiette plat table dîner',
   sel: 'sel salière assaisonnement', huile: 'huile olive bouteille',
-  tablier: 'tablier cuisine cuisinier chef', mixeur: 'mixeur blender smoothie',
+  entrecote: 'entrecôte côte boeuf steak viande grillée', mixeur: 'mixeur blender smoothie',
   discord: 'discord chat voix serveur communauté',
   teams: 'teams microsoft collaboration réunion',
   word: 'word microsoft document texte rédaction',
