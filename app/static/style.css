@@ -2219,8 +2219,8 @@ dialog.c-white .cal-popup {
 }
 .cal-btn svg { width: 19px; height: 19px; }
 .cal-btn:hover { background: rgba(255,255,255,.24); color: var(--md-on-surface); }
-.cal-btn.has-due { color: #ffd54f; background: rgba(66,165,245,.18); }
-.cal-btn.has-due:hover { background: rgba(66,165,245,.28); }
+.cal-btn.has-due { color: #ffd54f; background: rgba(66,165,245,.36); }
+.cal-btn.has-due:hover { background: rgba(66,165,245,.56); }
 
 /* Enregistrement (note vocale) ou dictée en cours. Rouge + pulsation : un
    micro ouvert doit se voir sans ambiguïté, y compris du coin de l'œil —
@@ -3702,7 +3702,7 @@ dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
    repos. */
 .note-ligne-cal.has-due {
   color: #ffd54f;
-  background: rgba(66,165,245,.18);
+  background: rgba(66,165,245,.36);
 }
 .note-ligne:hover .note-ligne-cal,
 .note-ligne-cal.has-due { opacity: 1; }
