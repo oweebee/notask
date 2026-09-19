@@ -1307,11 +1307,16 @@ function estEnRetard(dueAt, dueEndAt, allDay) {
    façon fiable avec la fermeture du popover) : un <input type="date"> pour
    le jour + deux <select> pour l'heure et les minutes (uniquement 00/15/30/45)
    sont entièrement sous notre contrôle, donc prévisibles partout. */
-function isoToParts(isoString) {
-  if (!isoString) return null;
-  const d = new Date(isoString);
+/* Décompose une date en {date, hour, minute} prêts pour les trois champs du
+   sélecteur d'échéance, en calant les minutes sur le quart d'heure.
+   `arrondi` décide du sens : Math.round pour relire une échéance existante
+   (le quart d'heure le PLUS PROCHE, on ne déplace pas ce qui est posé),
+   Math.ceil pour en proposer une nouvelle (le quart d'heure SUIVANT, jamais
+   une heure déjà passée). 60 minutes est un débordement légitime des deux
+   côtés : on repasse à 0 et on avance d'une heure, modulo 24. */
+function partsDepuisDate(d, arrondi) {
   const pad = (n) => String(n).padStart(2, '0');
-  let minute = Math.round(d.getMinutes() / 15) * 15;
+  let minute = arrondi(d.getMinutes() / 15) * 15;
   let hour = d.getHours();
   if (minute === 60) { minute = 0; hour = (hour + 1) % 24; }
   return {
@@ -1319,6 +1324,11 @@ function isoToParts(isoString) {
     hour: pad(hour),
     minute: pad(minute),
   };
+}
+
+function isoToParts(isoString) {
+  if (!isoString) return null;
+  return partsDepuisDate(new Date(isoString), Math.round);
 }
 
 function partsToIso(dateStr, hour, minute) {
@@ -1355,16 +1365,7 @@ function isoToUtcDateStr(isoString) {
 /* Prochain quart d'heure à venir, pour une valeur de départ sensée quand
    aucune échéance n'est encore réglée. */
 function nextQuarterHourParts() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  let minute = Math.ceil(d.getMinutes() / 15) * 15;
-  let hour = d.getHours();
-  if (minute === 60) { minute = 0; hour = (hour + 1) % 24; }
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    hour: pad(hour),
-    minute: pad(minute),
-  };
+  return partsDepuisDate(new Date(), Math.ceil);
 }
 
 /* Popup de sélection date + heure, ancré sous l'icône calendrier qui l'ouvre.
@@ -1373,6 +1374,24 @@ let _closeCalPopup = null;
 
 function closeCalPopup() {
   if (_closeCalPopup) { _closeCalPopup(); _closeCalPopup = null; }
+}
+
+/* Ordonnée d'un panneau ancré à un bouton : sous l'ancre par défaut,
+   AU-DESSUS s'il n'y a pas la place en dessous. Les boutons concernés
+   (échéance, choix d'icône) se trouvent tout en bas de la boîte d'édition :
+   ouvert systématiquement vers le bas, le panneau sortait de l'écran. En
+   dernier recours — ni la place au-dessus ni en dessous, petit écran — on le
+   colle au bas de la fenêtre visible plutôt que de le laisser déborder.
+   Le sélecteur de date et celui d'icône s'en partagent le calcul. */
+function ordonneePopup(anchorRect, hauteur, marge = 8) {
+  let haut = anchorRect.bottom + 6;
+  if (haut + hauteur > window.innerHeight - marge) {
+    const auDessus = anchorRect.top - hauteur - 6;
+    haut = auDessus >= marge
+      ? auDessus
+      : Math.max(marge, window.innerHeight - hauteur - marge);
+  }
+  return haut;
 }
 
 /* `onChange` reçoit (isoDebut, isoFin, journeeComplete, recur) — isoFin vaut
@@ -1502,21 +1521,7 @@ function openCalPopup(anchor, currentIso, onChange, currentEndIso = null, curren
   const hauteur = pop.offsetHeight;
   const marge = 8;
 
-  /* Ordonnée à l'écran : sous l'ancre par défaut, AU-DESSUS s'il n'y a pas
-     la place en dessous. Le bouton d'échéance se trouve tout en bas de la
-     boîte d'édition : ouvert systématiquement vers le bas, le sélecteur
-     sortait de l'écran. En dernier recours (ni assez de place en haut ni en
-     bas, petit écran) on le colle au bas de la fenêtre visible. */
-  const placerEnOrdonnee = (anchorRect) => {
-    let haut = anchorRect.bottom + 6;
-    if (haut + hauteur > window.innerHeight - marge) {
-      const auDessus = anchorRect.top - hauteur - 6;
-      haut = auDessus >= marge
-        ? auDessus
-        : Math.max(marge, window.innerHeight - hauteur - marge);
-    }
-    return haut;
-  };
+  const placerEnOrdonnee = (anchorRect) => ordonneePopup(anchorRect, hauteur, marge);
 
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
@@ -1976,17 +1981,8 @@ function openIconPopup(anchor, currentIcon, onChange) {
   const host = hostDialog || document.body;
   host.appendChild(pop);
 
-  // Même placement que le sélecteur de date : sous l'ancre, ou au-dessus
-  // faute de place en dessous (voir placerEnOrdonnee dans openCalPopup).
   const hauteurPop = pop.offsetHeight;
-  const placerEnOrdonnee = (anchorRect) => {
-    let haut = anchorRect.bottom + 6;
-    if (haut + hauteurPop > window.innerHeight - 8) {
-      const auDessus = anchorRect.top - hauteurPop - 6;
-      haut = auDessus >= 8 ? auDessus : Math.max(8, window.innerHeight - hauteurPop - 8);
-    }
-    return haut;
-  };
+  const placerEnOrdonnee = (anchorRect) => ordonneePopup(anchorRect, hauteurPop);
 
   if (hostDialog) {
     const dialogRect = hostDialog.getBoundingClientRect();
@@ -3570,16 +3566,28 @@ async function loadNotes() {
    comme des lignes et non comme des cartes : la notask parente n'est pas
    archivée, seule cette ligne l'est. Cliquer dessus ouvre la notask
    complète qui la contient, comme partout ailleurs. */
-async function loadArchivedItems() {
+/* Squelette commun aux deux listes de lignes ISOLÉES : celles archivées
+   seules (Archives) et celles mises seules à la corbeille. Les deux
+   parcouraient le même trajet mot pour mot sur une trentaine de lignes —
+   chargement, déchiffrement, regroupement, en-tête cliquable, sous-liste —
+   et une correction sur l'une ne se voyait pas sur l'autre. Ne diffèrent
+   réellement que les deux conteneurs, l'URL, la garde d'affichage et la
+   fabrique de ligne : d'où ces cinq paramètres, et rien de plus.
+
+   Lignes regroupées par notask d'origine, comme sur l'accueil (icône +
+   titre en en-tête, lignes imbriquées dessous), plutôt qu'une liste plate
+   où l'on perdrait de vue de quelle notask vient chaque ligne. Map et non
+   objet brut : conserve l'ordre d'arrivée des groupes, celui du serveur. */
+async function chargerLignesIsolees({ blocSel, listeSel, chemin, afficher = true, creerLigne }) {
   // Absent de la page fantôme /quick (voir switchView) : on sort sans rien
   // faire plutôt que de lancer une TypeError.
-  const bloc = $('#archived-items');
+  const bloc = $(blocSel);
   if (!bloc) return;
-  if (!state.showArchived) { bloc.hidden = true; return; }
+  if (!afficher) { bloc.hidden = true; return; }
 
   let items;
   try {
-    items = await api('/notes/archived-items');
+    items = await api(chemin);
   } catch {
     bloc.hidden = true;
     return;
@@ -3590,13 +3598,9 @@ async function loadArchivedItems() {
   }));
 
   bloc.hidden = items.length === 0;
-  const liste = $('#archived-items-list');
+  const liste = $(listeSel);
   liste.innerHTML = '';
 
-  // Regroupées par notask d'origine, comme sur l'accueil (icône + titre en
-  // en-tête, lignes imbriquées dessous) — plutôt qu'une liste plate où l'on
-  // perd de vue de quelle notask vient chaque ligne. Map plutôt qu'un objet
-  // brut : conserve l'ordre d'arrivée des groupes (celui du serveur).
   const groupes = new Map();
   for (const it of items) {
     if (!groupes.has(it.note_id)) groupes.set(it.note_id, []);
@@ -3619,20 +3623,27 @@ async function loadArchivedItems() {
 
     const sousListe = document.createElement('div');
     sousListe.className = 'archived-group-items';
-    for (const it of lignes) {
-      // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
-      // une ligne archivée peut ne plus avoir d'échéance du tout.
-      const ligne = creerLigneAgenda({
-        kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
-        due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
-        color: it.color, icon: it.icon,
-      }, () => loadNotes(), true, 'unarchive');
-      sousListe.appendChild(ligne);
-    }
+    for (const it of lignes) sousListe.appendChild(creerLigne(it));
     groupe.appendChild(sousListe);
     liste.appendChild(groupe);
   }
   layoutMosaic(true);
+}
+
+async function loadArchivedItems() {
+  return chargerLignesIsolees({
+    blocSel: '#archived-items',
+    listeSel: '#archived-items-list',
+    chemin: '/notes/archived-items',
+    afficher: state.showArchived,
+    // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
+    // une ligne archivée peut ne plus avoir d'échéance du tout.
+    creerLigne: (it) => creerLigneAgenda({
+      kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
+      due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
+      color: it.color, icon: it.icon,
+    }, () => loadNotes(), true, 'unarchive'),
+  });
 }
 
 async function ouvrirNotaskDemandeeParUrl() {
@@ -3811,52 +3822,12 @@ function creerLigneCorbeille(it, rafraichir) {
    Archives, jusqu'au regroupement par notask (voir ce commentaire-là pour
    le détail du principe). */
 async function loadTrashedItems() {
-  const bloc = $('#trashed-items');
-  if (!bloc) return;
-
-  let items;
-  try {
-    items = await api('/notes/trashed-items');
-  } catch {
-    bloc.hidden = true;
-    return;
-  }
-  await Promise.all(items.map(async (it) => {
-    it.text = await decryptField(it.text);
-    it.note_title = await decryptField(it.note_title);
-  }));
-
-  bloc.hidden = items.length === 0;
-  const liste = $('#trashed-items-list');
-  liste.innerHTML = '';
-
-  const groupes = new Map();
-  for (const it of items) {
-    if (!groupes.has(it.note_id)) groupes.set(it.note_id, []);
-    groupes.get(it.note_id).push(it);
-  }
-
-  for (const [noteId, lignes] of groupes) {
-    const premiere = lignes[0];
-    const groupe = document.createElement('div');
-    groupe.className = 'note archived-group c-' + premiere.color;
-
-    const header = document.createElement('div');
-    header.className = 'note-title-row archived-group-title';
-    const icon = ICON_CHOICES[premiere.icon] || ICON_CHOICES.spoonblue;
-    header.innerHTML = `<span class="note-icon">${icon}</span><h3>${escapeHtml(premiere.note_title || 'Notask sans titre')}</h3>`;
-    header.tabIndex = 0;
-    header.setAttribute('role', 'button');
-    header.addEventListener('click', () => ouvrirNoteParId(noteId));
-    groupe.appendChild(header);
-
-    const sousListe = document.createElement('div');
-    sousListe.className = 'archived-group-items';
-    for (const it of lignes) sousListe.appendChild(creerLigneCorbeille(it, loadTrashedItems));
-    groupe.appendChild(sousListe);
-    liste.appendChild(groupe);
-  }
-  layoutMosaic(true);
+  return chargerLignesIsolees({
+    blocSel: '#trashed-items',
+    listeSel: '#trashed-items-list',
+    chemin: '/notes/trashed-items',
+    creerLigne: (it) => creerLigneCorbeille(it, loadTrashedItems),
+  });
 }
 
 /* -------------------------------- Libellés --------------------------------
@@ -5355,16 +5326,20 @@ enablePointerReorder($('#trash-grid'), '.trash-card', {
   blob: true,
 });
 
-/* Pendant de commitNoteOrder() pour la corbeille : l'ordre visuel du DOM
-   fait foi une fois le geste terminé, et l'on ne PATCH que les notasks dont
-   la position a réellement changé. `position` reste modifiable sur une
-   notask en corbeille (voir _owned_note, qui ne la refuse pas). */
-async function commitTrashOrder() {
-  const ids = [...$('#trash-grid').querySelectorAll('.trash-card')].map((el) => Number(el.dataset.id));
+/* Une fois le geste de réordonnancement terminé, l'ordre visuel du DOM fait
+   foi : on réattribue à chaque carte une position décroissante correspondant
+   à sa place, et on ne PATCH que celles dont la position a réellement changé.
+   Commun à la mosaïque et à la corbeille — `position` reste modifiable sur
+   une notask en corbeille (voir _owned_note, qui ne la refuse pas).
+   `source` est une FONCTION et non un tableau : state.notes est réassigné à
+   chaque chargement, une référence capturée une fois pointerait sur
+   l'ancienne liste. */
+async function commitOrdreCartes({ grille, carteSel, source, rafraichir }) {
+  const ids = [...$(grille).querySelectorAll(carteSel)].map((el) => Number(el.dataset.id));
   const total = ids.length;
   const updates = [];
   ids.forEach((id, idx) => {
-    const note = (state.trashNotes || []).find((x) => x.id === id);
+    const note = source().find((x) => x.id === id);
     if (!note) return;
     const newPos = (total - idx) * 1000;
     if (Math.round(note.position || 0) !== newPos) {
@@ -5377,7 +5352,14 @@ async function commitTrashOrder() {
   } catch (err) {
     alert(err.message);
   }
-  loadTrash();
+  rafraichir();
+}
+
+async function commitTrashOrder() {
+  return commitOrdreCartes({
+    grille: '#trash-grid', carteSel: '.trash-card',
+    source: () => state.trashNotes || [], rafraichir: loadTrash,
+  });
 }
 
 // `itemSelector` par défaut à '.note' : seul le réordonnancement des
@@ -5421,24 +5403,10 @@ function getDropTarget(container, x, y, itemSelector = '.note', axis = 'x') {
    à chaque note visible une position décroissante correspondant à sa place,
    et on ne PATCH que celles dont la position a réellement changé. */
 async function commitNoteOrder() {
-  const ids = [...$('#notes-grid').querySelectorAll('.note')].map((el) => Number(el.dataset.id));
-  const total = ids.length;
-  const updates = [];
-  ids.forEach((id, idx) => {
-    const note = state.notes.find((x) => x.id === id);
-    if (!note) return;
-    const newPos = (total - idx) * 1000;
-    if (Math.round(note.position || 0) !== newPos) {
-      updates.push(api('/notes/' + id, { method: 'PATCH', body: { position: newPos } }));
-    }
+  return commitOrdreCartes({
+    grille: '#notes-grid', carteSel: '.note',
+    source: () => state.notes, rafraichir: loadNotes,
   });
-  if (!updates.length) return;
-  try {
-    await Promise.all(updates);
-  } catch (err) {
-    alert(err.message);
-  }
-  loadNotes();
 }
 
 /* Plus de `composerChecklist` ni de `composerItems` : une notask n'a plus de
@@ -6059,10 +6027,7 @@ $('#nc-attach-input').addEventListener('change', (e) => {
 
 // Coller une image directement dans le composeur, comme en édition rapide.
 $('.note-composer').addEventListener('paste', (e) => {
-  const files = Array.from(e.clipboardData ? e.clipboardData.items : [])
-    .filter((it) => it.kind === 'file')
-    .map((it) => it.getAsFile())
-    .filter(Boolean);
+  const files = fichiersDuPressePapier(e);
   if (!files.length) return;
   e.preventDefault();
   // Cf. le collage en édition rapide : une image collée dans le corps
@@ -6132,15 +6097,7 @@ async function creerNotaskDepuisComposeur() {
       // serveur reçoit d'une ligne, et uniquement quand elle porte une
       // échéance — il lui sert à nommer l'événement Google Calendar
       // correspondant. Logique inchangée.
-      items: await Promise.all(lignesMixtes.map(async (l) => ({
-        checked: l.checked,
-        due_at: l.due_at,
-        due_end_at: l.due_end_at,
-        all_day: l.all_day,
-        recur: l.recur,
-        calendar_title: l.due_at ? l.text : null,
-        text: await encryptField(l.text),
-      }))),
+      items: await Promise.all(lignesMixtes.map((l) => serialiserLigne(l))),
       icon: state.composerIcon,
       color: composerColor,
       due_at: $('#nc-due').value || null,
@@ -6649,10 +6606,7 @@ $('#dns-attach-input').addEventListener('change', (e) => {
 // qui nettoie la couleur/police d'un éventuel HTML collé sans toucher au
 // texte brut).
 $('#dlg-note-simple').addEventListener('paste', (e) => {
-  const files = Array.from(e.clipboardData ? e.clipboardData.items : [])
-    .filter((it) => it.kind === 'file')
-    .map((it) => it.getAsFile())
-    .filter(Boolean);
+  const files = fichiersDuPressePapier(e);
   if (!files.length) return;
   e.preventDefault();
   const { images, autres } = trierImages(files);
@@ -6955,6 +6909,73 @@ $('#dns-icon-btn').addEventListener('click', () => {
    l'ouverture (voir openNoteSimpleDialog()). */
 const FMT_TAGS = { bold: 'strong', italic: 'em', underline: 'u' };
 
+/* Fichiers réellement présents dans un presse-papier. Le navigateur y range
+   aussi des entrées de type texte, sur lesquelles getAsFile() renvoie null :
+   d'où le double filtrage, qu'il ne faut pas alléger. */
+function fichiersDuPressePapier(e) {
+  return Array.from(e.clipboardData ? e.clipboardData.items : [])
+    .filter((it) => it.kind === 'file')
+    .map((it) => it.getAsFile())
+    .filter(Boolean);
+}
+
+/* Distingue un simple clic dans le vide d'un vrai geste de sélection, pour
+   ne placer le curseur en fin de zone que dans le premier cas. On ne peut
+   pas trancher au mousedown, le glisser n'ayant pas encore eu lieu : on
+   attend donc le relâchement — souris qui n'a pas bougé (3 px de marge, la
+   main tremble) ET sélection restée vide = simple clic. Écoute posée en
+   capture et retirée dès le premier relâchement. */
+function placerCurseurSiSimpleClic(e, cible) {
+  const departX = e.clientX;
+  const departY = e.clientY;
+  const onUp = (up) => {
+    document.removeEventListener('mouseup', onUp, true);
+    const aBouge = Math.abs(up.clientX - departX) > 3
+      || Math.abs(up.clientY - departY) > 3;
+    const sel = window.getSelection();
+    if (aBouge || (sel && !sel.isCollapsed)) return; // glisser : on laisse faire
+    placerCurseurFinDeZone(cible);
+  };
+  document.addEventListener('mouseup', onUp, true);
+}
+
+/* Préambule commun aux commandes de mise en forme : mémoriser les
+   défilements, reprendre le focus, et vérifier que la sélection est bien
+   DANS la zone visée. Renvoie null s'il n'y a rien d'exploitable — en ayant
+   déjà rétabli le défilement, car le focus() ci-dessus a pu le déplacer
+   avant même qu'on renonce. L'appelant reçoit sinon de quoi travailler et
+   le rétablissement à appeler lui-même en sortie. */
+function selectionDansZone(el) {
+  const retablirDefilement = memoriserDefilements(el);
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { retablirDefilement(); return null; }
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return null; }
+  return { range, text: range.toString(), retablirDefilement };
+}
+
+/* Forme sous laquelle une ligne à cocher part au serveur. Le texte est
+   chiffré ; `calendar_title` est la SEULE exception, et uniquement quand la
+   ligne porte une échéance : c'est le titre en clair dont le serveur a
+   besoin pour nommer l'événement Google Calendar correspondant (voir le
+   compromis détaillé dans app/google_calendar.py). Sans échéance, rien ne
+   part en clair.
+   `avecId` à la mise à jour seulement : à la création, les lignes n'ont pas
+   encore d'identifiant côté serveur. */
+async function serialiserLigne(l, { avecId = false } = {}) {
+  return {
+    ...(avecId ? { id: l.id } : {}),
+    checked: l.checked,
+    due_at: l.due_at,
+    due_end_at: l.due_end_at,
+    all_day: l.all_day,
+    recur: l.recur,
+    calendar_title: l.due_at ? l.text : null,
+    text: await encryptField(l.text),
+  };
+}
+
 /* Mémorise la position de défilement de l'élément et de tous ses ancêtres
    défilables, et rend une fonction qui la rétablit. `focus()` sur une zone
    éditable fait remonter le conteneur en haut : sans ce garde-fou, appliquer
@@ -7169,15 +7190,9 @@ function retirerEnveloppe(range, enveloppe) {
    valeur libre de l'effet), et `texteImpose` de libellé de repli quand rien
    n'est sélectionné — l'adresse s'affiche alors telle quelle. */
 function wrapSelectionRich(el, kind, couleur, texteImpose) {
-  const retablirDefilement = memoriserDefilements(el);
-  el.focus();
-  const sel = window.getSelection();
-  // Sorties anticipées : le focus() ci-dessus a déjà pu faire défiler, il
-  // faut rétablir avant de renoncer.
-  if (!sel.rangeCount) { retablirDefilement(); return; }
-  const range = sel.getRangeAt(0);
-  if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return; }
-  const text = range.toString();
+  const ctx = selectionDansZone(el);
+  if (!ctx) return;
+  const { range, text, retablirDefilement } = ctx;
 
   /* Bouton bascule : si la sélection est déjà habillée par cet effet, on
      le RETIRE au lieu de l'empiler. Cas particulier de la couleur : tant
@@ -7437,17 +7452,7 @@ function activerClicDansLeVide(el) {
        bougé ET sélection restée vide = simple clic dans le vide, on place
        le curseur à la fin comme voulu ; sinon c'est un vrai geste de
        sélection, et on n'y touche pas. */
-    const departX = e.clientX;
-    const departY = e.clientY;
-    const onUp = (up) => {
-      document.removeEventListener('mouseup', onUp, true);
-      const aBouge = Math.abs(up.clientX - departX) > 3
-        || Math.abs(up.clientY - departY) > 3;
-      const sel = window.getSelection();
-      if (aBouge || (sel && !sel.isCollapsed)) return; // glisser : on laisse faire
-      placerCurseurFinDeZone(el);
-    };
-    document.addEventListener('mouseup', onUp, true);
+    placerCurseurSiSimpleClic(e, el);
   });
 }
 
@@ -7480,17 +7485,7 @@ function activerClicEntreChamps(carte, editable) {
       '.label-chips, .dns-attachments, .label-add-picker, input, button, a, [contenteditable]'
     );
     if (champReel && champReel !== carte) return;
-    const departX = e.clientX;
-    const departY = e.clientY;
-    const onUp = (up) => {
-      document.removeEventListener('mouseup', onUp, true);
-      const aBouge = Math.abs(up.clientX - departX) > 3
-        || Math.abs(up.clientY - departY) > 3;
-      const sel = window.getSelection();
-      if (aBouge || (sel && !sel.isCollapsed)) return;
-      placerCurseurFinDeZone(editable);
-    };
-    document.addEventListener('mouseup', onUp, true);
+    placerCurseurSiSimpleClic(e, editable);
   });
 }
 
@@ -7589,13 +7584,9 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
    partiellement sélectionnée au passage — le même mécanisme natif que
    n'importe quelle édition de texte riche. */
 function effacerMiseEnForme(el) {
-  const retablirDefilement = memoriserDefilements(el);
-  el.focus();
-  const sel = window.getSelection();
-  if (!sel.rangeCount) { retablirDefilement(); return; }
-  const range = sel.getRangeAt(0);
-  if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return; }
-  const text = range.toString();
+  const ctx = selectionDansZone(el);
+  if (!ctx) return;
+  const { range, text, retablirDefilement } = ctx;
   if (!text) { retablirDefilement(); return; }
 
   range.deleteContents();
@@ -9052,18 +9043,7 @@ async function saveNoteSimpleDialog() {
        l'échéance. Envoyer l'un sans l'autre laisserait soit des marqueurs
        sans ligne, soit des lignes sans place dans le texte. */
     body.content = await encryptField(contenuClair);
-    body.items = await Promise.all(lignesMixtes.map(async (l) => ({
-      id: l.id,
-      checked: l.checked,
-      due_at: l.due_at,
-      due_end_at: l.due_end_at,
-      all_day: l.all_day,
-      recur: l.recur,
-      // Cf. plus haut : seul texte en clair vu par le serveur, et seulement
-      // quand la ligne porte une échéance à mettre dans l'agenda Google.
-      calendar_title: l.due_at ? l.text : null,
-      text: await encryptField(l.text),
-    })));
+    body.items = await Promise.all(lignesMixtes.map((l) => serialiserLigne(l, { avecId: true })));
 
     const maj = await api('/notes/' + n.id, { method: 'PATCH', body });
 
@@ -9646,13 +9626,28 @@ function imgEditorStrokeSegment(ctx, x0, y0, x1, y1, pressure) {
    recalculer à chaque déplacement de souris serait coûteux pour rien tant
    que la zone n'est pas fixée). Repart toujours de strokeBase pour ne
    jamais laisser de trace du tracé précédent pendant le glisser. */
-function imgEditorDrawPreview(x0, y0, x1, y1) {
+/* Cadre de travail commun à l'aperçu et au tracé définitif : on repart
+   toujours de strokeBase (sinon le tracé précédent resterait visible
+   pendant le glisser) et on normalise le rectangle, l'utilisateur pouvant
+   glisser dans n'importe quel sens. */
+function imgEditorCadre(x0, y0, x1, y1) {
   imgEditorRestoreStrokeBase();
   const canvas = imgEditorCanvas();
-  const ctx = canvas.getContext('2d');
-  const x = Math.min(x0, x1), y = Math.min(y0, y1);
-  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  return {
+    canvas,
+    ctx: canvas.getContext('2d'),
+    x: Math.min(x0, x1), y: Math.min(y0, y1),
+    w: Math.abs(x1 - x0), h: Math.abs(y1 - y0),
+  };
+}
 
+/* Les trois formes dont l'aperçu et le tracé définitif sont IDENTIQUES :
+   rectangle, ellipse, surlignage. Seule la mosaïque diffère entre les deux
+   (cadre en pointillés pendant le glisser, pixellisation au relâchement),
+   elle reste donc chez chaque appelant. Renvoie false si l'outil courant
+   n'est pas l'une de ces trois formes, à charge de l'appelant de voir s'il
+   la prend en compte. */
+function imgEditorDessinerForme(ctx, canvas, x, y, w, h) {
   if (imgEditor.tool === 'rect') {
     ctx.lineWidth = imgEditorStrokeWidth(canvas);
     ctx.strokeStyle = imgEditor.color;
@@ -9668,7 +9663,20 @@ function imgEditorDrawPreview(x0, y0, x1, y1) {
     ctx.fillStyle = imgEditor.color;
     ctx.fillRect(x, y, w, h);
     ctx.globalAlpha = 1;
-  } else if (imgEditor.tool === 'mosaic') {
+  } else {
+    return false;
+  }
+  return true;
+}
+
+function imgEditorDrawPreview(x0, y0, x1, y1) {
+  const { canvas, ctx, x, y, w, h } = imgEditorCadre(x0, y0, x1, y1);
+  if (imgEditorDessinerForme(ctx, canvas, x, y, w, h)) return;
+  // Mosaïque : pendant le glisser on ne montre que la zone visée, en
+  // pointillés. La pixellisation réelle n'a lieu qu'au relâchement (voir
+  // imgEditorCommitShape) — la recalculer à chaque déplacement de souris
+  // coûterait cher pour rien tant que la zone n'est pas fixée.
+  if (imgEditor.tool === 'mosaic') {
     ctx.save();
     ctx.setLineDash([6, 4]);
     ctx.lineWidth = 2;
@@ -9704,29 +9712,10 @@ function imgEditorPixelate(ctx, x, y, w, h) {
 }
 
 function imgEditorCommitShape(x0, y0, x1, y1) {
-  imgEditorRestoreStrokeBase();
-  const canvas = imgEditorCanvas();
-  const ctx = canvas.getContext('2d');
-  const x = Math.min(x0, x1), y = Math.min(y0, y1);
-  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  const { canvas, ctx, x, y, w, h } = imgEditorCadre(x0, y0, x1, y1);
   if (w < 2 || h < 2) return; // clic sans glisser : rien à enregistrer
 
-  if (imgEditor.tool === 'rect') {
-    ctx.lineWidth = imgEditorStrokeWidth(canvas);
-    ctx.strokeStyle = imgEditor.color;
-    ctx.strokeRect(x, y, w, h);
-  } else if (imgEditor.tool === 'ellipse') {
-    ctx.lineWidth = imgEditorStrokeWidth(canvas);
-    ctx.strokeStyle = imgEditor.color;
-    ctx.beginPath();
-    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (imgEditor.tool === 'highlight') {
-    ctx.globalAlpha = 0.4;
-    ctx.fillStyle = imgEditor.color;
-    ctx.fillRect(x, y, w, h);
-    ctx.globalAlpha = 1;
-  } else if (imgEditor.tool === 'mosaic') {
+  if (!imgEditorDessinerForme(ctx, canvas, x, y, w, h) && imgEditor.tool === 'mosaic') {
     imgEditorPixelate(ctx, x, y, w, h);
   }
   imgEditorPushHistory();
