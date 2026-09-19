@@ -1152,8 +1152,30 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: var(--md-primary);
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid #ffd54f;
+  border-radius: 4px;
+  background: rgba(66,165,245,.36);
+  position: relative;
+  transition: background .15s ease, border-color .15s ease;
+}
+.agenda-item-check:checked {
+  background: rgba(66,165,245,.70);
+  border-color: #ffd54f;
+}
+.agenda-item-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #ffd54f;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
 /* Icône de la notask, toujours affichée dans un rond — celle choisie sur
    la carte (ICON_CHOICES), ou la cuillère bleue par défaut si la notask
