@@ -2491,20 +2491,23 @@ input[type=checkbox]:hover { border-color: var(--md-on-surface); }
 input[type=checkbox]:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
 
-/* Agenda : case à cocher — fond bleu notask + liseré jaune */
-.agenda-item-check {
+/* Agenda : case à cocher — fond bleu notask + liseré jaune.
+   Sélecteur `input[type=checkbox].agenda-item-check` et NON `.agenda-item-check`
+   seul : le reset générique `input[type=checkbox]` plus haut pèse 0-1-1
+   (type + attribut) contre 0-1-0 pour une simple classe — il gagnait donc la
+   cascade quel que soit l'ordre, et son `background: transparent` écrasait ce
+   fond. Ne pas retirer le `input[type=checkbox]` de tête. */
+input[type=checkbox].agenda-item-check {
   border-color: #ffd54f;
   background: rgba(66,165,245,.36);
 }
-.agenda-item-check:checked {
-  background: rgba(66,165,245,.70) !important;
-  border-color: #ffd54f !important;
-  outline: none !important;
+input[type=checkbox].agenda-item-check:hover { border-color: #ffd54f; }
+input[type=checkbox].agenda-item-check:checked {
+  background: rgba(66,165,245,.70);
+  border-color: #ffd54f;
+  outline: none;
 }
-.agenda-item-check:checked::after {
-  border-color: #ffd54f !important;
-}
-.agenda-item-check:hover { border-color: #ffd54f !important; }
+input[type=checkbox].agenda-item-check:checked::after { border-color: #ffd54f; }
 
 /* ============================= Libellés ============================= */
 
