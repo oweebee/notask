@@ -559,12 +559,39 @@ function setToken(t) { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.rem
    rechargement, et n'identifie ni l'utilisateur ni l'appareil. */
 const CLIENT_ID = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 
-async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  headers['X-Client-Id'] = CLIENT_ID;
+/* En-têtes communs aux quatre enveloppes HTTP (api, apiUpload,
+   apiFetchBytes, apiFichier) : le jeton de session, et l'identifiant de
+   client qui évite qu'un envoi ne se renvoie à lui-même son propre signal
+   de rafraîchissement (voir /api/events).
+   `json` pose le Content-Type — à ne surtout PAS poser sur un FormData,
+   dont le navigateur doit fixer lui-même la frontière ("boundary").
+   `clientId: false` pour les lectures d'octets : elles ne déclenchent aucun
+   rafraîchissement et n'ont donc rien à filtrer (comportement d'origine
+   d'apiFetchBytes, conservé tel quel).
+   X-Client-Id est posé APRÈS `base` : c'est un mécanisme interne, un
+   appelant n'a pas à pouvoir l'écraser par mégarde. */
+function entetesApi({ base = {}, json = false, clientId = true } = {}) {
+  const headers = { ...base };
+  if (json) headers['Content-Type'] = 'application/json';
+  if (clientId) headers['X-Client-Id'] = CLIENT_ID;
   const t = token();
   if (t) headers['Authorization'] = 'Bearer ' + t;
+  return headers;
+}
+
+/* Session expirée : même traitement partout — on jette le jeton, on
+   redemande une authentification, et on interrompt l'appelant en lançant.
+   Extrait parce que les quatre enveloppes en avaient chacune leur copie :
+   une correction sur l'une ne se voyait pas sur les trois autres.
+   Ne retourne JAMAIS (lance toujours) : rien ne s'exécute après l'appel. */
+function gerer401() {
+  setToken(null);
+  showLogin();
+  throw new Error('Session expirée');
+}
+
+async function api(path, options = {}) {
+  const headers = entetesApi({ base: options.headers, json: options.body !== undefined });
 
   const res = await fetch('/api' + path, {
     ...options,
@@ -575,7 +602,7 @@ async function api(path, options = {}) {
 
   if (res.status === 401) {
     log.warn('api', `401 sur ${options.method || 'GET'} ${path} — session expirée`);
-    setToken(null); showLogin(); throw new Error('Session expirée');
+    gerer401();
   }
   if (res.status === 204) return null;
 
@@ -597,15 +624,12 @@ async function api(path, options = {}) {
    passé à 'PUT' pour remplacer une pièce jointe existante (voir
    openImageEditor()), 'POST' par défaut pour en créer une nouvelle. */
 async function apiUpload(path, formData, method = 'POST') {
-  const t = token();
   const res = await fetch('/api' + path, {
     method,
-    // Cf. api() : X-Client-Id évite qu'un envoi de pièce jointe ne se
-    // renvoie son propre signal de rafraîchissement.
-    headers: { 'X-Client-Id': CLIENT_ID, ...(t ? { Authorization: 'Bearer ' + t } : {}) },
+    headers: entetesApi(),
     body: formData,
   });
-  if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
+  if (res.status === 401) gerer401();
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error((data && data.detail) || 'Erreur ' + res.status);
   return data;
@@ -614,12 +638,11 @@ async function apiUpload(path, formData, method = 'POST') {
 /* Récupère des octets bruts (contenu chiffré d'une pièce jointe) — api()
    ne convient pas ici, elle force un parsing JSON de la réponse. */
 async function apiFetchBytes(path) {
-  const t = token();
   const res = await fetch('/api' + path, {
-    headers: t ? { Authorization: 'Bearer ' + t } : {},
+    headers: entetesApi({ clientId: false }),
     cache: 'no-store',
   });
-  if (res.status === 401) { setToken(null); showLogin(); throw new Error('Session expirée'); }
+  if (res.status === 401) gerer401();
   if (!res.ok) throw new Error('Erreur ' + res.status);
   return res.arrayBuffer();
 }
@@ -11033,13 +11056,9 @@ let destinationExport = 'fichier';
    body, ce qui ne convient ni à un FormData ni à une réponse binaire. Même
    en-tête d'authentification, même traitement du 401. */
 async function apiFichier(path, options = {}) {
-  const headers = { 'X-Client-Id': CLIENT_ID, ...(options.headers || {}) };
-  const t = token();
-  if (t) headers['Authorization'] = 'Bearer ' + t;
+  const headers = entetesApi({ base: options.headers });
   const res = await fetch('/api' + path, { ...options, headers, cache: 'no-store' });
-  if (res.status === 401) {
-    setToken(null); showLogin(); throw new Error('Session expirée');
-  }
+  if (res.status === 401) gerer401();
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     const detail = (data && data.detail) || 'Erreur ' + res.status;
