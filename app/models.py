@@ -527,6 +527,12 @@ class NoteItem(SQLModel, table=True):
     # la masque, et le commentaire de sync_item).
     archived: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="0"))
     trashed_at: Optional[datetime] = None
+    # Moment où la ligne a été cochée (None si décochée). Pendant de
+    # Note.done_at : sert à garder une ligne terminée 7 jours dans la colonne
+    # « terminées » de la vue Notasks prévues (voir list_tasks, recent_done_days).
+    # Tenu à jour par l'écouteur `_horodater_coche` ci-dessous, pas à la main :
+    # une ligne se coche par une demi-douzaine de chemins différents.
+    checked_at: Optional[datetime] = None
 
     note: Optional[Note] = Relationship(back_populates="items")
 
@@ -886,3 +892,19 @@ class TaskOut(SQLModel):
 
 class TaskDone(SQLModel):
     done: bool
+
+
+# Horodatage de la coche, posé à CHAQUE changement de NoteItem.checked quel
+# que soit le chemin (vue des échéances, édition, remplacement des lignes,
+# widget Android…). Un écouteur plutôt qu'une ligne ajoutée dans chaque
+# route : il suffisait d'en oublier une pour qu'une ligne cochée n'ait
+# jamais de date, et reste donc invisible dans « terminées ».
+from sqlalchemy import event  # noqa: E402
+
+
+@event.listens_for(NoteItem.checked, "set")
+def _horodater_coche(item, valeur, ancienne, _initiator):
+    if valeur and not ancienne:
+        item.checked_at = utcnow()
+    elif not valeur:
+        item.checked_at = None

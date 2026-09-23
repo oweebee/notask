@@ -314,3 +314,39 @@ def test_reglages():
     assert client.put("/api/settings", json={"a": 1}, headers=auth(t)).json() == {"a": 1}
     assert client.put("/api/settings", json={"x": "y" * 20000}, headers=auth(t)).status_code == 400
     assert client.get("/api/settings").status_code == 401
+
+
+def test_terminees_gardees_7_jours_dans_notasks_prevues():
+    """Vue Notasks prévues (recent_done_days=7) : une notask terminée est
+    archivée tout de suite comme partout, mais reste listée dans « terminées »
+    7 jours. Ailleurs (/api/tasks sans paramètre), rien ne change."""
+    from datetime import timedelta
+    from sqlmodel import Session
+    from app.db import engine
+    from app.models import NoteItem, utcnow
+
+    t = client.post("/api/auth/login", json=ADMIN).json()["access_token"]
+    n = client.post("/api/notes", json={
+        "title": "Semaine", "content": "", "items": [{"text": "a", "due_at": iso(days=1)}],
+    }, headers=auth(t)).json()
+    item_id = n["items"][0]["id"]
+
+    r = client.patch(f"/api/tasks/item/{item_id}", json={"done": True}, headers=auth(t))
+    assert r.status_code == 200
+    assert client.get(f"/api/notes/{n['id']}", headers=auth(t)).json()["archived"] is True
+
+    ids = lambda q: {x["id"] for x in client.get("/api/tasks" + q, headers=auth(t)).json()
+                     if x["kind"] == "item"}
+    assert item_id not in ids("")                      # ailleurs : archivée, disparue
+    assert item_id in ids("?recent_done_days=7")       # vue prévues : encore là
+
+    with Session(engine) as s:                          # 8 jours plus tard
+        it = s.get(NoteItem, item_id)
+        it.checked_at = utcnow() - timedelta(days=8)
+        s.add(it); s.commit()
+    assert item_id not in ids("?recent_done_days=7")
+
+    # Décocher efface l'horodatage (l'écouteur, pas la route)
+    client.patch(f"/api/tasks/item/{item_id}", json={"done": False}, headers=auth(t))
+    with Session(engine) as s:
+        assert s.get(NoteItem, item_id).checked_at is None

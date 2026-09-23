@@ -10468,7 +10468,9 @@ async function loadAgenda() {
 async function loadTasks() {
   let tasks;
   try {
-    tasks = await api('/tasks');
+    // 7 jours : une notask terminée reste visible dans « terminées » une
+    // semaine, même déjà archivée (elle l'est tout de suite, comme partout).
+    tasks = await api('/tasks?recent_done_days=7');
   } catch {
     return;
   }

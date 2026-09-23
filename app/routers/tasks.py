@@ -74,6 +74,14 @@ def list_tasks(
         default=None, description="late, today, imminent, upcoming ou done ; tout si absent"
     ),
     include_archived: bool = Query(default=False, description="Inclure les notasks archivées"),
+    recent_done_days: Optional[int] = Query(
+        default=None, ge=1, le=365,
+        description=(
+            "Vue Notasks prévues : les tâches TERMINÉES ne sont gardées que si elles "
+            "l'ont été depuis moins de N jours — y compris quand leur notask est déjà "
+            "archivée. Sans ce paramètre, comportement inchangé."
+        ),
+    ),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -88,12 +96,26 @@ def list_tasks(
     # Une note en corbeille n'est plus une tâche, même si elle a une échéance.
     visible = [
         n for n in notes
-        if (include_archived or not n.archived) and n.trashed_at is None
+        if (include_archived or recent_done_days or not n.archived) and n.trashed_at is None
     ]
+    limite_done = now - timedelta(days=recent_done_days) if recent_done_days else None
+
+    def _garder(done: bool, fini_le: Optional[datetime], note_archivee: bool) -> bool:
+        """Filtre de la vue Notasks prévues (recent_done_days). Une notask
+        terminée est archivée tout de suite, comme partout ; seule cette vue
+        continue de la montrer dans « terminées » pendant N jours. Les tâches
+        non terminées d'une notask archivée restent exclues, comme avant."""
+        if limite_done is None:
+            return True
+        if not done:
+            return include_archived or not note_archivee
+        return fini_le is not None and _aware(fini_le) >= limite_done
 
     # 1. Les notes qui portent une échéance
     for n in visible:
         if n.due_at is None:
+            continue
+        if not _garder(n.done, n.done_at, n.archived):
             continue
         # text = n.title, sans le repli "extrait du contenu si titre vide"
         # d'origine : titre et contenu peuvent être chiffrés de bout en bout
@@ -134,6 +156,8 @@ def list_tasks(
         ).all()
         for it in items:
             parent = by_id[it.note_id]
+            if not _garder(it.checked, it.checked_at, parent.archived):
+                continue
             tasks.append(TaskOut(
                 kind="item",
                 id=it.id,

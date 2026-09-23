@@ -91,6 +91,23 @@ def _migrate_sqlite_schema() -> None:
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite_schema()
+    _dater_terminees_sans_date()
+
+
+def _dater_terminees_sans_date() -> None:
+    """Donne une date de fin aux notasks/lignes terminées qui n'en ont pas
+    (cochées avant l'ajout de checked_at, ou par un chemin qui ne posait pas
+    done_at). Datées « maintenant » : elles restent donc encore 7 jours dans
+    la colonne « terminées » au lieu d'en disparaître d'un coup au
+    déploiement. Idempotent : ne touche que les lignes sans date."""
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+    with engine.begin() as cx:
+        cx.execute(text("UPDATE noteitem SET checked_at = CURRENT_TIMESTAMP "
+                        "WHERE checked = 1 AND checked_at IS NULL"))
+        cx.execute(text("UPDATE note SET done_at = CURRENT_TIMESTAMP "
+                        "WHERE done = 1 AND done_at IS NULL"))
 
 
 def get_session():
