@@ -3135,8 +3135,8 @@ async function envoyerFonctionsGoogle() {
   loadAgenda();
 }
 
-$('#profil-google-cal-on').addEventListener('change', envoyerFonctionsGoogle);
-$('#profil-google-drive-on').addEventListener('change', envoyerFonctionsGoogle);
+$('#profil-google-cal-on')?.addEventListener('change', envoyerFonctionsGoogle);
+$('#profil-google-drive-on')?.addEventListener('change', envoyerFonctionsGoogle);
 
 $('#profil-google-connect').addEventListener('click', () => {
   // Navigation complète (pas un fetch) : Google doit pouvoir rediriger le
@@ -3172,7 +3172,7 @@ $('#profil-rappels-activer').addEventListener('click', activerRappels);
 /* Zoom : appliqué et affiché EN DIRECT au glissement (input), puis persisté.
    `input` et non `change` pour que la page rapetisse sous le doigt pendant
    qu'on cherche la bonne taille, au lieu de sauter à la valeur finale. */
-$('#profil-zoom').addEventListener('input', () => {
+$('#profil-zoom')?.addEventListener('input', () => {
   const v = appliquerZoom($('#profil-zoom').value);
   $('#profil-zoom-val').textContent = v + ' %';
   try { localStorage.setItem(ZOOM_KEY, String(v)); } catch { /* stockage refusé : le zoom reste actif pour la session, simplement pas mémorisé */ }
@@ -6687,7 +6687,7 @@ $('#dns-toggle-mask').addEventListener('click', () => {
   renderBoutonMasque('#dns-toggle-mask', state.editingMasked);
 });
 
-$('#dns-toggle-hide-checked').addEventListener('click', () => {
+$('#dns-toggle-hide-checked')?.addEventListener('click', () => {
   state.editingHideChecked = !state.editingHideChecked;
   renderBoutonLignesCochees('#dns-toggle-hide-checked', state.editingHideChecked);
   appliquerVisibiliteLignesCochees($('#dns-content'), state.editingHideChecked);
@@ -7903,13 +7903,6 @@ const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
    marqueur. Une URL ne peut de toute façon pas en contenir sans être
    encodée (%5D). */
 const NOTE_URL_MARK = /\[url:([^\]]+)\]([\s\S]*?)\[\/url\]/g;
-
-/* Adresse collée telle quelle dans le texte, sans passer par le bouton :
-   elle devient un lien automatiquement (voir brancherCollagePropre).
-   Bornée par des espaces/début/fin pour ne pas mordre au milieu d'un mot,
-   et la ponctuation finale courante est laissée hors du lien — « voir
-   https://exemple.fr. » ne doit pas embarquer le point dans l'adresse. */
-const URL_BRUTE = /(^|\s)(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])/g;
 
 /* Adresse jugée sûre pour un href, sinon null. Seuls http(s) et mailto sont
    acceptés : `javascript:` (ou `data:`) exécuterait du code au simple clic
@@ -11221,7 +11214,7 @@ async function majBlocDrive() {
   }
 }
 
-$('#drive-export').addEventListener('click', () => {
+$('#drive-export')?.addEventListener('click', () => {
   /* Réutilise INTÉGRALEMENT le chemin d'export existant — même collecte,
      même mot de passe, même chiffrement — en ne changeant que la
      destination. Refaire une seconde construction d'archive en parallèle,
@@ -11278,7 +11271,7 @@ $('#drive-export').addEventListener('click', () => {
   });
 })();
 
-$('#drive-import').addEventListener('click', async () => {
+$('#drive-import')?.addEventListener('click', async () => {
   const liste = $('#drive-liste');
   liste.hidden = false;
   liste.innerHTML = '<p class="aide">Lecture du dossier Drive…</p>';

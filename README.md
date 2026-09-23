@@ -30,7 +30,9 @@ est une lecture, pas un lieu de création.
 ## Fonctions
 
 **Notes** — titre et texte libre, 21 couleurs, épinglage, archive, listes à
-cocher, recherche.
+cocher, recherche. Le bouton *case à cocher* pose une case vide au curseur ;
+avec du texte sélectionné, il **transforme la sélection** en cases (une par
+ligne), comme le bouton *code* habille la sélection.
 
 **Tâches** — regroupement automatique en *En retard*, *Aujourd'hui*,
 *Imminentes* (échéance dans 7 jours ou moins), *À venir* et *Terminées*,
@@ -204,6 +206,9 @@ toute modification du Dockerfile.
   `Authorization`, ce qui écarte le risque de CSRF.
 - Cloisonnement des données vérifié par les tests : un utilisateur reçoit `404`
   sur les notes et tâches d'un autre.
+- **Les exports `.notask` sont en clair** (contenu complet des notes). Ils ne
+  doivent jamais entrer dans le dépôt, qui est public : `*.notask` et
+  `Claude outputs/` sont dans `.gitignore`, et `push.bat` fait `git add -A`.
 
 ## Variables d'environnement
 
@@ -230,6 +235,23 @@ Tests :
 pip install pytest httpx
 python -m pytest tests/ -q
 ```
+
+Vérifications statiques du client (Node requis) :
+
+```bash
+npx eslint@8 --no-eslintrc --env browser,es2022,serviceworker \
+  --parser-options=ecmaVersion:2022 \
+  --rule '{"no-undef":"error","no-unused-vars":["error",{"args":"none","caughtErrors":"none"}]}' \
+  app/static/app.js app/static/sw.js
+```
+
+`no-undef` est le garde-fou qui compte après tout déplacement de code : une
+variable oubliée dans une fonction extraite ne casse pas la syntaxe
+(`node --check` passe) mais lève une erreur à l'exécution.
+
+Après toute modification de `style.css` ou `app.js` : incrémenter `?v=` dans
+`index.html` **et** `quick.html`, et `CACHE_NAME` dans `sw.js`. Sans cela, le
+service worker continue de servir l'ancienne version.
 
 ## Déploiement Coolify
 

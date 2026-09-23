@@ -869,7 +869,7 @@ def delete_item(
     Aucun nettoyage Google Calendar à faire ici : sync_item() a déjà retiré
     l'événement lié au moment où trashed_at a été posé (should_have_event
     en dépend), voir update_item."""
-    note = _owned_note(note_id, user, session)
+    _owned_note(note_id, user, session)  # contrôle d'accès seul (404 si pas à lui)
     item = session.get(NoteItem, item_id)
     if item is None or item.note_id != note_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ligne introuvable")

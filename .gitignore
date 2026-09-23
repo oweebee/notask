@@ -26,3 +26,9 @@ ClaudeProject/
 # (voir notask-widget/README.md, section « Contrat d'API »), le serveur
 # n'a aucune connaissance de l'application Android.
 notask-widget/
+
+# Sorties de l'assistant IA et exports de notes : les exports .notask sont en
+# CLAIR (contenu complet des notes). Ne JAMAIS les pousser — le dépôt est public.
+Claude outputs/
+*.notask
+*.tgz
