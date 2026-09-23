@@ -6952,7 +6952,7 @@ function selectionDansZone(el) {
   if (!sel.rangeCount) { retablirDefilement(); return null; }
   const range = sel.getRangeAt(0);
   if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return null; }
-  return { range, text: range.toString(), retablirDefilement };
+  return { sel, range, text: range.toString(), retablirDefilement };
 }
 
 /* Forme sous laquelle une ligne à cocher part au serveur. Le texte est
@@ -7192,7 +7192,7 @@ function retirerEnveloppe(range, enveloppe) {
 function wrapSelectionRich(el, kind, couleur, texteImpose) {
   const ctx = selectionDansZone(el);
   if (!ctx) return;
-  const { range, text, retablirDefilement } = ctx;
+  const { sel, range, text, retablirDefilement } = ctx;
 
   /* Bouton bascule : si la sélection est déjà habillée par cet effet, on
      le RETIRE au lieu de l'empiler. Cas particulier de la couleur : tant
@@ -7586,7 +7586,7 @@ function brancherBarreFormat(groupeSel, editableSel, paletteSel, autrePaletteSel
 function effacerMiseEnForme(el) {
   const ctx = selectionDansZone(el);
   if (!ctx) return;
-  const { range, text, retablirDefilement } = ctx;
+  const { sel, range, text, retablirDefilement } = ctx;
   if (!text) { retablirDefilement(); return; }
 
   range.deleteContents();
@@ -8560,6 +8560,66 @@ function sortirDeLaLigne(bloc) {
   if (zone) zone.focus();
 }
 
+/* Coupe les nœuds situés entre un point et `el` (texte, gras, couleur…)
+   pour que ce point tombe ENTRE deux enfants directs de `el`. Renvoie
+   l'index de cet emplacement dans el.childNodes. Nécessaire parce qu'une
+   case à cocher doit toujours être enfant direct de la zone de saisie
+   (voir insererLigneACocher) : insérée dans un <b> ou un <span> coloré,
+   elle s'y retrouvait imbriquée. */
+function pointEnfantDirect(el, container, offset) {
+  while (container !== el) {
+    const parent = container.parentNode;
+    if (container.nodeType === Node.TEXT_NODE) {
+      if (offset > 0 && offset < container.length) container.splitText(offset);
+    } else if (offset > 0 && offset < container.childNodes.length) {
+      const moitie = container.cloneNode(false);
+      while (container.childNodes.length > offset) moitie.appendChild(container.childNodes[offset]);
+      parent.insertBefore(moitie, container.nextSibling);
+    }
+    const idx = Array.prototype.indexOf.call(parent.childNodes, container);
+    offset = offset === 0 ? idx : idx + 1;
+    container = parent;
+  }
+  return offset;
+}
+
+/* Sélection → cases à cocher : chaque ligne non vide de la sélection devient
+   une case portant ce texte, à l'endroit de la sélection. Renvoie false
+   (l'appelant retombe alors sur la case vide habituelle) si rien n'est
+   sélectionné, ou si la sélection touche une case, un bloc de code ou une
+   zone d'archive existants — les couper produirait un contenu incohérent. */
+function convertirSelectionEnCases(el, range) {
+  if (range.collapsed) return false;
+  const frag = range.cloneContents();
+  if (frag.querySelector('.note-ligne, pre, .note-code-inline, .note-archive-zone')) return false;
+  const anc = range.commonAncestorContainer;
+  const ancEl = anc.nodeType === Node.ELEMENT_NODE ? anc : anc.parentNode;
+  if (ancEl !== el && ancEl.closest('.note-ligne, pre, .note-code-inline, .note-archive-zone')) return false;
+  const lignes = texteDeRange(range).split('\n').map((t) => t.trim()).filter(Boolean);
+  if (!lignes.length) return false;
+
+  range.deleteContents();
+  const idx = pointEnfantDirect(el, range.startContainer, range.startOffset);
+  const suivant = el.childNodes[idx] || null;
+  let dernier = null;
+  for (const texte of lignes) {
+    const bloc = creerBlocLigne();
+    bloc.querySelector('.note-ligne-txt').textContent = texte;
+    majCaseVide(bloc);
+    el.insertBefore(bloc, suivant);
+    dernier = bloc;
+  }
+  // La case est un bloc : elle fait déjà office de saut de ligne. Le « \n »
+  // qui terminait la ligne convertie laisserait sinon une ligne vide dessous.
+  if (suivant && suivant.nodeType === Node.TEXT_NODE && suivant.data.startsWith('\n')) {
+    suivant.data = suivant.data.slice(1);
+  }
+  placerCurseurEnFin(dernier.querySelector('.note-ligne-txt'));
+  majLigneAttente(el, dernier);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+
 /* Insère une ligne à cocher à l'endroit exact du curseur dans une zone de
    saisie riche — c'est tout le geste « notask mixte » : on écrit, on pose une
    case, on écrit encore, on pose une image, on repose des cases. */
@@ -8578,6 +8638,10 @@ function insererLigneACocher(editableSel) {
     placerCurseurEnFin(bloc.querySelector('.note-ligne-txt'));
     return;
   }
+
+  // Texte sélectionné : il DEVIENT la case (une case par ligne sélectionnée),
+  // comme le bouton code habille la sélection au lieu de poser un bloc vide.
+  if (convertirSelectionEnCases(el, range)) return;
 
   /* La case se pose TOUJOURS au début de la ligne courante, et toujours comme
      enfant direct de la zone de saisie — jamais à l'endroit exact du curseur.
