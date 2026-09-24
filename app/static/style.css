@@ -101,8 +101,10 @@ html.mode-gris .agenda-col .agenda-empty,
 html.mode-gris #view-tasks .empty { filter: grayscale(1); }
 html.mode-gris .agenda-col .agenda-group > h2,
 html.mode-gris #view-tasks .agenda-group > h2 { filter: grayscale(1); }
+html.mode-gris .agenda-col .agenda-item,
+html.mode-gris #view-tasks .agenda-item { background: transparent !important; }
 html.mode-gris .agenda-col .agenda-item::before,
-html.mode-gris #view-tasks .agenda-item::before { filter: grayscale(1); }
+html.mode-gris #view-tasks .agenda-item::before { background: #3d3d3d; }
 html.mode-gris .agenda-col .agenda-item > *:not(.agenda-item-icon),
 html.mode-gris #view-tasks .agenda-item > *:not(.agenda-item-icon) { filter: grayscale(1); }
 
