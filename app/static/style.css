@@ -36,10 +36,10 @@ html.mode-gris main > *:not(#view-notes) { filter: grayscale(1); }
 html.mode-gris #view-notes > *:not(.notes-grid) { filter: grayscale(1); }
 html.mode-gris .notes-grid > *:not(.note) { filter: grayscale(1); }
 
-/* Carte de notask : seule l'icône (.note-icon) reste en couleur, tout le
-   reste de la carte (titre, description, cases, pièces jointes, pastille
-   de couleur de fond comprise) passe en gris. */
-html.mode-gris .note > *:not(.note-title-row) { filter: grayscale(1); }
+/* Carte de notask : seule l'icône (.note-icon) reste en couleur, ainsi que
+   le contenu textuel (.body — texte coloré, liens jaunes, etc.) ; le titre,
+   les pièces jointes, la palette et les actions passent en gris. */
+html.mode-gris .note > *:not(.note-title-row):not(.body) { filter: grayscale(1); }
 html.mode-gris .note-title-row > *:not(.note-icon) { filter: grayscale(1); }
 /* Fond coloré de la carte (posé par .c-XX directement sur .note) : copié
    sur ::before (background: inherit) plutôt que grisé sur .note lui-même
