@@ -28,11 +28,12 @@ html.mode-gris header.topbar > *:not(.logo):not(.brand):not(#btn-mode-gris) { fi
 html.mode-gris .drawer > *:not(.drawer-notes-group) { filter: grayscale(1); }
 html.mode-gris .drawer-item > *:not(svg) { filter: grayscale(1); }
 
-/* Reste de la coquille (fond du menu mobile, colonne d'échéances) : grisé
-   en bloc, .shell et main ne reçoivent pas le filter (ancêtres du menu et
-   de la mosaïque de notasks protégés ci-dessus/ci-dessous). */
-html.mode-gris .shell > *:not(aside.drawer):not(main) { filter: grayscale(1); }
-html.mode-gris main > *:not(#view-notes) { filter: grayscale(1); }
+/* Reste de la coquille (fond du menu mobile) : grisé en bloc. La colonne
+   d'échéances (.agenda-col) et la vue "notasks prévues" (#view-tasks) sont
+   traitées séparément pour préserver les icônes colorées. .shell et main
+   ne reçoivent pas le filter (ancêtres protégés). */
+html.mode-gris .shell > *:not(aside.drawer):not(main):not(.agenda-col) { filter: grayscale(1); }
+html.mode-gris main > *:not(#view-notes):not(#view-tasks) { filter: grayscale(1); }
 html.mode-gris #view-notes > *:not(.notes-grid) { filter: grayscale(1); }
 html.mode-gris .notes-grid > *:not(.note) { filter: grayscale(1); }
 
@@ -89,6 +90,19 @@ html.mode-gris .note.c-navy::before,
 html.mode-gris .note.c-olive::before {
   background: #161616;
 }
+
+/* Colonne d'échéances (accueil, .agenda-col) et vue "notasks prévues"
+   (#view-tasks) : les .agenda-item-icon (pastilles colorées) restent en
+   couleur — même principe que .note-icon pour les cartes. Texte, dates et
+   cases sont grisés en ciblant les enfants directs de .agenda-item sauf
+   l'icône. Le fond coloré de la ligne (.agenda-item background inline) reste
+   visible, comme le fond de la carte note. */
+html.mode-gris .agenda-col .agenda-empty,
+html.mode-gris #view-tasks .empty { filter: grayscale(1); }
+html.mode-gris .agenda-col .agenda-group > h2,
+html.mode-gris #view-tasks .agenda-group > h2 { filter: grayscale(1); }
+html.mode-gris .agenda-col .agenda-item > *:not(.agenda-item-icon),
+html.mode-gris #view-tasks .agenda-item > *:not(.agenda-item-icon) { filter: grayscale(1); }
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
    chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
