@@ -352,7 +352,7 @@ def list_labels() -> str:
 
 def create_mcp_app():
     """Retourne l'ASGI app MCP protégée par NOTASK_MCP_KEY."""
-    inner = mcp.streamable_http_app()
+    inner = mcp.sse_app()
 
     async def auth_wrapper(scope, receive, send):
         if scope["type"] == "http":
