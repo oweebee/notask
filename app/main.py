@@ -15,6 +15,7 @@ from app.routers import (
 )
 from app.security import decode_access_token
 from app.mcp_server import create_mcp_app
+from app.oauth import router as oauth_router
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -173,7 +174,8 @@ def health():
     return {"status": "ok"}
 
 
-app.mount("/mcp", create_mcp_app())
+app.include_router(oauth_router)
+app.mount("/mcp/", create_mcp_app())
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
