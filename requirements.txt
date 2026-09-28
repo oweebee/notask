@@ -17,3 +17,5 @@ httpx==0.28.1
 # ZoneInfo("Europe/Paris") échoue en production alors qu'il marche en local,
 # et la reprogrammation retombe silencieusement sur son calcul en UTC.
 tzdata==2025.2
+
+mcp

@@ -14,6 +14,7 @@ from app.routers import (
     attachments, auth, events, google, labels, note_versions, notes, settings, tasks, users,
 )
 from app.security import decode_access_token
+from app.mcp_server import create_mcp_app
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -171,6 +172,8 @@ app.include_router(google.router)
 def health():
     return {"status": "ok"}
 
+
+app.mount("/mcp", create_mcp_app())
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
