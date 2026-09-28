@@ -32,3 +32,6 @@ notask-widget/
 Claude outputs/
 *.notask
 *.tgz
+
+# Config MCP locale (clé en dur, jamais pousser)
+.mcp.json
