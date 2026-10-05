@@ -8167,11 +8167,19 @@ function ajouterBoutonsCopieCode(root) {
       const texte = estLien
         ? (zone.getAttribute('href') || '')
         : texteCodeSansBouton(zone.tagName === 'PRE' ? (zone.querySelector('code') || zone) : zone);
+      // e.clientX/clientY valent (0,0) sur un clic synthétique (activation
+      // au clavier via Tab puis Entrée/Espace) : la bulle sautait alors en
+      // haut à gauche de l'écran au lieu d'apparaître près du bouton. On se
+      // rabat sur le centre du bouton lui-même dans ce cas.
+      const centreSurBouton = !e.clientX && !e.clientY;
+      const r = centreSurBouton ? btn.getBoundingClientRect() : null;
+      const x = centreSurBouton ? r.left + r.width / 2 : e.clientX;
+      const y = centreSurBouton ? r.top + r.height / 2 : e.clientY;
       try {
         await navigator.clipboard.writeText(texte);
-        afficherBulleCopie(e.clientX, e.clientY, 'Copié');
+        afficherBulleCopie(x, y, 'Copié');
       } catch {
-        afficherBulleCopie(e.clientX, e.clientY, 'Copie impossible');
+        afficherBulleCopie(x, y, 'Copie impossible');
       }
     });
     // Bloc : le bouton est placé EN TÊTE et flotte à droite (voir le CSS),
