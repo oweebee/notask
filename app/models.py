@@ -828,6 +828,11 @@ class LabelBase(SQLModel):
     # couleur d'une note quelconque ; None = pas de couleur (fond neutre,
     # seulement mis en évidence au survol comme les autres entrées du menu).
     color: Optional[str] = Field(default=None, max_length=20)
+    # Catégorie « masquée » : purement visuel, ne filtre rien. Les notes qui
+    # portent ce libellé restent dans la page principale mais s'affichent en
+    # transparence (voir ICONS.eye côté client) — contrairement à n.masked
+    # (Note), qui cache le CONTENU d'une notask précise derrière un rideau.
+    hidden: bool = Field(default=False)
 
 
 class Label(LabelBase, table=True):
@@ -850,6 +855,7 @@ class LabelUpdate(SQLModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=50)
     color: Optional[str] = None
     position: Optional[float] = None
+    hidden: Optional[bool] = None
 
 
 class LabelOut(LabelBase):

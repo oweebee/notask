@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>notask — rapide</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="stylesheet" href="/static/style.css?v=2.9095">
+<link rel="stylesheet" href="/static/style.css?v=2.9102">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -608,6 +608,19 @@
     <div id="outil-msg"></div>
   </section>
 
+  <section class="outil-bloc">
+    <h3>Copie locale consultable</h3>
+    <p class="aide">Un fichier .zip à garder où vous voulez : une fois dézippé, la page HTML qu'il contient s'ouvre dans n'importe quel navigateur, sans serveur ni connexion, et affiche vos notasks après avoir redemandé ce mot de passe. Lecture seule — rien ne peut y être modifié.</p>
+    <div class="field">
+      <label for="local-pw">Mot de passe de la copie</label>
+      <input id="local-pw" type="password" autocomplete="off">
+    </div>
+    <div class="outil-actions">
+      <button class="btn" id="export-zip-run" type="button">Générer la copie locale</button>
+    </div>
+    <div id="outil-zip-msg"></div>
+  </section>
+
   <!-- Journal : une ligne dédiée, le détail vit dans sa propre fenêtre
        (#dlg-logs) pour ne pas gonfler la boîte Outils. -->
   <section class="outil-bloc">
@@ -648,6 +661,6 @@
 </dialog>
 
 <script>window.NOTASK_QUICK_CAPTURE = true;</script>
-<script src="/static/app.js?v=0.9095"></script>
+<script src="/static/app.js?v=0.9102"></script>
 </body>
 </html>

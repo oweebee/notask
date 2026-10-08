@@ -1780,6 +1780,12 @@ body.is-dragging * {
 .note:hover .pin-btn, .note:focus-within .pin-btn { opacity: 1; }
 .note.pinned .pin-btn { opacity: 1; color: var(--md-primary); }
 
+/* Catégorie masquée depuis le menu latéral (œil barré) — purement visuel,
+   la note reste dans la grille et cliquable comme n'importe quelle autre,
+   voir renderLabelsDrawer()/renderNotes() dans app.js. */
+.note.note-dim { opacity: .3; transition: opacity .15s ease; }
+.note.note-dim:hover { opacity: .65; }
+
 /* Barre d'icônes : apparaît en fondu au survol, comme dans Keep.
    padding-top plutôt que margin-top : une marge appartient à la carte, pas
    à la barre elle-même — un clic dans cet espace passait donc à travers le
@@ -2566,16 +2572,16 @@ input[type=checkbox].agenda-item-check:checked::after { border-color: var(--spoo
 
 /* ============================= Libellés ============================= */
 
-.drawer-item.label-item { padding-left: 2.5rem; padding-right: 2.25rem; }
+.drawer-item.label-item { padding-left: 2.5rem; padding-right: 3.75rem; }
 
 /* Ligne de libellé : le crayon n'apparaît qu'au survol de la ligne, en
    overlay à droite — le bouton lui-même reste inchangé (pilule collée à
    gauche, arrondie à droite, couleur propre en fond permanent si réglée). */
 .label-row { position: relative; margin-bottom: 4px; -webkit-touch-callout: none; }
 .label-row.dragging { opacity: .4; }
-.label-edit-btn {
+.label-edit-btn,
+.label-eye-btn {
   position: absolute;
-  right: .5rem;
   top: 50%;
   transform: translateY(-50%);
   width: 28px;
@@ -2583,10 +2589,21 @@ input[type=checkbox].agenda-item-check:checked::after { border-color: var(--spoo
   opacity: 0;
   transition: opacity .15s ease, background .15s ease, color .15s ease;
 }
-.label-edit-btn svg { width: 15px; height: 15px; }
-.label-edit-btn:hover { background: rgba(230,224,233,.14); color: var(--md-on-surface); }
-.label-row:hover .label-edit-btn { opacity: 1; }
-@media (hover: none) { .label-edit-btn { opacity: 1; } }
+.label-edit-btn { right: .5rem; }
+/* À gauche du crayon, même gabarit. */
+.label-eye-btn { right: 2.25rem; }
+.label-edit-btn svg,
+.label-eye-btn svg { width: 15px; height: 15px; }
+.label-edit-btn:hover,
+.label-eye-btn:hover { background: rgba(230,224,233,.14); color: var(--md-on-surface); }
+.label-row:hover .label-edit-btn,
+.label-row:hover .label-eye-btn { opacity: 1; }
+/* Catégorie déjà masquée : l'œil barré reste visible en permanence, pas
+   seulement au survol — sinon aucun moyen de voir d'un coup d'œil quelles
+   catégories sont estompées, ni de les réactiver sans survoler chaque
+   ligne une à une. */
+.label-eye-btn.active { opacity: 1; color: var(--spoon-bleu); }
+@media (hover: none) { .label-edit-btn, .label-eye-btn { opacity: 1; } }
 
 .label-color-grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .625rem 0; }
 .label-color-opt { width: 22px; height: 22px; }

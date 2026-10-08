@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9095">
+<link rel="stylesheet" href="/static/style.css?v=2.9102">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -735,6 +735,25 @@
     </div>
   </section>
 
+  <!-- Copie locale consultable : un .zip contenant UNE page HTML autonome
+       (pas de serveur, pas de connexion) qui redemande le mot de passe à
+       l'ouverture et affiche les notasks en LECTURE SEULE — voir
+       construireVisionneuseHTML() dans app.js. Mot de passe OBLIGATOIRE ici
+       (contrairement à l'archive .notask ci-dessus) : ce fichier est fait
+       pour être ouvert n'importe où, le clair n'a pas sa place dedans. -->
+  <section class="outil-bloc">
+    <h3>Copie locale consultable</h3>
+    <p class="aide">Un fichier .zip à garder où vous voulez : une fois dézippé, la page HTML qu'il contient s'ouvre dans n'importe quel navigateur, sans serveur ni connexion, et affiche vos notasks après avoir redemandé ce mot de passe. Lecture seule — rien ne peut y être modifié.</p>
+    <div class="field">
+      <label for="local-pw">Mot de passe de la copie</label>
+      <input id="local-pw" type="password" autocomplete="off">
+    </div>
+    <div class="outil-actions">
+      <button class="btn" id="export-zip-run" type="button">Générer la copie locale</button>
+    </div>
+    <div id="outil-zip-msg"></div>
+  </section>
+
   <!-- Journal : une ligne dédiée, le détail vit dans sa propre fenêtre
        (#dlg-logs) pour ne pas gonfler la boîte Outils. -->
   <section class="outil-bloc">
@@ -774,6 +793,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9095"></script>
+<script src="/static/app.js?v=0.9102"></script>
 </body>
 </html>

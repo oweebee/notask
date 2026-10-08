@@ -751,6 +751,8 @@ const ICONS = {
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5l17 17"/><path d="M10.6 5.7A10.6 10.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16.6 16.6 0 0 1-3.1 3.9M7.4 7.4C4.6 9.1 2.5 12 2.5 12s3.5 6.5 9.5 6.5a9.8 9.8 0 0 0 4.6-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5 3.5 12 9 17.5"/><path d="M15 6.5 20.5 12 15 17.5"/></svg>',
   attach: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8.5 9.5 16a3 3 0 0 1-4.2-4.2l8-8a4.5 4.5 0 0 1 6.4 6.4l-8.1 8.1a2 2 0 0 1-2.8-2.8l7-7"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/></svg>',
@@ -3882,6 +3884,34 @@ function renderLabelsDrawer() {
       loadNotes();
     };
 
+    /* Œil : masque purement visuellement les notes de ce libellé dans la
+       page principale (transparence, voir renderNotes()) — ça ne filtre
+       rien, contrairement au clic sur le libellé lui-même. Visible au
+       survol comme le crayon, MAIS reste affiché même hors survol quand le
+       libellé est déjà masqué : sinon, impossible de savoir d'un coup
+       d'œil quelles catégories sont estompées, ni de les réactiver sans
+       d'abord survoler chaque ligne une à une. */
+    const eye = document.createElement('button');
+    eye.className = 'label-eye-btn' + (l.hidden ? ' active' : '');
+    eye.type = 'button';
+    eye.setAttribute('aria-label', l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie');
+    eye.title = l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie';
+    eye.innerHTML = l.hidden ? ICONS.eyeOff : ICONS.eye;
+    eye.onclick = async (e) => {
+      e.stopPropagation();
+      const neuf = !l.hidden;
+      l.hidden = neuf;   // optimiste : pas d'attente réseau pour un simple bascule visuel
+      renderLabelsDrawer();
+      renderNotes();
+      try {
+        await api('/labels/' + l.id, { method: 'PATCH', body: { hidden: neuf } });
+      } catch {
+        l.hidden = !neuf;   // le serveur n'a pas pris : on revient en arrière
+        renderLabelsDrawer();
+        renderNotes();
+      }
+    };
+
     // Crayon visible au survol de la ligne : renommer et choisir la couleur
     // du libellé, dans la MÊME palette que les notasks (voir COLORS et les
     // classes .c-* — le sélecteur de openLabelEditPopup les réutilise telles
@@ -3893,7 +3923,7 @@ function renderLabelsDrawer() {
     edit.innerHTML = ICONS.pencil;
     edit.onclick = (e) => { e.stopPropagation(); openLabelEditPopup(edit, l); };
 
-    row.append(btn, edit);
+    row.append(btn, eye, edit);
     box.appendChild(row);
   }
 }
@@ -4642,9 +4672,19 @@ function renderNotes() {
     ? 'Aucune notask archivée.'
     : state.showFavoritesOnly ? 'Aucun favori.' : 'Aucune notask.';
 
+  // Libellés marqués "masqués" (œil barré, voir renderLabelsDrawer()) :
+  // mis en Set une seule fois pour tout le rendu plutôt que de refaire une
+  // recherche par note — la grille peut compter des centaines de cartes.
+  const libellesMasques = new Set(state.labels.filter((l) => l.hidden).map((l) => l.id));
+
   for (const n of state.notes) {
     const el = document.createElement('article');
-    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
+    // Transparence seule (pas de display:none) : la note reste repérable et
+    // cliquable, exactement l'inverse du filtre par clic sur un libellé qui,
+    // lui, retire les autres notes de la grille.
+    const estEstompee = libellesMasques.size > 0
+      && (n.label_ids || []).some((id) => libellesMasques.has(id));
+    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '') + (estEstompee ? ' note-dim' : '');
     el.dataset.id = n.id;
 
     /* Y a-t-il au moins une ligne à cocher ? `n.items` porte les lignes
@@ -10952,10 +10992,348 @@ async function collecterExport(progres) {
   };
 }
 
+/* ====================== Copie locale consultable (.zip) ======================
+   Une page HTML autonome (pas de serveur, pas de connexion) qui redemande le
+   mot de passe à l'ouverture et affiche les notasks en LECTURE SEULE —
+   réutilise le même format chiffré que l'archive .notask (EXPORT_MAGIC,
+   deriveArchiveKey) et le même pipeline de rendu que renderFormatted(), mais
+   réécrit en autonome : pas d'id à aller chercher sur le serveur, tout
+   (texte, images, notes vocales) voyage déjà dans le JSON de collecterExport(),
+   il suffit de le relire depuis les marqueurs plutôt que de le récupérer par
+   réseau. Volontairement SANS dépendance externe (pas de bibliothèque de zip
+   chargée depuis un CDN) : un .zip ne sert ici que de conteneur, « STORE »
+   (sans compression) suffit amplement pour une seule page HTML. */
+
+/* CRC32 — table précalculée, polynôme standard (0xEDB88320). Nécessaire au
+   format ZIP (en-tête local ET registre central), aucune bibliothèque ne le
+   fournit ici puisqu'on écrit le zip à la main. */
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(octets) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < octets.length; i++) c = CRC32_TABLE[(c ^ octets[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/* Date/heure au format DOS que ZIP impose dans ses en-têtes (deux entiers 16
+   bits). La précision (résolution de 2 secondes, pas d'avant 1980) n'a aucune
+   importance ici : rien ne s'appuie sur cette date, les lecteurs de zip
+   l'ignorent superbement en pratique. */
+function dosDateTime(date) {
+  const heure = ((date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1)) & 0xFFFF;
+  const jour = (((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()) & 0xFFFF;
+  return { heure, jour };
+}
+
+/* Construit un .zip minimal, méthode STORE (aucune compression) : chaque
+   fichier est un en-tête local + ses octets tels quels, suivis en fin
+   d'archive du registre central puis de l'« End Of Central Directory ».
+   `fichiers` : [{ nom, octets: Uint8Array }]. Suffisant pour UN seul fichier
+   comme pour plusieurs — ici un seul (la page HTML autonome). */
+function construireZipStore(fichiers) {
+  const encodeur = new TextEncoder();
+  const { heure, jour } = dosDateTime(new Date());
+  const morceauxLocaux = [];
+  const entreesCentrales = [];
+  let decalage = 0;
+
+  for (const { nom, octets } of fichiers) {
+    const nomOctets = encodeur.encode(nom);
+    const somme = crc32(octets);
+
+    const enteteLocal = new DataView(new ArrayBuffer(30));
+    enteteLocal.setUint32(0, 0x04034b50, true);   // signature locale
+    enteteLocal.setUint16(4, 20, true);            // version nécessaire
+    enteteLocal.setUint16(6, 0, true);              // indicateurs
+    enteteLocal.setUint16(8, 0, true);              // méthode 0 = STORE
+    enteteLocal.setUint16(10, heure, true);
+    enteteLocal.setUint16(12, jour, true);
+    enteteLocal.setUint32(14, somme, true);
+    enteteLocal.setUint32(18, octets.length, true); // taille compressée = taille réelle (STORE)
+    enteteLocal.setUint32(22, octets.length, true);
+    enteteLocal.setUint16(26, nomOctets.length, true);
+    enteteLocal.setUint16(28, 0, true);             // pas de champ « extra »
+
+    morceauxLocaux.push(new Uint8Array(enteteLocal.buffer), nomOctets, octets);
+
+    const entreeCentrale = new DataView(new ArrayBuffer(46));
+    entreeCentrale.setUint32(0, 0x02014b50, true);  // signature centrale
+    entreeCentrale.setUint16(4, 20, true);           // version ayant produit le zip
+    entreeCentrale.setUint16(6, 20, true);           // version nécessaire
+    entreeCentrale.setUint16(8, 0, true);
+    entreeCentrale.setUint16(10, 0, true);
+    entreeCentrale.setUint16(12, heure, true);
+    entreeCentrale.setUint16(14, jour, true);
+    entreeCentrale.setUint32(16, somme, true);
+    entreeCentrale.setUint32(20, octets.length, true);
+    entreeCentrale.setUint32(24, octets.length, true);
+    entreeCentrale.setUint16(28, nomOctets.length, true);
+    entreeCentrale.setUint16(30, 0, true);
+    entreeCentrale.setUint16(32, 0, true);
+    entreeCentrale.setUint16(34, 0, true);           // numéro de disque
+    entreeCentrale.setUint16(36, 0, true);           // attributs internes
+    entreeCentrale.setUint32(38, 0, true);           // attributs externes
+    entreeCentrale.setUint32(42, decalage, true);    // position de l'en-tête local
+
+    entreesCentrales.push(new Uint8Array(entreeCentrale.buffer), nomOctets);
+    decalage += enteteLocal.byteLength + nomOctets.length + octets.length;
+  }
+
+  const tailleLocale = morceauxLocaux.reduce((s, m) => s + m.length, 0);
+  const tailleCentrale = entreesCentrales.reduce((s, m) => s + m.length, 0);
+
+  const fin = new DataView(new ArrayBuffer(22));
+  fin.setUint32(0, 0x06054b50, true);     // signature de fin
+  fin.setUint16(4, 0, true);
+  fin.setUint16(6, 0, true);
+  fin.setUint16(8, fichiers.length, true);
+  fin.setUint16(10, fichiers.length, true);
+  fin.setUint32(12, tailleCentrale, true);
+  fin.setUint32(16, tailleLocale, true);   // position du registre central
+  fin.setUint16(20, 0, true);              // pas de commentaire
+
+  const total = tailleLocale + tailleCentrale + fin.byteLength;
+  const resultat = new Uint8Array(total);
+  let pos = 0;
+  for (const m of [...morceauxLocaux, ...entreesCentrales, new Uint8Array(fin.buffer)]) {
+    resultat.set(m, pos);
+    pos += m.length;
+  }
+  return resultat;
+}
+
+/* Rendu HORS LIGNE d'une notask, même grammaire que renderFormatted() mais
+   réécrit pour lire les pièces jointes et les lignes à cocher déjà PRÉSENTES
+   dans le JSON exporté (note.attachments, note.items), au lieu d'aller les
+   chercher par identifiant auprès du serveur — il n'y en a plus, dans ce
+   contexte. Dupliqué plutôt que partagé avec renderFormatted() : cette
+   version doit rester fonctionnelle seule, collée telle quelle dans une page
+   HTML qui n'a accès à rien d'autre de app.js. */
+function renderFormattedHorsLigne(texte, note) {
+  const attParId = new Map((note.attachments || []).map((a) => [String(a.id), a]));
+  const itemParId = new Map((note.items || []).map((i) => [String(i.id), i]));
+
+  let html = String(texte || '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  html = html.replace(/!\[att:(\w+)\]/g, (m, id) => {
+    const a = attParId.get(id);
+    if (!a || !(a.mime || '').startsWith('image/')) return '';
+    return `<img class="hl-img" src="data:${a.mime};base64,${a.data}" alt="">`;
+  });
+  html = html.replace(/\n?\[audio:(\w+)\]\n?/g, (m, id) => {
+    const a = attParId.get(id);
+    if (!a) return '';
+    return `<div class="hl-audio"><audio controls src="data:${a.mime};base64,${a.data}"></audio></div>`;
+  });
+  html = html.replace(/\n?\[ligne:(\w+)\]/g, (m, id) => {
+    const it = itemParId.get(id);
+    if (!it) return '';
+    return `<div class="hl-ligne"><input type="checkbox" disabled ${it.checked ? 'checked' : ''}>`
+      + `<span>${String(it.text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}</span></div>`;
+  });
+  html = html.replace(/\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
+  html = html.replace(/\[url:([^\]]+)\]([\s\S]*?)\[\/url\]/g, (m, href, texte2) => {
+    const url = String(href || '').trim();
+    if (!/^(https?:\/\/|mailto:)/i.test(url)) return texte2;
+    return `<a href="${url.replace(/["'<>]/g, '')}" target="_blank" rel="noopener noreferrer">${texte2}</a>`;
+  });
+  html = html.replace(/\[arch(-?)\]([\s\S]*?)\[\/arch\]/g, (m, plie, contenu) => {
+    const bloc = /\n/.test(contenu);
+    return `<${bloc ? 'div' : 'span'} class="hl-archive">${contenu}</${bloc ? 'div' : 'span'}>`;
+  });
+  html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="hl-code">${code}</pre>`);
+  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, '<code class="hl-code-inline">$1</code>');
+  html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
+  html = html.replace(/(?<!\\)\*([^\n*]+?)(?<!\\)\*/g, '<em>$1</em>');
+  html = html.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\');
+  return html;
+}
+
+/* Construit la page HTML autonome : CSS et JS inline (aucune ressource
+   externe, ouvre depuis file:// comme depuis un serveur quelconque), rien
+   n'y est en clair — `fichierChiffre` est EXACTEMENT le même format binaire
+   que l'archive .notask (EXPORT_MAGIC + sel + iv + AES-GCM), embarqué en
+   base64. La page redemande donc le mot de passe à l'ouverture, dérive la
+   clé et déchiffre EN LOCAL avant d'afficher quoi que ce soit — un clic sur
+   « Enregistrer » dans le navigateur qui l'affiche n'enregistre jamais que
+   du chiffré. */
+function construireVisionneuseHTML(fichierChiffre) {
+  const b64 = bytesToBase64(fichierChiffre);
+  const rendu = renderFormattedHorsLigne.toString();
+  return `<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>notask — copie locale</title>
+<style>
+:root{color-scheme:dark;}
+body{margin:0;font-family:system-ui,sans-serif;background:#141218;color:#e6e0e9;}
+#pw-ecran{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:1rem;padding:1rem;text-align:center;}
+#pw-ecran input{font-size:1rem;padding:.6rem .8rem;border-radius:8px;border:1px solid #49454f;background:#211f26;color:#e6e0e9;}
+#pw-ecran button{font-size:1rem;padding:.6rem 1.2rem;border-radius:999px;border:none;background:#42a5f5;color:#0d1b2a;font-weight:600;cursor:pointer;}
+#pw-erreur{color:#ff7a7a;min-height:1.2em;}
+#app{display:none;max-width:900px;margin:0 auto;padding:1rem;}
+#barre{position:sticky;top:0;background:#141218;padding:.5rem 0 1rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;}
+#barre input[type=search]{flex:1;min-width:160px;font-size:1rem;padding:.5rem .7rem;border-radius:8px;border:1px solid #49454f;background:#211f26;color:#e6e0e9;}
+.hl-chip{padding:.3rem .7rem;border-radius:999px;border:1px solid #49454f;background:transparent;color:#e6e0e9;cursor:pointer;font-size:.85rem;}
+.hl-chip.on{background:#42a5f5;color:#0d1b2a;border-color:#42a5f5;}
+.grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem;}
+.carte{background:#211f26;border-radius:12px;padding:.9rem 1rem;break-inside:avoid;}
+.carte h3{margin:0 0 .4rem;font-size:1rem;}
+.carte .desc{opacity:.7;font-size:.85rem;margin-bottom:.4rem;}
+.carte .corps{font-size:.9rem;white-space:pre-wrap;word-break:break-word;}
+.carte .corps strong{font-weight:700;}
+.hl-img{max-width:100%;border-radius:8px;display:block;margin:.4rem 0;}
+.hl-audio audio{width:100%;}
+.hl-ligne{display:flex;gap:.4rem;align-items:flex-start;margin:.2rem 0;}
+.hl-code{background:#0e0d12;padding:.5rem;border-radius:6px;overflow:auto;}
+.hl-code-inline{background:#0e0d12;padding:0 .3rem;border-radius:4px;}
+.hl-archive{opacity:.6;border-left:2px solid #49454f;padding-left:.5rem;}
+.carte .etiq{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem;}
+.carte .etiq span{font-size:.7rem;opacity:.65;background:#2b2930;border-radius:999px;padding:.1rem .5rem;}
+#vide{opacity:.6;text-align:center;padding:2rem;}
+</style>
+</head><body>
+
+<div id="pw-ecran">
+  <h1>notask — copie locale</h1>
+  <p>Lecture seule. Le mot de passe de cette copie n'est jamais envoyé nulle part.</p>
+  <input id="pw-champ" type="password" placeholder="Mot de passe" autofocus>
+  <button id="pw-go">Déverrouiller</button>
+  <div id="pw-erreur"></div>
+</div>
+
+<div id="app">
+  <div id="barre">
+    <input type="search" id="recherche" placeholder="Rechercher…">
+    <span id="chips"></span>
+  </div>
+  <div id="grille" class="grille"></div>
+  <div id="vide" hidden>Aucune notask ne correspond.</div>
+</div>
+
+<script>
+const FICHIER_B64 = ${JSON.stringify(b64)};
+const EXPORT_MAGIC = 'NOTASKX1';
+const EXPORT_ITERATIONS = 210000;
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function deriveArchiveKey(password, salt) {
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: EXPORT_ITERATIONS, hash: 'SHA-256' },
+    baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+  );
+}
+
+const renderFormattedHorsLigne = ${rendu};
+
+let DONNEES = null;
+let filtreLabel = null;
+
+async function dechiffrer(password) {
+  const octets = base64ToBytes(FICHIER_B64);
+  const entete = new TextDecoder().decode(octets.slice(0, EXPORT_MAGIC.length));
+  if (entete !== EXPORT_MAGIC) throw new Error('Fichier illisible.');
+  const salt = octets.slice(EXPORT_MAGIC.length, EXPORT_MAGIC.length + 16);
+  const iv = octets.slice(EXPORT_MAGIC.length + 16, EXPORT_MAGIC.length + 28);
+  const chiffre = octets.slice(EXPORT_MAGIC.length + 28);
+  const key = await deriveArchiveKey(password, salt);
+  const clair = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, chiffre);
+  return JSON.parse(new TextDecoder().decode(clair));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function construireChips() {
+  const zone = document.getElementById('chips');
+  zone.innerHTML = '';
+  for (const l of DONNEES.labels) {
+    const b = document.createElement('button');
+    b.className = 'hl-chip' + (filtreLabel === l.id ? ' on' : '');
+    b.textContent = l.name;
+    b.onclick = () => { filtreLabel = filtreLabel === l.id ? null : l.id; construireChips(); rendreGrille(); };
+    zone.appendChild(b);
+  }
+}
+
+function rendreGrille() {
+  const terme = document.getElementById('recherche').value.trim().toLowerCase();
+  const grille = document.getElementById('grille');
+  grille.innerHTML = '';
+  const notes = DONNEES.notes
+    .filter((n) => !n.trashed)
+    .filter((n) => !filtreLabel || (n.label_ids || []).includes(filtreLabel))
+    .filter((n) => !terme || (n.title + ' ' + n.description + ' ' + n.content).toLowerCase().includes(terme))
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+  document.getElementById('vide').hidden = notes.length > 0;
+
+  for (const n of notes) {
+    const carte = document.createElement('article');
+    carte.className = 'carte';
+    let inner = '';
+    if (n.title) inner += \`<h3>\${escapeHtml(n.title)}\${n.archived ? ' (archivée)' : ''}</h3>\`;
+    if (n.description) inner += \`<div class="desc">\${escapeHtml(n.description)}</div>\`;
+    if (n.is_checklist) {
+      inner += '<div class="corps">';
+      for (const it of (n.items || [])) {
+        inner += \`<div class="hl-ligne"><input type="checkbox" disabled \${it.checked ? 'checked' : ''}><span>\${escapeHtml(it.text)}</span></div>\`;
+      }
+      inner += '</div>';
+    } else if (n.content) {
+      inner += \`<div class="corps">\${renderFormattedHorsLigne(n.content, n)}</div>\`;
+    }
+    const noms = (n.label_ids || []).map((id) => DONNEES.labels.find((l) => l.id === id)?.name).filter(Boolean);
+    if (noms.length) inner += \`<div class="etiq">\${noms.map((x) => \`<span>\${escapeHtml(x)}</span>\`).join('')}</div>\`;
+    carte.innerHTML = inner;
+    grille.appendChild(carte);
+  }
+}
+
+document.getElementById('pw-go').onclick = async () => {
+  const pw = document.getElementById('pw-champ').value;
+  document.getElementById('pw-erreur').textContent = '';
+  try {
+    DONNEES = await dechiffrer(pw);
+  } catch {
+    document.getElementById('pw-erreur').textContent = 'Mot de passe incorrect, ou fichier corrompu.';
+    return;
+  }
+  document.getElementById('pw-ecran').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  construireChips();
+  rendreGrille();
+};
+document.getElementById('pw-champ').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('pw-go').click(); });
+document.getElementById('recherche').addEventListener('input', rendreGrille);
+</script>
+</body></html>`;
+}
+
 $('#btn-outils').addEventListener('click', () => {
   $('#archive-pw').value = '';
   $('#import-file').value = '';
   msg($('#outil-msg'), '');
+  if ($('#local-pw')) $('#local-pw').value = '';
+  if ($('#outil-zip-msg')) msg($('#outil-zip-msg'), '');
   majCompteJournal();
   majBlocDrive();
   $('#dlg-outils').showModal();
@@ -11199,6 +11577,54 @@ $('#export-run').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
     destinationExport = 'fichier';  // cf. sa déclaration : jamais rémanent
+  }
+});
+
+$('#export-zip-run')?.addEventListener('click', async () => {
+  // Mot de passe OBLIGATOIRE ici (contrairement à #export-run ci-dessus) :
+  // ce fichier est fait pour être ouvert n'importe où, le clair n'a pas sa
+  // place dedans — voir le commentaire au-dessus de construireVisionneuseHTML().
+  const pw = $('#local-pw').value;
+  if (!pw || pw.length < 8) {
+    return msg($('#outil-zip-msg'), 'Mot de passe : 8 caractères minimum, obligatoire pour ce fichier.');
+  }
+
+  const btn = $('#export-zip-run');
+  btn.disabled = true;
+  try {
+    const avancement = (t) => msg($('#outil-zip-msg'), t, 'ok');
+    const donnees = await collecterExport(avancement);
+    const clair = new TextEncoder().encode(JSON.stringify(donnees));
+
+    avancement('Chiffrement…');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveArchiveKey(pw, salt);
+    const chiffre = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, clair));
+    const entete = new TextEncoder().encode(EXPORT_MAGIC);
+    const fichierChiffre = new Uint8Array(entete.length + salt.length + iv.length + chiffre.length);
+    fichierChiffre.set(entete, 0);
+    fichierChiffre.set(salt, entete.length);
+    fichierChiffre.set(iv, entete.length + salt.length);
+    fichierChiffre.set(chiffre, entete.length + salt.length + iv.length);
+
+    avancement('Construction de la page…');
+    const page = construireVisionneuseHTML(fichierChiffre);
+    const zip = construireZipStore([{ nom: 'index.html', octets: new TextEncoder().encode(page) }]);
+
+    const nomZip = `notask-copie-locale-${new Date().toISOString().slice(0, 10)}.zip`;
+    const url = URL.createObjectURL(new Blob([zip], { type: 'application/zip' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomZip;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    msg($('#outil-zip-msg'), `Copie locale créée : ${donnees.notes.length} notask(s). Dézippez puis ouvrez index.html.`, 'ok');
+  } catch (err) {
+    msg($('#outil-zip-msg'), err.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 

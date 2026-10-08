@@ -86,6 +86,8 @@ def update_label(
         label.color = data["color"]
     if "position" in data:
         label.position = data["position"]
+    if "hidden" in data:
+        label.hidden = bool(data["hidden"])
 
     session.add(label)
     session.commit()
