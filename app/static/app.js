@@ -3902,9 +3902,40 @@ function renderLabelsDrawer() {
     eye.onclick = async (e) => {
       e.stopPropagation();
       const neuf = !l.hidden;
+      const grid = $('#notes-grid');
+
+      /* Positions relevées AVANT tout changement : les cartes qui restent
+         affichées vont se déplacer pour combler/accueillir un vide une fois
+         le libellé masqué/démasqué, et renderNotes() reconstruit TOUTES les
+         cartes de zéro (voir son 1er querySelectorAll('.note').remove()) —
+         les nouvelles n'ont donc aucune position de départ à faire glisser
+         sans ce relevé préalable, clé-id par clé-id. */
+      const aDisparaitre = [];
+      const positionsAvant = new Map();
+      if (grid) {
+        for (const el of $$('.note', grid)) {
+          const note = state.notes.find((nn) => String(nn.id) === el.dataset.id);
+          const concernee = note && (note.label_ids || []).includes(l.id);
+          if (neuf && concernee) aDisparaitre.push(el);
+          else positionsAvant.set(el.dataset.id, { left: el.style.left, top: el.style.top });
+        }
+      }
+
+      /* Masquage : chaque carte du libellé se replie sur elle-même et
+         s'efface avant de quitter la grille — même animation que la
+         suppression définitive (voir disparaitreCarte) — plutôt que de
+         disparaître sèchement au prochain renderNotes(). Démasquage :
+         rien à animer ici, les cartes réapparaissent directement avec le
+         re-rendu (voir tâche associée). */
+      if (aDisparaitre.length) await Promise.all(aDisparaitre.map((el) => disparaitreCarte(el)));
+
       l.hidden = neuf;   // optimiste : pas d'attente réseau pour un simple bascule visuel
       renderLabelsDrawer();
       renderNotes();
+      // Les cartes restées affichées glissent vers leur nouvel emplacement
+      // au lieu d'y sauter (layoutMosaic(true), appelé par renderNotes(),
+      // les y a déjà posées sans transition — voir animerReorganisationApresMasquage()).
+      animerReorganisationApresMasquage(grid, positionsAvant);
       try {
         await api('/labels/' + l.id, { method: 'PATCH', body: { hidden: neuf } });
       } catch {
@@ -4177,6 +4208,41 @@ function layoutMosaic(instant) {
   mosaicResizeObserver.disconnect();
   for (const m of MOSAIQUES) {
     poserMosaique($(m.grille), $$(m.cartes), m.pile ? $(m.pile) : null, instant);
+  }
+}
+
+/* Fait glisser en douceur, vers leur position actuelle, les cartes de
+   #notes-grid listées dans `positionsAvant` (Map noteId -> {left, top}
+   relevée AVANT un re-rendu) — appelé juste après un renderNotes() qui vient
+   de les replacer INSTANTANÉMENT (layoutMosaic(true)). Nécessaire parce que
+   renderNotes() reconstruit toutes les cartes de zéro : les nouveaux éléments
+   n'ont par eux-mêmes aucune position de départ à animer, contrairement à un
+   déplacement (glisser-déposer) ou un redimensionnement, qui réutilisent les
+   mêmes éléments et profitent donc directement de la transition CSS normale
+   de poserMosaique() (layoutMosaic() sans `instant`).
+
+   Technique : on saute d'abord, SANS transition (même garde `mosaic-instant`
+   + reflow forcé que poserMosaique(instant), réutilisée ici), à l'ancienne
+   position ; puis on repose la position finale déjà calculée — c'est ce
+   second changement, transition réactivée, qui produit le glissement. */
+function animerReorganisationApresMasquage(grid, positionsAvant) {
+  if (!grid || !positionsAvant.size) return;
+  const survivantes = $$('.note', grid).filter((el) => positionsAvant.has(el.dataset.id));
+  if (!survivantes.length) return;
+
+  grid.classList.add('mosaic-instant');
+  const positionsApres = new Map();
+  for (const el of survivantes) {
+    positionsApres.set(el, { left: el.style.left, top: el.style.top });
+    const anc = positionsAvant.get(el.dataset.id);
+    el.style.left = anc.left;
+    el.style.top = anc.top;
+  }
+  void grid.offsetHeight; // acquiert le saut avant de réautoriser la transition
+  grid.classList.remove('mosaic-instant');
+  for (const [el, pos] of positionsApres) {
+    el.style.left = pos.left;
+    el.style.top = pos.top;
   }
 }
 
@@ -11124,47 +11190,15 @@ function construireZipStore(fichiers) {
    contexte. Dupliqué plutôt que partagé avec renderFormatted() : cette
    version doit rester fonctionnelle seule, collée telle quelle dans une page
    HTML qui n'a accès à rien d'autre de app.js. */
-function renderFormattedHorsLigne(texte, note) {
-  const attParId = new Map((note.attachments || []).map((a) => [String(a.id), a]));
-  const itemParId = new Map((note.items || []).map((i) => [String(i.id), i]));
-
-  let html = String(texte || '').replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  html = html.replace(/!\[att:(\w+)\]/g, (m, id) => {
-    const a = attParId.get(id);
-    if (!a || !(a.mime || '').startsWith('image/')) return '';
-    return `<img class="hl-img" src="data:${a.mime};base64,${a.data}" alt="">`;
-  });
-  html = html.replace(/\n?\[audio:(\w+)\]\n?/g, (m, id) => {
-    const a = attParId.get(id);
-    if (!a) return '';
-    return `<div class="hl-audio"><audio controls src="data:${a.mime};base64,${a.data}"></audio></div>`;
-  });
-  html = html.replace(/\n?\[ligne:(\w+)\]/g, (m, id) => {
-    const it = itemParId.get(id);
-    if (!it) return '';
-    return `<div class="hl-ligne"><input type="checkbox" disabled ${it.checked ? 'checked' : ''}>`
-      + `<span>${String(it.text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}</span></div>`;
-  });
-  html = html.replace(/\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
-  html = html.replace(/\[url:([^\]]+)\]([\s\S]*?)\[\/url\]/g, (m, href, texte2) => {
-    const url = String(href || '').trim();
-    if (!/^(https?:\/\/|mailto:)/i.test(url)) return texte2;
-    return `<a href="${url.replace(/["'<>]/g, '')}" target="_blank" rel="noopener noreferrer">${texte2}</a>`;
-  });
-  html = html.replace(/\[arch(-?)\]([\s\S]*?)\[\/arch\]/g, (m, plie, contenu) => {
-    const bloc = /\n/.test(contenu);
-    return `<${bloc ? 'div' : 'span'} class="hl-archive">${contenu}</${bloc ? 'div' : 'span'}>`;
-  });
-  html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="hl-code">${code}</pre>`);
-  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, '<code class="hl-code-inline">$1</code>');
-  html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
-  html = html.replace(/(?<!\\)\*([^\n*]+?)(?<!\\)\*/g, '<em>$1</em>');
-  html = html.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\');
-  return html;
-}
+/* Rendu "hors ligne" du texte riche d'une notask : SUPPRIMÉ. La copie
+   locale réutilise désormais directement renderFormatted() (voir plus
+   haut) — embarquée telle quelle (toString()) dans la page générée par
+   construireVisionneuseHTML() — plutôt qu'une réécriture séparée et
+   approximative des mêmes marqueurs ([c:], [url:], [arch], [ligne:],
+   ```code```...). Seule la partie réseau (chargement d'une pièce jointe
+   depuis le serveur) est remplacée côté page générée, par une lecture
+   directe des données embarquées en base64 — voir hydrateInlineImages
+   HorsLigne()/hydrateInlineAudioHorsLigne() dans construireVisionneuseHTML. */
 
 /* Construit la page HTML autonome : CSS et JS inline (aucune ressource
    externe, ouvre depuis file:// comme depuis un serveur quelconque), rien
@@ -11173,41 +11207,108 @@ function renderFormattedHorsLigne(texte, note) {
    base64. La page redemande donc le mot de passe à l'ouverture, dérive la
    clé et déchiffre EN LOCAL avant d'afficher quoi que ce soit — un clic sur
    « Enregistrer » dans le navigateur qui l'affiche n'enregistre jamais que
-   du chiffré. */
-function construireVisionneuseHTML(fichierChiffre) {
+   du chiffré.
+
+   Fidélité visuelle : plutôt qu'un CSS et un rendu réécrits à la main (donc
+   forcément approximatifs), la page embarque LA VRAIE feuille de style du
+   site (style.css, lue en direct) et LES VRAIES fonctions de rendu de
+   l'application (texte riche, lignes à cocher, lecteur de note vocale,
+   mosaïque en positionnement absolu) — capturées ici par toString() et
+   collées telles quelles dans le <script> généré. Poids assumé : aucune
+   version simplifiée n'est gardée en remplacement. Seule différence
+   obligée : ces fonctions, en ligne, chargent une pièce jointe DEPUIS LE
+   SERVEUR (loadAttachment) ; la copie n'a pas de serveur à qui demander —
+   ses propres hydrateInlineImagesHorsLigne()/hydrateInlineAudioHorsLigne()
+   lisent directement les octets déjà embarqués (voir collecterExport()). */
+async function construireVisionneuseHTML(fichierChiffre) {
   const b64 = bytesToBase64(fichierChiffre);
-  const rendu = renderFormattedHorsLigne.toString();
+
+  // Fonctions RÉELLES de l'application, embarquées telles quelles.
+  const srcEscapeHtml = escapeHtml.toString();
+  const srcUrlSure = urlSure.toString();
+  const srcAudioBlockHtml = audioBlockHtml.toString();
+  const srcLigneBlockHtml = ligneBlockHtml.toString();
+  const srcRenderFormatted = renderFormatted.toString();
+  const srcFormatDue = formatDue.toString();
+  const srcFormatDueRange = formatDueRange.toString();
+  const srcEstEnRetard = estEnRetard.toString();
+  const srcIsoToUtcDateStr = isoToUtcDateStr.toString();
+  const srcHexToRgba = hexToRgba.toString();
+  const srcContexteAudio = contexteAudio.toString();
+  const srcFormatDuree = formatDuree.toString();
+  const srcCretesAudio = cretesAudio.toString();
+  const srcDessinerOnde = dessinerOnde.toString();
+  const srcBrancherLecteurAudio = brancherLecteurAudio.toString();
+  const srcVoisineDuBloc = voisineDuBloc.toString();
+  const srcPeindreTousLesBlocs = peindreTousLesBlocs.toString();
+  const srcMajEcheanceLigne = majEcheanceLigne.toString();
+  const srcHydrateLignesACocher = hydrateLignesACocher.toString();
+  const srcPoserMosaique = poserMosaique.toString();
+
+  // Marqueurs de mise en forme : mêmes regex que NOTE_IMG_MARK et consorts
+  // plus haut, répétées en valeur (.toString() d'une regex redonne sa
+  // syntaxe littérale, directement collable dans le script généré).
+  const srcNoteImgMark = NOTE_IMG_MARK.toString();
+  const srcNoteAudioMark = NOTE_AUDIO_MARK.toString();
+  const srcNoteLineMark = NOTE_LINE_MARK.toString();
+  const srcNoteColorMark = NOTE_COLOR_MARK.toString();
+  const srcNoteArchiveMark = NOTE_ARCHIVE_MARK.toString();
+  const srcNoteUrlMark = NOTE_URL_MARK.toString();
+
+  // Jeux de données constants (icônes, couleurs des libellés) : simples
+  // objets, donc embarqués en JSON plutôt que par toString() — mais ce
+  // sont les VRAIS objets de l'app, pas une liste réécrite à la main.
+  // Seul ICONS est réduit aux icônes réellement utilisées par la page
+  // générée (épingle, archive, lecture, pause, fichier, horloge) : le
+  // jeu complet contient des dizaines d'icônes d'édition d'image sans
+  // rapport avec une copie en lecture seule.
+  const iconesUtilisees = {
+    pin: ICONS.pin, pinFilled: ICONS.pinFilled, archive: ICONS.archive,
+    play: ICONS.play, pause: ICONS.pause, file: ICONS.file, clock: ICONS.clock,
+  };
+  const jsonIcons = JSON.stringify(iconesUtilisees);
+  const jsonIconChoices = JSON.stringify(ICON_CHOICES);
+  const jsonLabelColorHex = JSON.stringify(LABEL_COLOR_HEX);
+  const jsonRecurIcones = JSON.stringify(RECUR_ICONES);
+  const jsonArchiveIconHtml = JSON.stringify(ARCHIVE_ICON_HTML);
+
+  // Feuille de style RÉELLE du site (mêmes classes .note/.notes-grid/
+  // .label-chip/.note-code-block/.note-archive-zone/.note-audio… que
+  // celles générées ci-dessous) : lue en direct plutôt que recopiée à la
+  // main, pour ne jamais diverger d'elle. Un échec de lecture (page servie
+  // autrement qu'au travers de l'appli) laisse la copie sans styliste du
+  // site — elle reste lisible via le CSS de secours plus bas, juste moins
+  // fidèle.
+  let styleCssSite = '';
+  try {
+    styleCssSite = await (await fetch('/static/style.css')).text();
+  } catch { /* tant pis : CSS de secours ci-dessous seulement */ }
+
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>notask — copie locale</title>
 <style>
-:root{color-scheme:dark;}
-body{margin:0;font-family:system-ui,sans-serif;background:#141218;color:#e6e0e9;}
-#pw-ecran{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:1rem;padding:1rem;text-align:center;}
-#pw-ecran input{font-size:1rem;padding:.6rem .8rem;border-radius:8px;border:1px solid #49454f;background:#211f26;color:#e6e0e9;}
-#pw-ecran button{font-size:1rem;padding:.6rem 1.2rem;border-radius:999px;border:none;background:#42a5f5;color:#0d1b2a;font-weight:600;cursor:pointer;}
-#pw-erreur{color:#ff7a7a;min-height:1.2em;}
-#app{display:none;max-width:900px;margin:0 auto;padding:1rem;}
-#barre{position:sticky;top:0;background:#141218;padding:.5rem 0 1rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;}
-#barre input[type=search]{flex:1;min-width:160px;font-size:1rem;padding:.5rem .7rem;border-radius:8px;border:1px solid #49454f;background:#211f26;color:#e6e0e9;}
-.hl-chip{padding:.3rem .7rem;border-radius:999px;border:1px solid #49454f;background:transparent;color:#e6e0e9;cursor:pointer;font-size:.85rem;}
-.hl-chip.on{background:#42a5f5;color:#0d1b2a;border-color:#42a5f5;}
-.grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem;}
-.carte{background:#211f26;border-radius:12px;padding:.9rem 1rem;break-inside:avoid;}
-.carte h3{margin:0 0 .4rem;font-size:1rem;}
-.carte .desc{opacity:.7;font-size:.85rem;margin-bottom:.4rem;}
-.carte .corps{font-size:.9rem;white-space:pre-wrap;word-break:break-word;}
-.carte .corps strong{font-weight:700;}
-.hl-img{max-width:100%;border-radius:8px;display:block;margin:.4rem 0;}
-.hl-audio audio{width:100%;}
-.hl-ligne{display:flex;gap:.4rem;align-items:flex-start;margin:.2rem 0;}
-.hl-code{background:#0e0d12;padding:.5rem;border-radius:6px;overflow:auto;}
-.hl-code-inline{background:#0e0d12;padding:0 .3rem;border-radius:4px;}
-.hl-archive{opacity:.6;border-left:2px solid #49454f;padding-left:.5rem;}
-.carte .etiq{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem;}
-.carte .etiq span{font-size:.7rem;opacity:.65;background:#2b2930;border-radius:999px;padding:.1rem .5rem;}
-#vide{opacity:.6;text-align:center;padding:2rem;}
+${styleCssSite}
+
+/* ---------------------------------------------------------------------
+   CSS DE SECOURS, propre à la page générée : UNIQUEMENT la coquille qui
+   n'existe pas dans le site (écran de mot de passe, barre de recherche et
+   chips de filtre par libellé, message "vide") — le rendu des notasks
+   elles-mêmes vient entièrement de style.css ci-dessus. */
+:root { color-scheme: dark; }
+body { margin: 0; font-family: 'Roboto', system-ui, sans-serif; background: var(--md-surface, #141218); color: var(--md-on-surface, #e6e0e9); }
+#pw-ecran { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 1rem; padding: 1rem; text-align: center; }
+#pw-ecran input { font-size: 1rem; padding: .6rem .8rem; border-radius: 8px; border: 1px solid #49454f; background: #211f26; color: #e6e0e9; }
+#pw-ecran button { font-size: 1rem; padding: .6rem 1.2rem; border-radius: 999px; border: none; background: #42a5f5; color: #0d1b2a; font-weight: 600; cursor: pointer; }
+#pw-erreur { color: #ff7a7a; min-height: 1.2em; }
+#app { display: none; max-width: 1100px; margin: 0 auto; padding: 1rem; }
+#barre { position: sticky; top: 0; z-index: 10; background: var(--md-surface, #141218); padding: .5rem 0 1rem; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+#barre input[type=search] { flex: 1; min-width: 160px; font-size: 1rem; padding: .5rem .7rem; border-radius: 8px; border: 1px solid #49454f; background: #211f26; color: #e6e0e9; }
+.hl-chip { padding: .3rem .7rem; border-radius: 999px; border: 1px solid #49454f; background: transparent; color: #e6e0e9; cursor: pointer; font-size: .85rem; }
+.hl-chip.on { background: #42a5f5; color: #0d1b2a; border-color: #42a5f5; }
+#vide { opacity: .6; text-align: center; padding: 2rem; }
+.note { cursor: default; }
 </style>
 </head><body>
 
@@ -11224,7 +11325,7 @@ body{margin:0;font-family:system-ui,sans-serif;background:#141218;color:#e6e0e9;
     <input type="search" id="recherche" placeholder="Rechercher…">
     <span id="chips"></span>
   </div>
-  <div id="grille" class="grille"></div>
+  <div id="grille" class="notes-grid"></div>
   <div id="vide" hidden>Aucune notask ne correspond.</div>
 </div>
 
@@ -11248,7 +11349,118 @@ async function deriveArchiveKey(password, salt) {
   );
 }
 
-const renderFormattedHorsLigne = ${rendu};
+/* ---- Données et icônes constantes, réellement celles de l'application
+   (voir construireVisionneuseHTML ci-dessus, côté app.js). ---- */
+const ICONS = ${jsonIcons};
+const ICON_CHOICES = ${jsonIconChoices};
+const LABEL_COLOR_HEX = ${jsonLabelColorHex};
+const ATTENUATION_LIBELLE = ${ATTENUATION_LIBELLE};
+const RECUR_ICONES = ${jsonRecurIcones};
+const ARCHIVE_ICON_HTML = ${jsonArchiveIconHtml};
+const NOTE_IMG_MARK = ${srcNoteImgMark};
+const NOTE_AUDIO_MARK = ${srcNoteAudioMark};
+const NOTE_LINE_MARK = ${srcNoteLineMark};
+const NOTE_COLOR_MARK = ${srcNoteColorMark};
+const NOTE_ARCHIVE_MARK = ${srcNoteArchiveMark};
+const NOTE_URL_MARK = ${srcNoteUrlMark};
+
+/* ---- Fonctions RÉELLES de l'application (voir leur définition dans
+   app.js — embarquées ici par toString(), pas réécrites). ---- */
+${srcEscapeHtml}
+${srcUrlSure}
+${srcAudioBlockHtml}
+${srcLigneBlockHtml}
+${srcRenderFormatted}
+${srcFormatDue}
+${srcFormatDueRange}
+${srcEstEnRetard}
+${srcIsoToUtcDateStr}
+${srcHexToRgba}
+
+let lecteursAudio = new Set();
+let _audioCtx = null;
+${srcContexteAudio}
+${srcFormatDuree}
+${srcCretesAudio}
+${srcDessinerOnde}
+${srcBrancherLecteurAudio}
+${srcVoisineDuBloc}
+${srcPeindreTousLesBlocs}
+${srcMajEcheanceLigne}
+${srcHydrateLignesACocher}
+
+/* ---- Mosaïque : le VRAI moteur de poserMosaique()/layoutMosaic() de
+   l'application (positionnement absolu calé sous la colonne la plus basse,
+   voir --mosaic-min-col/--mosaic-gap dans style.css), réduit à la seule
+   grille #grille — l'app en pilote plusieurs (corbeille, archives…) qui
+   n'existent pas dans cette copie. ---- */
+const _mosaicHeights = new WeakMap();
+const mosaicResizeObserver = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const entry of entries) {
+    const box = entry.borderBoxSize && entry.borderBoxSize[0];
+    const h = Math.round(box ? box.blockSize : entry.contentRect.height);
+    if (_mosaicHeights.get(entry.target) !== h) { _mosaicHeights.set(entry.target, h); changed = true; }
+  }
+  if (changed) scheduleLayoutMosaic();
+});
+${srcPoserMosaique}
+function layoutMosaic(instant) {
+  mosaicResizeObserver.disconnect();
+  const grid = document.getElementById('grille');
+  poserMosaique(grid, Array.from(grid.querySelectorAll('.note')), null, instant);
+}
+let _layoutTimer;
+function scheduleLayoutMosaic(delay = 80) {
+  clearTimeout(_layoutTimer);
+  _layoutTimer = setTimeout(() => layoutMosaic(), delay);
+}
+window.addEventListener('resize', () => scheduleLayoutMosaic(150));
+
+/* ---- Hydratation des images et notes vocales insérées dans le texte :
+   même rôle EXACT que hydrateInlineImages()/hydrateInlineAudio() côté
+   app.js (mêmes sélecteurs, mêmes classes), seule la source des octets
+   change — lus depuis les données déjà embarquées (note.attachments[].data,
+   voir collecterExport()) plutôt que depuis le serveur (loadAttachment). */
+function hydrateInlineImagesHorsLigne(root, note) {
+  const list = (note && note.attachments) || [];
+  root.querySelectorAll('img.note-inline-img[data-att]').forEach((img) => {
+    const att = list.find((a) => String(a.id) === img.dataset.att);
+    if (!att) return;
+    img.addEventListener('load', () => scheduleLayoutMosaic());
+    img.src = 'data:' + (att.mime || 'application/octet-stream') + ';base64,' + att.data;
+  });
+}
+function hydrateInlineAudioHorsLigne(root, note) {
+  const list = (note && note.attachments) || [];
+  root.querySelectorAll('.note-audio[data-att]').forEach((bloc) => {
+    if (bloc.dataset.pret === '1') return;
+    const att = list.find((a) => String(a.id) === bloc.dataset.att);
+    if (!att) return;
+    try {
+      const blob = new Blob([base64ToBytes(att.data)], { type: att.mime || 'audio/webm' });
+      brancherLecteurAudio(bloc, URL.createObjectURL(blob), blob);
+    } catch {
+      const minuteur = bloc.querySelector('.note-audio-time');
+      if (minuteur) minuteur.textContent = 'indisponible';
+    }
+  });
+}
+/* Même rôle que renderCardLabels() côté app.js (mêmes classes .label-chip
+   .label-chip-card.is-readonly, même atténuation de couleur) — state.labels
+   devient simplement le tableau "labels" passé en paramètre. */
+function renderCardLabelsHorsLigne(el, n, labels) {
+  const box = el.querySelector('.note-labels');
+  if (!box) return;
+  const assignes = (n.label_ids || []).map((id) => labels.find((l) => l.id === id)).filter(Boolean);
+  for (const l of assignes) {
+    const chip = document.createElement('span');
+    chip.className = 'label-chip label-chip-card is-readonly';
+    if (l.color && LABEL_COLOR_HEX[l.color]) chip.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_LIBELLE);
+    chip.textContent = l.name;
+    box.appendChild(chip);
+  }
+}
 
 let DONNEES = null;
 let filtreLabel = null;
@@ -11265,10 +11477,6 @@ async function dechiffrer(password) {
   return JSON.parse(new TextDecoder().decode(clair));
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-}
-
 function construireChips() {
   const zone = document.getElementById('chips');
   zone.innerHTML = '';
@@ -11281,10 +11489,16 @@ function construireChips() {
   }
 }
 
+/* Construit chaque carte avec EXACTEMENT les classes/structure DOM que
+   renderNotes() pose dans #notes-grid côté app.js (note-title-row, body,
+   ul.check, note-attachments, note-due, note-labels…) — seuls les contrôles
+   D'ÉDITION (épingler, couleur, archiver, supprimer…) sont omis : cette
+   page est en lecture seule, ils n'ont ici ni serveur ni sens. */
 function rendreGrille() {
   const terme = document.getElementById('recherche').value.trim().toLowerCase();
   const grille = document.getElementById('grille');
-  grille.innerHTML = '';
+  grille.querySelectorAll('.note').forEach((el) => el.remove());
+
   const notes = DONNEES.notes
     .filter((n) => !n.trashed)
     .filter((n) => !filtreLabel || (n.label_ids || []).includes(filtreLabel))
@@ -11294,25 +11508,60 @@ function rendreGrille() {
   document.getElementById('vide').hidden = notes.length > 0;
 
   for (const n of notes) {
-    const carte = document.createElement('article');
-    carte.className = 'carte';
+    const el = document.createElement('article');
+    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
+
     let inner = '';
-    if (n.title) inner += \`<h3>\${escapeHtml(n.title)}\${n.archived ? ' (archivée)' : ''}</h3>\`;
-    if (n.description) inner += \`<div class="desc">\${escapeHtml(n.description)}</div>\`;
-    if (n.is_checklist) {
-      inner += '<div class="corps">';
-      for (const it of (n.items || [])) {
-        inner += \`<div class="hl-ligne"><input type="checkbox" disabled \${it.checked ? 'checked' : ''}><span>\${escapeHtml(it.text)}</span></div>\`;
-      }
-      inner += '</div>';
-    } else if (n.content) {
-      inner += \`<div class="corps">\${renderFormattedHorsLigne(n.content, n)}</div>\`;
+    if (n.pinned) inner += '<span class="pin-btn" aria-hidden="true">' + ICONS.pinFilled + '</span>';
+
+    if ((n.icon && ICON_CHOICES[n.icon]) || n.title) {
+      const icon = n.icon && ICON_CHOICES[n.icon] ? '<span class="note-icon">' + ICON_CHOICES[n.icon] + '</span>' : '';
+      const titre = n.title ? '<h3>' + escapeHtml(n.title) + (n.archived ? ' (archivée)' : '') + '</h3>' : '';
+      inner += '<div class="note-title-row">' + icon + titre + '</div>';
     }
-    const noms = (n.label_ids || []).map((id) => DONNEES.labels.find((l) => l.id === id)?.name).filter(Boolean);
-    if (noms.length) inner += \`<div class="etiq">\${noms.map((x) => \`<span>\${escapeHtml(x)}</span>\`).join('')}</div>\`;
-    carte.innerHTML = inner;
-    grille.appendChild(carte);
+    if (n.description) inner += '<div class="description">' + escapeHtml(n.description) + '</div>';
+
+    if (n.is_checklist) {
+      inner += '<ul class="check">';
+      for (const it of (n.items || []).filter((i) => !i.archived)) {
+        const due = it.due_at ? '<em class="item-due-tag">' + formatDueRange(it.due_at, it.due_end_at, it.all_day) + '</em>' : '';
+        inner += '<li class="' + (it.checked ? 'done' : '') + '">'
+          + '<input type="checkbox" disabled ' + (it.checked ? 'checked' : '') + '>'
+          + '<span>' + escapeHtml(it.text) + due + '</span></li>';
+      }
+      inner += '</ul>';
+    } else if (n.content) {
+      inner += '<div class="body' + ((n.items || []).length ? ' has-note-lines' : '') + '">' + renderFormatted(n.content, false) + '</div>';
+    }
+
+    const jointes = n.attachments || [];
+    if (jointes.length) {
+      inner += '<div class="note-attachments"><div class="note-attach-files">' + ICONS.file
+        + '<span>' + jointes.length + ' fichier' + (jointes.length > 1 ? 's' : '') + '</span></div></div>';
+    }
+
+    if (n.due_at) {
+      const late = !n.done && estEnRetard(n.due_at, n.due_end_at, n.all_day);
+      inner += '<div class="note-due ' + (late ? 'late' : '') + ' ' + (n.done ? 'done' : '') + '">'
+        + '<input type="checkbox" disabled ' + (n.done ? 'checked' : '') + '>'
+        + ICONS.clock + '<span>' + formatDueRange(n.due_at, n.due_end_at, n.all_day) + '</span></div>';
+    }
+
+    inner += '<div class="note-labels"></div>';
+    el.innerHTML = inner;
+
+    hydrateInlineImagesHorsLigne(el, n);
+    hydrateInlineAudioHorsLigne(el, n);
+    hydrateLignesACocher(el, n, { editable: false, onCheck: null });
+    // Lecture seule : les cases restent visibles (même rendu que l'app),
+    // mais aucune ne doit pouvoir être cochée sans serveur pour l'enregistrer.
+    el.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.disabled = true; });
+    renderCardLabelsHorsLigne(el, n, DONNEES.labels);
+
+    grille.appendChild(el);
   }
+
+  layoutMosaic(true);
 }
 
 document.getElementById('pw-go').onclick = async () => {
@@ -11616,7 +11865,7 @@ $('#export-zip-run')?.addEventListener('click', async () => {
     fichierChiffre.set(chiffre, entete.length + salt.length + iv.length);
 
     avancement('Construction de la page…');
-    const page = construireVisionneuseHTML(fichierChiffre);
+    const page = await construireVisionneuseHTML(fichierChiffre);
     const zip = construireZipStore([{ nom: 'index.html', octets: new TextEncoder().encode(page) }]);
 
     const nomZip = `notask-copie-locale-${new Date().toISOString().slice(0, 10)}.zip`;
