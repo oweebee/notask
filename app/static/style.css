@@ -1063,6 +1063,7 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
 .agenda-item-actions button,
 .note .pin-btn,
 .label-edit-btn,
+.label-eye-btn,
 .icon-opt {
   display: grid;
   place-items: center;
@@ -1780,11 +1781,6 @@ body.is-dragging * {
 .note:hover .pin-btn, .note:focus-within .pin-btn { opacity: 1; }
 .note.pinned .pin-btn { opacity: 1; color: var(--md-primary); }
 
-/* Catégorie masquée depuis le menu latéral (œil barré) — purement visuel,
-   la note reste dans la grille et cliquable comme n'importe quelle autre,
-   voir renderLabelsDrawer()/renderNotes() dans app.js. */
-.note.note-dim { opacity: .3; transition: opacity .15s ease; }
-.note.note-dim:hover { opacity: .65; }
 
 /* Barre d'icônes : apparaît en fondu au survol, comme dans Keep.
    padding-top plutôt que margin-top : une marge appartient à la carte, pas
@@ -2604,6 +2600,12 @@ input[type=checkbox].agenda-item-check:checked::after { border-color: var(--spoo
    ligne une à une. */
 .label-eye-btn.active { opacity: 1; color: var(--spoon-bleu); }
 @media (hover: none) { .label-edit-btn, .label-eye-btn { opacity: 1; } }
+
+/* Pilule du libellé estompée quand sa catégorie est masquée dans la page
+   principale (œil barré) — le signal visuel est sur la commande elle-même,
+   à gauche ; les cartes concernées, elles, sont retirées de la grille (voir
+   renderNotes()), pas simplement atténuées. */
+.drawer-item.label-item.label-item-hidden { opacity: .35; }
 
 .label-color-grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .625rem 0; }
 .label-color-opt { width: 22px; height: 22px; }

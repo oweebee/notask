@@ -3852,7 +3852,9 @@ function renderLabelsDrawer() {
     row.className = 'label-row';
 
     const btn = document.createElement('button');
-    btn.className = 'drawer-item label-item' + (state.labelFilter === l.id ? ' active' : '');
+    btn.className = 'drawer-item label-item'
+      + (state.labelFilter === l.id ? ' active' : '')
+      + (l.hidden ? ' label-item-hidden' : '');
     btn.dataset.id = l.id;
     // Couleur en style inline plutôt qu'en classe .c-* : une classe a la même
     // spécificité CSS que .drawer-item:hover, qui l'écrasait donc au survol
@@ -4665,26 +4667,31 @@ function renderNotes() {
   // index.html) : on ne retire que les cartes de note d'un rendu précédent,
   // jamais tout le conteneur, sous peine de les faire disparaître.
   grid.querySelectorAll('.note').forEach((el) => el.remove());
-  $('#notes-empty').hidden = state.notes.length > 0;
   // Remet le message d'origine : la recherche en profondeur le remplace
   // par « Aucune notask ne contient … » quand elle est active.
   $('#notes-empty').textContent = state.showArchived
     ? 'Aucune notask archivée.'
     : state.showFavoritesOnly ? 'Aucun favori.' : 'Aucune notask.';
+  // .hidden posé plus bas, une fois le filtre des catégories masquées
+  // appliqué (voir notesAffichees) : state.notes seul compterait des notes
+  // qui ne vont justement pas s'afficher.
 
   // Libellés marqués "masqués" (œil barré, voir renderLabelsDrawer()) :
   // mis en Set une seule fois pour tout le rendu plutôt que de refaire une
   // recherche par note — la grille peut compter des centaines de cartes.
+  // Les cartes qui en portent un sont retirées de la grille (voir le filtre
+  // juste en dessous) ; le signal visuel, lui, reste sur la pilule du
+  // libellé à gauche (.label-item-hidden), pas sur les cartes.
   const libellesMasques = new Set(state.labels.filter((l) => l.hidden).map((l) => l.id));
+  const notesAffichees = libellesMasques.size === 0
+    ? state.notes
+    : state.notes.filter((n) => !(n.label_ids || []).some((id) => libellesMasques.has(id)));
 
-  for (const n of state.notes) {
+  $('#notes-empty').hidden = notesAffichees.length > 0;
+
+  for (const n of notesAffichees) {
     const el = document.createElement('article');
-    // Transparence seule (pas de display:none) : la note reste repérable et
-    // cliquable, exactement l'inverse du filtre par clic sur un libellé qui,
-    // lui, retire les autres notes de la grille.
-    const estEstompee = libellesMasques.size > 0
-      && (n.label_ids || []).some((id) => libellesMasques.has(id));
-    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '') + (estEstompee ? ' note-dim' : '');
+    el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
     el.dataset.id = n.id;
 
     /* Y a-t-il au moins une ligne à cocher ? `n.items` porte les lignes
