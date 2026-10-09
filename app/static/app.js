@@ -8496,39 +8496,60 @@ function peindreTousLesBlocs(zone) {
   });
 }
 
-/* La case en attente n'existe QUE pendant qu'on travaille sur la dernière
-   case d'un bloc — elle est une proposition, pas une ligne de la notask.
+/* Les cases en attente n'existent QUE pendant qu'on travaille sur la
+   première ou la dernière case d'un bloc — ce sont des propositions, pas
+   des lignes de la notask.
 
-   Avant, elle apparaissait dès la première frappe et ne repartait plus : une
-   notask ouverte pour la lire montrait une case vide en trop sous chaque
-   bloc, et cliquer dans un autre bloc en laissait une deuxième derrière soi.
+   Avant, une case vide apparaissait dès la première frappe et ne repartait
+   plus : une notask ouverte pour la lire montrait une case vide en trop
+   sous chaque bloc, et cliquer dans un autre bloc en laissait une deuxième
+   derrière soi.
 
-   Deux règles, tenues ici :
-   - au plus UNE case vide à la fois dans toute la zone, celle du bloc où l'on
-     se trouve ; toutes les autres sont retirées ;
-   - elle ne s'ajoute que sous la DERNIÈRE case d'un bloc. Cliquer au milieu
-     d'une liste ne propose rien : la case suivante est déjà là.
+   Désormais DEUX extrémités, symétriques, pour pouvoir énumérer aussi bien
+   « par le haut » que par le bas (demande explicite) :
+   - au plus UNE case vide par EXTRÉMITÉ de bloc (début ET fin) à la fois ;
+     toute autre case vide (ni la première, ni la dernière de son bloc, ni
+     celle où l'on se trouve) est retirée ;
+   - elle ne s'ajoute qu'AU-DESSUS de la PREMIÈRE case d'un bloc si on vient
+     d'y écrire, et qu'EN DESSOUS de la DERNIÈRE si on vient d'y écrire.
+     Cliquer au milieu d'une liste ne propose rien : la case voisine est
+     déjà là. Une case à la fois première ET dernière de son bloc (liste
+     d'une seule ligne) peut ainsi se retrouver encadrée des deux côtés dès
+     qu'on y écrit.
 
-   L'insertion est un simple insertBefore dans le flux : le reste de la notask
-   descend tout seul, il n'y a aucune position à calculer.
+   L'insertion est un simple insertBefore dans le flux : le reste de la
+   notask descend (ou reste) tout seul, il n'y a aucune position à calculer.
 
    Repeint systématiquement à la fin (voir peindreTousLesBlocs) : ajouter ou
    retirer une case en attente change la structure des blocs (une case en
-   moins ou en plus peut déplacer un arrondi de fin), et cette fonction est
-   appelée à chaque frappe — c'est le point de passage le plus fiable pour
-   garder le fond des blocs synchronisé avec le DOM réel. */
+   moins ou en plus peut déplacer un arrondi de début ou de fin), et cette
+   fonction est appelée à chaque frappe — c'est le point de passage le plus
+   fiable pour garder le fond des blocs synchronisé avec le DOM réel. */
 function majLigneAttente(zone, blocActif) {
   if (!zone) return;
   zone.querySelectorAll('.note-ligne').forEach((b) => {
     if (b === blocActif || !caseEstVide(b)) return;
     // Ne jamais retirer la case sous les doigts de l'utilisateur.
     if (b.contains(document.activeElement)) return;
+    // Case vide permanente d'une extrémité de bloc (début ou fin) : on la
+    // garde, même si ce n'est pas celle sous les doigts de l'utilisateur —
+    // sans cette garde, écrire dans la case du bas ferait disparaître celle
+    // du haut d'un AUTRE bloc de la même zone, et réciproquement.
+    const estPremiere = !voisineDuBloc(b, 'previousSibling');
+    const estDerniere = !voisineDuBloc(b, 'nextSibling');
+    if (estPremiere || estDerniere) return;
     b.remove();
   });
   if (blocActif && !caseEstVide(blocActif)) {
     const suivant = blocActif.nextElementSibling;
     if (!suivant || !suivant.classList.contains('note-ligne')) {  // dernière du bloc
       blocActif.parentNode.insertBefore(creerBlocLigne(), blocActif.nextSibling);
+    }
+    // Symétrique, pour le haut : blocActif vient d'être rempli et n'avait
+    // personne avant lui dans son bloc — on lui en redonne une, vide, pour
+    // ne jamais perdre la possibilité d'ajouter « par en haut ».
+    if (!voisineDuBloc(blocActif, 'previousSibling')) {
+      blocActif.parentNode.insertBefore(creerBlocLigne(), blocActif);
     }
   }
   peindreTousLesBlocs(zone);
@@ -8715,12 +8736,14 @@ function convertirSelectionEnCases(el, range) {
   range.deleteContents();
   const idx = pointEnfantDirect(el, range.startContainer, range.startOffset);
   const suivant = el.childNodes[idx] || null;
+  let premier = null;
   let dernier = null;
   for (const texte of lignes) {
     const bloc = creerBlocLigne();
     bloc.querySelector('.note-ligne-txt').textContent = texte;
     majCaseVide(bloc);
     el.insertBefore(bloc, suivant);
+    if (!premier) premier = bloc;
     dernier = bloc;
   }
   // La case est un bloc : elle fait déjà office de saut de ligne. Le « \n »
@@ -8729,6 +8752,11 @@ function convertirSelectionEnCases(el, range) {
     suivant.data = suivant.data.slice(1);
   }
   placerCurseurEnFin(dernier.querySelector('.note-ligne-txt'));
+  // Les deux bouts du lot converti : le premier peut avoir besoin de sa
+  // case vide au-dessus (rien avant lui dans son bloc), le dernier de la
+  // sienne en dessous — même logique que la frappe normale (voir
+  // majLigneAttente).
+  majLigneAttente(el, premier);
   majLigneAttente(el, dernier);
   el.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
@@ -11230,6 +11258,8 @@ async function construireVisionneuseHTML(fichierChiffre) {
   const srcLigneBlockHtml = ligneBlockHtml.toString();
   const srcRenderFormatted = renderFormatted.toString();
   const srcFormatDue = formatDue.toString();
+  const srcSansAccents = sansAccents.toString();
+  const srcDateSearchTerms = dateSearchTerms.toString();
   const srcFormatDueRange = formatDueRange.toString();
   const srcEstEnRetard = estEnRetard.toString();
   const srcIsoToUtcDateStr = isoToUtcDateStr.toString();
@@ -11309,6 +11339,15 @@ body { margin: 0; font-family: 'Roboto', system-ui, sans-serif; background: var(
 .hl-chip.on { background: #42a5f5; color: #0d1b2a; border-color: #42a5f5; }
 #vide { opacity: .6; text-align: center; padding: 2rem; }
 .note { cursor: default; }
+.note { cursor: pointer; }
+.note input[type=checkbox] { cursor: default; }
+#detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 2rem; z-index: 1000; }
+#detail-overlay[hidden] { display: none; }
+.hl-detail-wrap { position: relative; width: min(640px, 100%); max-height: 90vh; }
+.hl-detail-card { width: 100%; max-height: 90vh; overflow: auto; cursor: default; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+.hl-detail-card .body { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+#detail-close { position: absolute; top: -.6rem; right: -.6rem; z-index: 5; width: 2rem; height: 2rem; border-radius: 50%; background: var(--md-surface-4, #322f37); border: none; color: inherit; font-size: 1.3rem; line-height: 1; cursor: pointer; opacity: .9; }
+#detail-close:hover { opacity: 1; }
 </style>
 </head><body>
 
@@ -11327,6 +11366,13 @@ body { margin: 0; font-family: 'Roboto', system-ui, sans-serif; background: var(
   </div>
   <div id="grille" class="notes-grid"></div>
   <div id="vide" hidden>Aucune notask ne correspond.</div>
+</div>
+
+<div id="detail-overlay" hidden>
+  <div class="hl-detail-wrap">
+    <button id="detail-close" type="button" aria-label="Fermer">\u00d7</button>
+    <article id="detail-card" class="note hl-detail-card"></article>
+  </div>
 </div>
 
 <script>
@@ -11372,6 +11418,8 @@ ${srcAudioBlockHtml}
 ${srcLigneBlockHtml}
 ${srcRenderFormatted}
 ${srcFormatDue}
+${srcSansAccents}
+${srcDateSearchTerms}
 ${srcFormatDueRange}
 ${srcEstEnRetard}
 ${srcIsoToUtcDateStr}
@@ -11494,6 +11542,118 @@ function construireChips() {
    ul.check, note-attachments, note-due, note-labels…) — seuls les contrôles
    D'ÉDITION (épingler, couleur, archiver, supprimer…) sont omis : cette
    page est en lecture seule, ils n'ont ici ni serveur ni sens. */
+/* Contenu HTML d'une carte — factorisé : utilisé aussi bien pour la carte
+   tronquée à 10 lignes dans la mosaïque (voir .note .body dans style.css,
+   -webkit-line-clamp) que pour la vue détail plein texte ouverte au clic
+   (voir afficherDetailHorsLigne ci-dessous) — mêmes classes, même rendu,
+   seule la présentation autour change. */
+/* Même logique EXACTE que noteMatchesSearch() côté app.js (titre,
+   description, contenu, texte des items, noms de libellés, dates
+   d'échéance — accent-insensible via sansAccents()) : seule state.labels
+   devient le tableau "labels" déjà chargé dans DONNEES. */
+function noteMatchesSearchHorsLigne(n, q, labels) {
+  const needle = sansAccents(q.toLowerCase());
+  const libelles = (n.label_ids || [])
+    .map((id) => ((labels || []).find((l) => l.id === id) || {}).name || '')
+    .join(' ');
+  const dates = [
+    dateSearchTerms(n.due_at),
+    dateSearchTerms(n.due_end_at),
+    ...(n.items || []).map((it) => dateSearchTerms(it.due_at)),
+  ].join(' ');
+  const foin = sansAccents([
+    n.title || '',
+    n.description || '',
+    n.content || '',
+    (n.items || []).map((it) => it.text || '').join(' '),
+    libelles,
+    dates,
+  ].join(' ').toLowerCase());
+  return foin.includes(needle);
+}
+
+function construireContenuCarte(n) {
+  let inner = '';
+  if (n.pinned) inner += '<span class="pin-btn" aria-hidden="true">' + ICONS.pinFilled + '</span>';
+
+  if ((n.icon && ICON_CHOICES[n.icon]) || n.title) {
+    const icon = n.icon && ICON_CHOICES[n.icon] ? '<span class="note-icon">' + ICON_CHOICES[n.icon] + '</span>' : '';
+    const titre = n.title ? '<h3>' + escapeHtml(n.title) + (n.archived ? ' (archivée)' : '') + '</h3>' : '';
+    inner += '<div class="note-title-row">' + icon + titre + '</div>';
+  }
+  if (n.description) inner += '<div class="description">' + escapeHtml(n.description) + '</div>';
+
+  if (n.is_checklist) {
+    inner += '<ul class="check">';
+    for (const it of (n.items || []).filter((i) => !i.archived)) {
+      const due = it.due_at ? '<em class="item-due-tag">' + formatDueRange(it.due_at, it.due_end_at, it.all_day) + '</em>' : '';
+      inner += '<li class="' + (it.checked ? 'done' : '') + '">'
+        + '<input type="checkbox" disabled ' + (it.checked ? 'checked' : '') + '>'
+        + '<span>' + escapeHtml(it.text) + due + '</span></li>';
+    }
+    inner += '</ul>';
+  } else if (n.content) {
+    inner += '<div class="body' + ((n.items || []).length ? ' has-note-lines' : '') + '">' + renderFormatted(n.content, false) + '</div>';
+  }
+
+  const jointes = n.attachments || [];
+  if (jointes.length) {
+    inner += '<div class="note-attachments"><div class="note-attach-files">' + ICONS.file
+      + '<span>' + jointes.length + ' fichier' + (jointes.length > 1 ? 's' : '') + '</span></div></div>';
+  }
+
+  if (n.due_at) {
+    const late = !n.done && estEnRetard(n.due_at, n.due_end_at, n.all_day);
+    inner += '<div class="note-due ' + (late ? 'late' : '') + ' ' + (n.done ? 'done' : '') + '">'
+      + '<input type="checkbox" disabled ' + (n.done ? 'checked' : '') + '>'
+      + ICONS.clock + '<span>' + formatDueRange(n.due_at, n.due_end_at, n.all_day) + '</span></div>';
+  }
+
+  inner += '<div class="note-labels"></div>';
+  return inner;
+}
+
+/* Hydratation d'une carte déjà posée dans le DOM (images/audio insérés dans
+   le texte, lignes à cocher du texte, libellés) — factorisé pour la même
+   raison que construireContenuCarte() ci-dessus. */
+function hydraterCarte(el, n) {
+  hydrateInlineImagesHorsLigne(el, n);
+  hydrateInlineAudioHorsLigne(el, n);
+  hydrateLignesACocher(el, n, { editable: false, onCheck: null });
+  // Lecture seule : les cases restent visibles (même rendu que l'app),
+  // mais aucune ne doit pouvoir être cochée sans serveur pour l'enregistrer.
+  el.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.disabled = true; });
+  renderCardLabelsHorsLigne(el, n, DONNEES.labels);
+}
+
+/* Vue détail plein texte d'une notask, ouverte au clic sur sa carte — la
+   carte de la mosaïque tronque à 10 lignes (voir .note .body dans
+   style.css), ce détail affiche le contenu complet (titre, description,
+   items/cases, pièces jointes, libellés, échéance), en lecture seule,
+   dans un overlay fermable — pas de réplique du chrome de la vraie boîte
+   d'édition (openNoteSimpleDialog côté app.js), qui n'a pas de sens ici
+   (aucun bouton n'enregistre quoi que ce soit sans serveur). */
+function afficherDetailHorsLigne(n) {
+  const carte = document.getElementById('detail-card');
+  carte.className = 'note hl-detail-card c-' + n.color + (n.pinned ? ' pinned' : '');
+  carte.innerHTML = construireContenuCarte(n);
+  hydraterCarte(carte, n);
+  document.getElementById('detail-overlay').hidden = false;
+}
+
+function fermerDetailHorsLigne() {
+  document.getElementById('detail-overlay').hidden = true;
+  document.getElementById('detail-card').innerHTML = '';
+}
+
+document.getElementById('detail-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'detail-overlay') fermerDetailHorsLigne(); // clic hors carte
+});
+document.getElementById('detail-close').addEventListener('click', fermerDetailHorsLigne);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('detail-overlay').hidden) fermerDetailHorsLigne();
+});
+
 function rendreGrille() {
   const terme = document.getElementById('recherche').value.trim().toLowerCase();
   const grille = document.getElementById('grille');
@@ -11502,7 +11662,7 @@ function rendreGrille() {
   const notes = DONNEES.notes
     .filter((n) => !n.trashed)
     .filter((n) => !filtreLabel || (n.label_ids || []).includes(filtreLabel))
-    .filter((n) => !terme || (n.title + ' ' + n.description + ' ' + n.content).toLowerCase().includes(terme))
+    .filter((n) => !terme || noteMatchesSearchHorsLigne(n, terme, DONNEES.labels))
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   document.getElementById('vide').hidden = notes.length > 0;
@@ -11510,60 +11670,26 @@ function rendreGrille() {
   for (const n of notes) {
     const el = document.createElement('article');
     el.className = 'note c-' + n.color + (n.pinned ? ' pinned' : '');
+    el.innerHTML = construireContenuCarte(n);
+    hydraterCarte(el, n);
 
-    let inner = '';
-    if (n.pinned) inner += '<span class="pin-btn" aria-hidden="true">' + ICONS.pinFilled + '</span>';
-
-    if ((n.icon && ICON_CHOICES[n.icon]) || n.title) {
-      const icon = n.icon && ICON_CHOICES[n.icon] ? '<span class="note-icon">' + ICON_CHOICES[n.icon] + '</span>' : '';
-      const titre = n.title ? '<h3>' + escapeHtml(n.title) + (n.archived ? ' (archivée)' : '') + '</h3>' : '';
-      inner += '<div class="note-title-row">' + icon + titre + '</div>';
-    }
-    if (n.description) inner += '<div class="description">' + escapeHtml(n.description) + '</div>';
-
-    if (n.is_checklist) {
-      inner += '<ul class="check">';
-      for (const it of (n.items || []).filter((i) => !i.archived)) {
-        const due = it.due_at ? '<em class="item-due-tag">' + formatDueRange(it.due_at, it.due_end_at, it.all_day) + '</em>' : '';
-        inner += '<li class="' + (it.checked ? 'done' : '') + '">'
-          + '<input type="checkbox" disabled ' + (it.checked ? 'checked' : '') + '>'
-          + '<span>' + escapeHtml(it.text) + due + '</span></li>';
-      }
-      inner += '</ul>';
-    } else if (n.content) {
-      inner += '<div class="body' + ((n.items || []).length ? ' has-note-lines' : '') + '">' + renderFormatted(n.content, false) + '</div>';
-    }
-
-    const jointes = n.attachments || [];
-    if (jointes.length) {
-      inner += '<div class="note-attachments"><div class="note-attach-files">' + ICONS.file
-        + '<span>' + jointes.length + ' fichier' + (jointes.length > 1 ? 's' : '') + '</span></div></div>';
-    }
-
-    if (n.due_at) {
-      const late = !n.done && estEnRetard(n.due_at, n.due_end_at, n.all_day);
-      inner += '<div class="note-due ' + (late ? 'late' : '') + ' ' + (n.done ? 'done' : '') + '">'
-        + '<input type="checkbox" disabled ' + (n.done ? 'checked' : '') + '>'
-        + ICONS.clock + '<span>' + formatDueRange(n.due_at, n.due_end_at, n.all_day) + '</span></div>';
-    }
-
-    inner += '<div class="note-labels"></div>';
-    el.innerHTML = inner;
-
-    hydrateInlineImagesHorsLigne(el, n);
-    hydrateInlineAudioHorsLigne(el, n);
-    hydrateLignesACocher(el, n, { editable: false, onCheck: null });
-    // Lecture seule : les cases restent visibles (même rendu que l'app),
-    // mais aucune ne doit pouvoir être cochée sans serveur pour l'enregistrer.
-    el.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.disabled = true; });
-    renderCardLabelsHorsLigne(el, n, DONNEES.labels);
+    // Clic sur la carte (hors pièces jointes, liens, cases à cocher) :
+    // ouvre le détail plein texte — même exclusion que le vrai site
+    // (el.addEventListener('click', ...) dans renderNotes côté app.js),
+    // réduite à ce qui existe réellement ici (pas de .actions/.palette en
+    // lecture seule). Le lecteur audio (bouton, onde) fait déjà son propre
+    // e.stopPropagation() (voir brancherLecteurAudio), pas besoin de
+    // l'exclure ici.
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.pin-btn, .note-attachments, a.note-url, input')) return;
+      afficherDetailHorsLigne(n);
+    });
 
     grille.appendChild(el);
   }
 
   layoutMosaic(true);
 }
-
 document.getElementById('pw-go').onclick = async () => {
   const pw = document.getElementById('pw-champ').value;
   document.getElementById('pw-erreur').textContent = '';
