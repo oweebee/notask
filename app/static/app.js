@@ -6983,6 +6983,7 @@ function openNoteSimpleDialog(note) {
   // premier focus dans une case (voir peindreTousLesBlocs — persistant,
   // pas un simple retour de saisie).
   peindreTousLesBlocs($('#dns-content'));
+  assurerCasesViduesInitiales($('#dns-content'));
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
   $('#dns-all-day').value = note.all_day ? '1' : '';
@@ -8553,6 +8554,26 @@ function majLigneAttente(zone, blocActif) {
     }
   }
   peindreTousLesBlocs(zone);
+}
+
+/* Pose les cases vides des deux extrémités DÈS L'OUVERTURE d'une notask
+   déjà enregistrée, sans attendre un focus ou une frappe de l'utilisateur
+   dans la première/dernière case de chaque bloc — sinon une notask
+   existante, ouverte puis refermée sans y toucher, n'aurait jamais ces
+   cases vides tant qu'on n'a pas cliqué dedans au moins une fois.
+
+   Même règle, même fonction (majLigneAttente) : on l'appelle juste une
+   fois par bloc réel (première ou dernière case, les deux si le bloc n'a
+   qu'une case), sur un instantané des cases (querySelectorAll n'est pas
+   une liste vivante) pour ne pas revisiter les cases vides qu'on vient
+   d'insérer. */
+function assurerCasesViduesInitiales(zone) {
+  if (!zone) return;
+  for (const b of zone.querySelectorAll('.note-ligne')) {
+    if (!voisineDuBloc(b, 'previousSibling') || !voisineDuBloc(b, 'nextSibling')) {
+      majLigneAttente(zone, b);
+    }
+  }
 }
 
 /* Rend une ligne interactive dans une zone de saisie. Idempotent : appelé
