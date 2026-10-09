@@ -5759,8 +5759,14 @@ activerClicEntreChamps($('#dlg-note-simple .dns-card'), $('#dns-content'));
    cette ligne en fasse réapparaître une nouvelle juste en dessous — même
    principe que la ligne d'attente des cases à cocher, transposé au texte
    libre. Idempotente : ne touche rien si la ligne libre existe déjà. */
-$('#nc-content').addEventListener('input', () => assurerLigneApresBloc($('#nc-content')));
-$('#dns-content').addEventListener('input', () => assurerLigneApresBloc($('#dns-content')));
+$('#nc-content').addEventListener('input', () => {
+  assurerLigneAvantBloc($('#nc-content'));
+  assurerLigneApresBloc($('#nc-content'));
+});
+$('#dns-content').addEventListener('input', () => {
+  assurerLigneAvantBloc($('#dns-content'));
+  assurerLigneApresBloc($('#dns-content'));
+});
 // Voir protegerCopieCodeBackspace() : empêche Backspace d'effacer la
 // pastille de copie d'un bloc de code au lieu de la ligne vide de tête.
 $('#nc-content').addEventListener('keydown', protegerCopieCodeBackspace);
@@ -6984,6 +6990,7 @@ function openNoteSimpleDialog(note) {
   // pas un simple retour de saisie).
   peindreTousLesBlocs($('#dns-content'));
   assurerCasesViduesInitiales($('#dns-content'));
+  assurerLigneAvantBloc($('#dns-content'));
   $('#dns-due').value = note.due_at || '';
   $('#dns-due-end').value = note.due_end_at || '';
   $('#dns-all-day').value = note.all_day ? '1' : '';
@@ -7481,6 +7488,44 @@ function assurerLigneApresBloc(el) {
   el.appendChild(document.createElement('br'));
 }
 
+/* Symétrique de assurerLigneApresBloc() ci-dessus, pour le DÉBUT de la
+   zone cette fois — demandé explicitement : pouvoir aussi ajouter du
+   contenu "par le haut", sans avoir à placer le curseur au tout début et
+   décaler le reste à la main. Même raisonnement, même garanties
+   (idempotente, aucune dérive de contenu), simplement en tête plutôt
+   qu'en fin de zone : un <br> ouvre la première ligne de contenu si elle
+   n'en avait pas déjà un, et un second, toujours ajouté, devient la ligne
+   libre proprement dite — celle sur laquelle on clique et on tape "avant"
+   le reste. Voir richToText() pour la purge symétrique au moment
+   d'enregistrer (sinon ce doublon finirait dans le contenu sauvegardé). */
+function assurerLigneAvantBloc(el) {
+  if (!el) return;
+  while (el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE && el.firstChild.textContent === '') {
+    el.removeChild(el.firstChild);
+  }
+  let premier = el.firstChild;
+  if (!premier) return;
+
+  // Mirroir du matérialisation de fin : un \n en tout début de texte ne
+  // montre pas forcément de ligne cliquable à l'écran (même constat Chrome
+  // que pour la fin de zone) — on le matérialise en vrai <br>.
+  if (premier.nodeType === Node.TEXT_NODE && /^\n/.test(premier.textContent)) {
+    premier.textContent = premier.textContent.replace(/^\n/, '');
+    el.insertBefore(document.createElement('br'), el.firstChild);
+    premier = el.firstChild;
+  }
+
+  const premierEstBr = premier.nodeType === Node.ELEMENT_NODE && premier.tagName === 'BR';
+  const apresPremier = premierEstBr ? premier.nextSibling : null;
+  const apresPremierEstBr = !!apresPremier
+    && apresPremier.nodeType === Node.ELEMENT_NODE && apresPremier.tagName === 'BR';
+
+  if (premierEstBr && apresPremierEstBr) return; // déjà les deux <br> : rien à faire
+
+  if (!premierEstBr) el.insertBefore(document.createElement('br'), el.firstChild);
+  el.insertBefore(document.createElement('br'), el.firstChild);
+}
+
 /* Cliquer dans le vide SOUS le texte place le curseur à la fin, comme dans
    n'importe quel traitement de texte.
 
@@ -7774,6 +7819,30 @@ function richToText(root) {
     // finaux[0] = le tout dernier <br> (le plus externe) … finaux[last] =
     // celui collé au vrai contenu, à garder. On retire tous les autres.
     for (let i = 0; i < finaux.length - 1; i++) finaux[i].remove();
+  }
+
+  /* Même purge, symétrique, pour la ligne libre DE TÊTE (voir
+     assurerLigneAvantBloc) : la zone commence TOUJOURS par DEUX <br>, on ne
+     garde que le DERNIER des <br> initiaux (le plus proche du vrai contenu,
+     qui l'ouvre) et on retire les autres avant de convertir. */
+  {
+    const initiaux = [];
+    let n = root.firstChild;
+    while (n) {
+      if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') {
+        initiaux.push(n);
+        n = n.nextSibling;
+        continue;
+      }
+      if (n.nodeType === Node.TEXT_NODE && n.textContent === '') {
+        n = n.nextSibling;
+        continue;
+      }
+      break;
+    }
+    // initiaux[0] = le tout premier <br> (le plus externe) … initiaux[last] =
+    // celui collé au vrai contenu, à garder. On retire tous les autres.
+    for (let i = 0; i < initiaux.length - 1; i++) initiaux[i].remove();
   }
 
   function walk(node) {
