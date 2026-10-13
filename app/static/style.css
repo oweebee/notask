@@ -3384,14 +3384,21 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Pastille de copie d'un bloc de code, en haut à droite. Visible en
    permanence et non au survol : c'est un raccourci qu'on doit voir pour
    savoir qu'il existe. Injectée par ajouterBoutonsCopieCode() dans app.js,
-   pas par renderFormatted(), pour ne jamais finir dans le texte enregistré. */
+   pas par renderFormatted(), pour ne jamais finir dans le texte enregistré.
+   Simple `float: right`, PAS sticky par défaut : un bouton sticky n'a de
+   sens que dans un bloc qui défile DANS SA PROPRE boîte (voir l'exception
+   .note .note-code-block ci-dessous, seul cas qui en a une) — ailleurs
+   (éditeurs #dns-content/#nc-content, historique, copie locale...) le
+   bloc n'a pas de défilement interne, seule la PAGE/le dialogue défile :
+   un sticky y est alors contraint par la hauteur de son propre bloc, qui
+   varie selon la longueur du code — un bloc court pousse vite le bouton
+   en BAS au lieu du haut en défilant, un bloc long le garde en haut plus
+   longtemps. D'où le bug signalé : la position dépendait de la hauteur de
+   CHAQUE bloc, pas d'un calcul JS (aucun calcul de position en JS ici,
+   tout est posé par ce CSS). Un simple float, sans sticky, reste toujours
+   en haut du bloc (il défile avec lui) — cohérent partout. */
 .code-copy-btn {
-  /* sticky + float : le bouton reste en haut à droite de la PARTIE VISIBLE
-     du bloc quand un code long défile avec la carte. En `absolute` il
-     restait collé au sommet du bloc et sortait de l'écran dès qu'on
-     descendait dans un code de plusieurs lignes. */
-  position: sticky;
-  top: .35rem;
+  position: static;
   float: right;
   margin-left: .5rem;
   width: 26px;
@@ -3407,6 +3414,17 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 }
 .code-copy-btn:hover { background: var(--spoon-bleu); color: #0d1b2a; }
 .code-copy-btn svg { width: 14px; height: 14px; display: block; }
+/* Seule exception : la CARTE (.note .note-code-block a son propre
+   `overflow-y: auto` + `max-height`, voir plus haut) — là, le bloc défile
+   DANS SA PROPRE boîte, donc le sticky reste valide et utile (évite que le
+   bouton sorte par le haut quand on fait défiler un long code dans la
+   carte, sans jamais pouvoir être poussé vers le bas puisqu'il reste dans
+   SA zone de défilement à lui, qui a la même hauteur visible en
+   permanence). */
+.note .note-code-block .code-copy-btn {
+  position: sticky;
+  top: .35rem;
+}
 dialog h2 { margin: 0 0 1.5rem; font-size: 1.5rem; font-weight: 400; }
 .dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; }
 
