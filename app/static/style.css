@@ -107,6 +107,19 @@ html.mode-gris .agenda-col .agenda-item::before,
 html.mode-gris #view-tasks .agenda-item::before { background: #3d3d3d; }
 html.mode-gris .agenda-col .agenda-item > *:not(.agenda-item-icon),
 html.mode-gris #view-tasks .agenda-item > *:not(.agenda-item-icon) { filter: grayscale(1); }
+/* Exception : les lignes "en retard" gardent leur rouge même en mode gris
+   (voir .agenda-item.late .agenda-item-due plus bas). On ne peut pas
+   repasser en couleur un enfant déjà grisé par le filtre de son parent
+   (un filter CSS rasterise tout le sous-arbre, un filter:none posé dessus
+   ne l'annule pas — même piège que le filtre global sur <html>) : il faut
+   donc exclure .agenda-item-body du filtre, pas le recolorer après coup.
+   Le texte du titre n'y perd rien, il n'a pas de teinte propre. Même
+   logique pour le h2 de la colonne "en retard", déjà rouge via
+   .agenda-group.late h2 (règle juste au-dessus). */
+html.mode-gris .agenda-col .agenda-group.late > h2,
+html.mode-gris #view-tasks .agenda-group.late > h2 { filter: none; }
+html.mode-gris .agenda-col .agenda-item.late > *:not(.agenda-item-icon),
+html.mode-gris #view-tasks .agenda-item.late > *:not(.agenda-item-icon) { filter: none; }
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
    chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
@@ -1257,6 +1270,12 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* En retard (t.bucket === 'late', voir creerLigneAgenda() dans app.js) :
+   rouge sur la date, même teinte que .agenda-group.late h2 (var(--md-error))
+   pour rester cohérent. Variante foncée sur fond clair (.c-white), même
+   principe que .c-white .note-due.late plus bas dans ce fichier. */
+.agenda-item.late .agenda-item-due { color: var(--md-error); font-weight: 600; }
+.agenda-item.late.c-white .agenda-item-due { color: #8c1d21; }
 .agenda-empty { padding: 0 0 0 .125rem; text-align: left; font-size: .8125rem; }
 
 /* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),

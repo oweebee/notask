@@ -422,7 +422,7 @@ def list_notes(
     archived: bool = Query(default=False, description="Afficher les notasks archivées"),
     trashed: bool = Query(default=False, description="Afficher la corbeille au lieu des notasks normales"),
     q: Optional[str] = Query(default=None, description="Recherche titre et contenu"),
-    label: Optional[int] = Query(default=None, description="Filtrer par identifiant de libellé"),
+    label: Optional[List[int]] = Query(default=None, description="Filtrer par identifiant(s) de libellé (OU/union, plusieurs valeurs possibles)"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -467,8 +467,8 @@ def list_notes(
         notes = session.exec(
             stmt.order_by(Note.pinned.desc(), Note.position.desc(), Note.updated_at.desc())
         ).all()
-    if label is not None:
-        notes = [n for n in notes if label in (n.label_ids or [])]
+    if label:
+        notes = [n for n in notes if any(lid in (n.label_ids or []) for lid in label)]
     return notes
 
 

@@ -483,7 +483,7 @@ let state = {
   editingNote: null,
   editingNoteItems: [],
   labels: [],
-  labelFilter: null,
+  labelFilters: new Set(),
   editingLabelIds: [],
   // Couleur en cours d'édition dans la boîte d'édition rapide (la boîte
   // "Modifier" complète, elle, écrit directement dans state.editingNote).
@@ -499,6 +499,62 @@ let state = {
   composerIcon: null,
   editingIcon: null,
 };
+
+/* Filtre par libellé (state.labelFilters) : persistant PAR ONGLET, pas
+   partagé entre onglets — sessionStorage plutôt que localStorage, à la
+   demande explicite. Chaque onglet garde ainsi SA sélection après un
+   F5/rechargement, indépendamment des autres onglets ouverts sur la même
+   appli. Multi-sélection confirmée (OU/union : une notask s'affiche si
+   elle porte AU MOINS un des libellés filtrés) — state.labelFilters est un
+   Set d'ids, vide = pas de filtre. Aucun autre état de FILTRE/AFFICHAGE
+   côté client n'existe à sauvegarder ici — le "masquage" d'un libellé
+   (l.hidden) est un réglage SERVEUR par libellé, déjà persistant (PATCH
+   /labels/:id), partagé entre tous les onglets ET tous les appareils :
+   rien à faire dessus. */
+const LABEL_FILTER_KEY = 'notask_label_filter';
+function persisterLabelFilters() {
+  try {
+    if (state.labelFilters.size) {
+      sessionStorage.setItem(LABEL_FILTER_KEY, JSON.stringify([...state.labelFilters]));
+    } else {
+      sessionStorage.removeItem(LABEL_FILTER_KEY);
+    }
+  } catch { /* stockage refusé : le filtre reste actif pour l'onglet, simplement pas restauré après F5 */ }
+}
+function toggleLabelFilter(id) {
+  if (state.labelFilters.has(id)) state.labelFilters.delete(id);
+  else state.labelFilters.add(id);
+  persisterLabelFilters();
+}
+function removeLabelFilter(id) {
+  if (!state.labelFilters.has(id)) return;
+  state.labelFilters.delete(id);
+  persisterLabelFilters();
+}
+function clearLabelFilters() {
+  if (!state.labelFilters.size) return;
+  state.labelFilters.clear();
+  persisterLabelFilters();
+}
+function chargerLabelFilter() {
+  state.labelFilters = new Set();
+  try {
+    const sauve = sessionStorage.getItem(LABEL_FILTER_KEY);
+    if (sauve) {
+      let ids = null;
+      try { ids = JSON.parse(sauve); } catch { ids = null; }
+      if (Array.isArray(ids)) {
+        for (const n of ids) { const v = Number(n); if (v) state.labelFilters.add(v); }
+      } else {
+        // Ancien format (scalaire, avant la multi-sélection) : un simple
+        // nombre stocké tel quel par l'ancien setLabelFilter(). On le
+        // migre en filtre à un seul id plutôt que de le jeter.
+        const v = Number(sauve);
+        if (v) state.labelFilters.add(v);
+      }
+    }
+  } catch { /* stockage refusé : filtre reparti à vide, sans conséquence grave */ }
+}
 
 const BUCKET_LABELS = {
   late: 'notasks en retard',
@@ -2664,6 +2720,12 @@ function enterApp() {
   const notaskParam = new URLSearchParams(location.search).get('notask');
   if (notaskParam && /^\d+$/.test(notaskParam)) notaskDemandeeParUrl = Number(notaskParam);
 
+  // Filtre par libellé restauré AVANT loadLabels()/switchView('notes') ci-
+  // dessous (qui déclenchent le premier rendu du tiroir et le premier
+  // loadNotes()) : sinon la mosaïque et le tiroir partiraient un instant
+  // sans filtre, puis sauteraient dessus.
+  chargerLabelFilter();
+
   loadLabels();
   declarerFuseauHoraire();
   switchView('notes');
@@ -3186,14 +3248,14 @@ $('#profil-password').addEventListener('click', () => {
 });
 // Un libellé cliqué (bouton .label-item, sans [data-view] — donc pas visé
 // par ce sélecteur, aucun double-déclenchement possible ici) gère lui-même
-// state.labelFilter et son propre appel à switchView() le cas échéant (voir
+// state.labelFilters et son propre appel à switchView() le cas échéant (voir
 // renderLabelsDrawer()). Les VRAIES entrées de menu (notasks, favoris,
 // archives...) ci-dessous doivent en revanche effacer un filtre par
 // libellé resté actif : sinon la liste reste filtrée sans indice visible,
 // il fallait recliquer sur le libellé ou recharger la page pour s'en sortir.
 $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
-  if (state.labelFilter) {
-    state.labelFilter = null;
+  if (state.labelFilters.size) {
+    clearLabelFilters();
     renderLabelsDrawer();
   }
   // "Notasks" spécifiquement : une recherche en cours resterait sinon
@@ -3213,8 +3275,8 @@ $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
 // clientWidth qu'en mobile (le carrousel), donc ce scrollTo ne fait rien de
 // visible sur desktop : la colonne y est déjà affichée en permanence.
 $('#nav-tasks').addEventListener('click', () => {
-  if (state.labelFilter) {
-    state.labelFilter = null;
+  if (state.labelFilters.size) {
+    clearLabelFilters();
     renderLabelsDrawer();
   }
   // Deux comportements selon la largeur, à la demande : en mobile, pas la
@@ -3527,7 +3589,7 @@ async function loadNotes() {
   // toute nouvelle liste repart avec l'icône barrée et les lignes masquées.
   state.visibleCheckedNoteIds.clear();
   const params = new URLSearchParams({ archived: state.showArchived });
-  if (state.labelFilter) params.set('label', state.labelFilter);
+  for (const id of state.labelFilters) params.append('label', id);
   const notes = await api('/notes?' + params);
   await Promise.all(notes.map(decryptNote));
   let filtered = notes;
@@ -3853,7 +3915,7 @@ function renderLabelsDrawer() {
 
     const btn = document.createElement('button');
     btn.className = 'drawer-item label-item'
-      + (state.labelFilter === l.id ? ' active' : '')
+      + (state.labelFilters.has(l.id) ? ' active' : '')
       + (l.hidden ? ' label-item-hidden' : '');
     btn.dataset.id = l.id;
     // Couleur en style inline plutôt qu'en classe .c-* : une classe a la même
@@ -3873,7 +3935,7 @@ function renderLabelsDrawer() {
       // garde-fou, relâcher le doigt/la souris après avoir réordonné le
       // libellé le filtrerait aussi, ce qui n'est pas le geste voulu.
       if (geleParGlisser(row)) return;
-      state.labelFilter = state.labelFilter === l.id ? null : l.id;
+      toggleLabelFilter(l.id);
       if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
       else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
     };
@@ -3881,7 +3943,7 @@ function renderLabelsDrawer() {
       e.preventDefault();
       if (!confirm(`Supprimer le libellé « ${l.name} » ?`)) return;
       await api('/labels/' + l.id, { method: 'DELETE' });
-      if (state.labelFilter === l.id) state.labelFilter = null;
+      removeLabelFilter(l.id);
       loadLabels();
       loadNotes();
     };
@@ -4078,7 +4140,7 @@ function openLabelEditPopup(anchor, label) {
     } catch (err) {
       alert(err.message);
     }
-    if (state.labelFilter === label.id) state.labelFilter = null;
+    removeLabelFilter(label.id);
     loadLabels();
     loadNotes();
   };
@@ -4116,7 +4178,7 @@ function notesReorderable() {
      notasks non affichées. Restent exclus les vrais sous-ensembles filtrés
      — favoris, recherche, libellé — pour cette raison-là précisément. */
   return !state.showFavoritesOnly && !state.search
-    && !state.deepSearch && !state.labelFilter;
+    && !state.deepSearch && !state.labelFilters.size;
 }
 
 /* Vrai masonry (empilement par colonnes), en positionnement absolu — plus
@@ -5601,6 +5663,17 @@ function resetComposer() {
 function composerExpand() {
   if (composerExpanded) return;
   composerExpanded = true;
+  /* Les libellés filtrés à gauche (state.labelFilters, voir
+     renderLabelsDrawer — multi-sélection confirmée, union/OU) s'appliquent
+     d'office à la notask qu'on démarre — sans ça, retrouver une notask
+     créée pendant qu'un filtre actif masquait la mosaïque réclamait de la
+     ré-étiqueter à la main après coup. TOUS les libellés filtrés sont
+     repris, pas juste un. Rien ne s'applique si aucun filtre n'est actif
+     (composerLabelIds reste tel que resetComposer() l'a laissé). */
+  if (state.labelFilters.size) {
+    composerLabelIds = [...state.labelFilters];
+    renderComposerLabelChips();
+  }
   // Démarrer une nouvelle notask pendant qu'une recherche filtre encore la
   // mosaïque prêtait à confusion (la notask fraîchement créée pouvait ne
   // pas apparaître, exclue par le filtre) — voir viderRecherches().
@@ -10635,12 +10708,13 @@ async function updateTaskBadges() {
    gestionnaire de clic de #nav-tasks). Aucune limite de date : toutes les
    échéances à venir y figurent, par ordre chronologique. Les tâches
    terminées n'y figurent pas.
-   Un libellé sélectionné (state.labelFilter, voir renderLabelsDrawer) doit
-   filtrer cette colonne comme il filtre la mosaïque : /api/tasks n'a pas de
-   paramètre "label" (une tâche ne porte pas ses libellés, seule la notask
-   qui la contient les porte), donc on redemande la liste des notasks pour
-   ce libellé — juste leurs id, pas de déchiffrement nécessaire — et on ne
-   garde que les tâches dont la notask parente y figure. */
+   Les libellés sélectionnés (state.labelFilters, voir renderLabelsDrawer —
+   union/OU) doivent filtrer cette colonne comme ils filtrent la mosaïque :
+   /api/tasks n'a pas de paramètre "label" (une tâche ne porte pas ses
+   libellés, seule la notask qui la contient les porte), donc on redemande
+   la liste des notasks pour CES libellés — juste leurs id, pas de
+   déchiffrement nécessaire — et on ne garde que les tâches dont la notask
+   parente y figure. */
 async function loadAgenda() {
   let tasks;
   try {
@@ -10661,8 +10735,9 @@ async function loadAgenda() {
     if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
     return true;
   });
-  if (state.labelFilter) {
-    const params = new URLSearchParams({ archived: state.showArchived, label: state.labelFilter });
+  if (state.labelFilters.size) {
+    const params = new URLSearchParams({ archived: state.showArchived });
+    for (const id of state.labelFilters) params.append('label', id);
     let notesDuLibelle;
     try {
       notesDuLibelle = await api('/notes?' + params);
@@ -10830,7 +10905,7 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
   // Fond = couleur propre de la note d'origine (même classe .c-* que
   // sur sa carte), pas un simple repère en bordure : on veut
   // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
-  btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '');
+  btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '') + (t.bucket === 'late' ? ' late' : '');
   /* Même traitement que les libellés du menu d'en face (voir
      renderLabelsDrawer et ATTENUATION_PASTILLE) : la teinte de la notask,
      atténuée, au lieu de l'aplat vif de la classe .c-*. Les deux colonnes
