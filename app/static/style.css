@@ -120,6 +120,11 @@ html.mode-gris .agenda-col .agenda-group.late > h2,
 html.mode-gris #view-tasks .agenda-group.late > h2 { filter: none; }
 html.mode-gris .agenda-col .agenda-item.late > *:not(.agenda-item-icon),
 html.mode-gris #view-tasks .agenda-item.late > *:not(.agenda-item-icon) { filter: none; }
+/* Même chose pour les lignes "du jour" (fond vert, voir
+   .agenda-item.today .agenda-item-due plus bas) — exclusion du filtre,
+   même raison que ci-dessus. */
+html.mode-gris .agenda-col .agenda-item.today > *:not(.agenda-item-icon),
+html.mode-gris #view-tasks .agenda-item.today > *:not(.agenda-item-icon) { filter: none; }
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
    chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
@@ -1270,12 +1275,14 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* En retard (t.bucket === 'late', voir creerLigneAgenda() dans app.js) :
-   rouge sur la date, même teinte que .agenda-group.late h2 (var(--md-error))
-   pour rester cohérent. Variante foncée sur fond clair (.c-white), même
-   principe que .c-white .note-due.late plus bas dans ce fichier. */
-.agenda-item.late .agenda-item-due { color: var(--md-error); font-weight: 600; }
-.agenda-item.late.c-white .agenda-item-due { color: #8c1d21; }
+/* En retard / du jour (t.bucket === 'late'/'today', voir creerLigneAgenda()
+   dans app.js) : fond coloré + texte blanc sur la date, pas juste le texte
+   — à la demande. Teintes reprises des VRAIES couleurs de carte .c-red et
+   .c-green (pas de couleur inventée), donc lisibles quelle que soit la
+   couleur propre de la ligne (le fond devient opaque, il n'est plus
+   besoin d'une variante .c-white séparée comme avant). */
+.agenda-item.late .agenda-item-due { background: #ab4047; color: #fff; font-weight: 600; padding: 0 .35rem; border-radius: var(--shape-sm); }
+.agenda-item.today .agenda-item-due { background: #2f7a3c; color: #fff; font-weight: 600; padding: 0 .35rem; border-radius: var(--shape-sm); }
 .agenda-empty { padding: 0 0 0 .125rem; text-align: left; font-size: .8125rem; }
 
 /* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),

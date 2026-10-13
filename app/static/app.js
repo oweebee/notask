@@ -10905,7 +10905,8 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
   // Fond = couleur propre de la note d'origine (même classe .c-* que
   // sur sa carte), pas un simple repère en bordure : on veut
   // reconnaître la note d'un coup d'œil, pas juste voir "une tâche".
-  btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '') + (t.bucket === 'late' ? ' late' : '');
+  btn.className = 'agenda-item c-' + t.color + (t.done ? ' done' : '')
+    + (t.bucket === 'late' ? ' late' : '') + (t.bucket === 'today' ? ' today' : '');
   /* Même traitement que les libellés du menu d'en face (voir
      renderLabelsDrawer et ATTENUATION_PASTILLE) : la teinte de la notask,
      atténuée, au lieu de l'aplat vif de la classe .c-*. Les deux colonnes
