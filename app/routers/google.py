@@ -31,16 +31,16 @@ from sqlmodel import Session, select
 from app import google_calendar as gcal
 from app import google_drive as gdrive
 from app.db import get_session
-from app.deps import get_current_admin, get_current_user
+from app.deps import get_current_user
 from app.models import (
     GoogleAccount,
     GoogleAccountStatus,
-    GoogleAdminConfigIn,
-    GoogleAdminConfigOut,
-    GoogleAppConfig,
     GoogleCalendarIn,
     GoogleFeaturesIn,
     GoogleOAuthState,
+    GoogleUserAppConfig,
+    GoogleUserConfigIn,
+    GoogleUserConfigOut,
     Note,
     NoteItem,
     User,
@@ -98,12 +98,6 @@ def connect(
     token: str = Query(...),
     session: Session = Depends(get_session),
 ):
-    if not gcal.is_configured(session):
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Intégration Google Calendar non configurée côté serveur (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET manquants)",
-        )
-
     user_id = decode_access_token(token)
     if user_id is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session invalide ou expirée")
@@ -111,13 +105,22 @@ def connect(
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session invalide ou expirée")
 
+    # is_configured() dépend maintenant de CET utilisateur (GoogleUserAppConfig,
+    # bascule franche, plus de réglage global) : il faut donc le résoudre
+    # avant de pouvoir vérifier la config, contrairement à avant.
+    if not gcal.is_configured(session, user.id):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Identifiants Google (Client ID/Secret) non configurés pour ce compte — voir Profil.",
+        )
+
     _purge_expired_states(session)
 
     state = gcal.new_state_token()
     session.add(GoogleOAuthState(state=state, user_id=user.id))
     session.commit()
 
-    url = gcal.build_authorize_url(_redirect_uri(request), state, session)
+    url = gcal.build_authorize_url(_redirect_uri(request), state, session, user.id)
     return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
@@ -144,7 +147,7 @@ def callback(
     session.commit()
 
     try:
-        tokens = gcal.exchange_code(code, _redirect_uri(request), session)
+        tokens = gcal.exchange_code(code, _redirect_uri(request), session, user_id)
     except Exception:
         return RedirectResponse("/?google=error", status_code=status.HTTP_302_FOUND)
 
@@ -261,34 +264,36 @@ def disconnect(
     session.commit()
 
 
-# ------------------------- Configuration (admin) -------------------------
-# Identifiants OAuth de l'appli (Client ID/Secret Google Cloud) — une seule
-# ligne pour toute l'installation (GoogleAppConfig), pas par utilisateur.
-# Alternative à GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET en variables
-# d'environnement : les deux fonctionnent, la base est prioritaire (voir
-# google_calendar._client_config()). Réservé aux administrateurs — ce sont
-# des identifiants pour toute l'installation, pas un réglage personnel.
+# --------------------------- Configuration (perso) ---------------------------
+# Identifiants OAuth Google (Client ID/Secret Google Cloud) PAR UTILISATEUR
+# (GoogleUserAppConfig) — bascule franche : il n'y a plus de réglage
+# partagé pour toute l'installation (voir models.py, ancien GoogleAppConfig.
+# client_id/client_secret, retirés) ni de repli sur variables
+# d'environnement. Ouvert à tout utilisateur connecté (get_current_user,
+# pas get_current_admin) : chacun ne lit/modifie que SA PROPRE ligne.
 
-@router.get("/admin-config", response_model=GoogleAdminConfigOut)
-def get_admin_config(
-    admin: User = Depends(get_current_admin),
+@router.get("/my-config", response_model=GoogleUserConfigOut)
+def get_my_config(
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return GoogleAdminConfigOut(**gcal.config_status(session))
+    return GoogleUserConfigOut(**gcal.config_status(session, user.id))
 
 
-@router.put("/admin-config", status_code=status.HTTP_204_NO_CONTENT)
-def set_admin_config(
-    payload: GoogleAdminConfigIn,
-    admin: User = Depends(get_current_admin),
+@router.put("/my-config", status_code=status.HTTP_204_NO_CONTENT)
+def set_my_config(
+    payload: GoogleUserConfigIn,
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    row = session.exec(select(GoogleAppConfig)).first()
+    row = session.exec(
+        select(GoogleUserAppConfig).where(GoogleUserAppConfig.user_id == user.id)
+    ).first()
     if row is None:
-        row = GoogleAppConfig()
+        row = GoogleUserAppConfig(user_id=user.id)
     row.client_id = payload.client_id.strip()
     # Secret vide => on garde l'existant (cf. commentaire sur
-    # GoogleAdminConfigIn) ; s'il n'y en avait pas encore, la config reste
+    # GoogleUserConfigIn) ; s'il n'y en avait pas encore, la config reste
     # incomplète (is_configured()/config_status() l'ignoreront) plutôt que
     # d'échouer bruyamment ici.
     if payload.client_secret and payload.client_secret.strip():
@@ -298,13 +303,19 @@ def set_admin_config(
     session.commit()
 
 
-@router.delete("/admin-config", status_code=status.HTTP_204_NO_CONTENT)
-def clear_admin_config(
-    admin: User = Depends(get_current_admin),
+@router.delete("/my-config", status_code=status.HTTP_204_NO_CONTENT)
+def clear_my_config(
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    """Revient aux variables d'environnement (si présentes) ou à rien."""
-    row = session.exec(select(GoogleAppConfig)).first()
+    """Efface les identifiants perso de cet utilisateur. Plus de repli
+    (ni variables d'environnement, ni réglage global) : ses connexions
+    Google existantes resteront visibles mais ne pourront plus se
+    rafraîchir tant qu'il n'aura pas reconfiguré puis reconnecté son
+    compte (voir needs_reauth dans _valid_access_token)."""
+    row = session.exec(
+        select(GoogleUserAppConfig).where(GoogleUserAppConfig.user_id == user.id)
+    ).first()
     if row is not None:
         session.delete(row)
         session.commit()

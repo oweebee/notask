@@ -3041,17 +3041,10 @@ $('#btn-profil').addEventListener('click', () => {
   $('#profil-zoom-val').textContent = zoomActuel + ' %';
   $('#dlg-profil').showModal();
   animerOuvertureDialogue($('#dlg-profil'));
-  // Identifiants OAuth de l'installation : réservés aux administrateurs
-  // (le serveur les refuserait de toute façon à un compte non admin, mais
-  // autant ne pas afficher des champs qui échoueraient systématiquement).
-  // Les boutons Effacer/Enregistrer des identifiants d'installation vivent
-  // désormais dans la rangée d'actions COMMUNE (hors de #admin-google, pour
-  // qu'un non-admin garde le bouton Déconnecter) : ils doivent donc être
-  // masqués séparément du bloc de champs.
-  $('#admin-google').hidden = !state.user.is_admin;
-  $('#ga-clear').hidden = !state.user.is_admin;
-  $('#ga-save').hidden = !state.user.is_admin;
-  if (state.user.is_admin) loadGoogleAdminConfig();
+  // Identifiants OAuth PERSO (Client ID/Secret Google) : visibles de tous
+  // désormais (bascule franche, plus de réglage partagé réservé aux
+  // administrateurs — voir /api/google/my-config côté serveur).
+  loadGoogleMyConfig();
   refreshGoogleStatus();
 });
 
@@ -11077,22 +11070,21 @@ $('#btn-new-user').addEventListener('click', () => {
   $('#dlg-user').showModal();
 });
 
-/* --------------------- Comptes : config Google Calendar --------------------
-   Une seule ligne pour toute l'installation (voir GoogleAppConfig côté
-   serveur) — Client ID/Secret OAuth, alternative aux variables
-   d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Chargée à chaque
-   ouverture de l'onglet Comptes (voir switchView('admin') plus haut). */
-async function loadGoogleAdminConfig() {
+/* --------------------- Identifiants Google personnels --------------------
+   Client ID/Secret OAuth PAR UTILISATEUR (voir GoogleUserAppConfig côté
+   serveur, /api/google/my-config) — bascule franche : plus de réglage
+   partagé pour toute l'installation, plus de repli sur des variables
+   d'environnement. Chargés à chaque ouverture de Profil. */
+async function loadGoogleMyConfig() {
   msg($('#ga-msg'), '');
   try {
-    const cfg = await api('/google/admin-config');
+    const cfg = await api('/google/my-config');
     $('#ga-client-id').value = cfg.client_id || '';
     $('#ga-client-secret').value = '';
     $('#ga-client-secret').placeholder = cfg.has_secret
       ? '••••••••  (laisser vide pour ne pas changer)'
       : '(non renseigné)';
-    const src = { database: 'configuré depuis cet écran', environment: 'configuré via une variable d’environnement', none: 'non configuré' }[cfg.source] || '';
-    $('#admin-google-source').textContent = src ? `Statut : ${src}.` : '';
+    $('#admin-google-source').textContent = cfg.client_id ? '' : 'Aucun identifiant enregistré pour votre compte.';
   } catch (err) {
     $('#admin-google-source').textContent = 'Statut indisponible : ' + err.message;
   }
@@ -11102,23 +11094,23 @@ $('#ga-save').addEventListener('click', async () => {
   const clientId = $('#ga-client-id').value.trim();
   if (!clientId) return msg($('#ga-msg'), 'Le Client ID est obligatoire.');
   try {
-    await api('/google/admin-config', {
+    await api('/google/my-config', {
       method: 'PUT',
       body: { client_id: clientId, client_secret: $('#ga-client-secret').value.trim() || null },
     });
     msg($('#ga-msg'), 'Enregistré.', 'ok');
-    loadGoogleAdminConfig();
+    loadGoogleMyConfig();
   } catch (err) {
     msg($('#ga-msg'), err.message);
   }
 });
 
 $('#ga-clear').addEventListener('click', async () => {
-  if (!confirm('Effacer la configuration Google Calendar de cette installation ?\n(Les comptes déjà connectés restent connectés ; seule la création de nouvelles connexions sera bloquée, sauf si des variables d’environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET existent encore.)')) return;
+  if (!confirm('Effacer vos identifiants Google personnels ?\n(Votre connexion existante reste affichée, mais ne pourra plus se rafraîchir ni resynchroniser tant que vous n’aurez pas renseigné de nouveaux identifiants puis reconnecté votre compte.)')) return;
   try {
-    await api('/google/admin-config', { method: 'DELETE' });
+    await api('/google/my-config', { method: 'DELETE' });
     msg($('#ga-msg'), 'Configuration effacée.', 'ok');
-    loadGoogleAdminConfig();
+    loadGoogleMyConfig();
   } catch (err) {
     msg($('#ga-msg'), err.message);
   }

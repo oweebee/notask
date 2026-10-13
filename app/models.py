@@ -230,18 +230,12 @@ class UserSettings(SQLModel, table=True):
 # connecté/déconnecté/à reconnecter (needs_reauth) et l'e-mail du compte.
 
 class GoogleAppConfig(SQLModel, table=True):
-    """Identifiants OAuth de l'appli (Client ID/Secret Google Cloud), une
-    seule ligne pour toute l'installation — pas par utilisateur, contrairement
-    à GoogleAccount ci-dessous. Configurable depuis l'écran admin (onglet
-    Comptes) plutôt qu'en variables d'environnement uniquement : évite d'avoir
-    à passer par Coolify. Repli sur GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
-    (variables d'environnement) tant qu'aucune ligne n'existe ici — voir
-    google_calendar.py::_client_config(). Comme UserSettings/GoogleAccount,
-    jamais renvoyée telle quelle à un client (voir GoogleAdminConfigOut plus
-    bas, qui ne renvoie jamais client_secret)."""
+    """Réglages Google de PORTÉE INSTALLATION — seulement l'adresse publique
+    aujourd'hui (base_url). Les identifiants OAuth (Client ID/Secret) ont
+    été retirés d'ici (bascule franche demandée) : ils sont désormais PAR
+    UTILISATEUR, voir GoogleUserAppConfig plus bas. Cette table reste une
+    seule ligne pour toute l'installation, mais plus aucun champ secret."""
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: Optional[str] = Field(default=None, max_length=500)
-    client_secret: Optional[str] = Field(default=None, max_length=500)
     # Adresse publique de l'installation (ex. https://notask.example.com),
     # relevée automatiquement lors de la connexion Google (le callback OAuth
     # est la seule requête où le serveur connaît à coup sûr son adresse
@@ -254,17 +248,34 @@ class GoogleAppConfig(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
-class GoogleAdminConfigOut(SQLModel):
+class GoogleUserAppConfig(SQLModel, table=True):
+    """Identifiants OAuth Google (Client ID/Secret Google Cloud) PAR
+    UTILISATEUR — remplace l'ancien réglage global (GoogleAppConfig.
+    client_id/client_secret, retirés). Table dédiée plutôt qu'extension de
+    GoogleAccount : GoogleAccount n'existe qu'APRÈS une connexion Google
+    réussie (créé dans callback()), alors qu'il faut pouvoir enregistrer ces
+    identifiants AVANT de se connecter (connect() vérifie is_configured()
+    avant même de rediriger vers Google) — une table à part, indépendante
+    du statut de connexion, évite ce problème d'ordre. Plus de repli sur les
+    variables d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (même
+    bascule franche : il n'y a plus de réglage partagé du tout). Comme
+    GoogleAccount, jamais renvoyée telle quelle à un client (voir
+    GoogleUserConfigOut plus bas, qui ne renvoie jamais client_secret)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, unique=True)
+    client_id: Optional[str] = Field(default=None, max_length=500)
+    client_secret: Optional[str] = Field(default=None, max_length=500)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GoogleUserConfigOut(SQLModel):
     client_id: Optional[str] = None
     has_secret: bool = False
-    # "database" (configuré depuis l'écran admin), "environment" (variables
-    # d'environnement), "none" (rien de configuré nulle part).
-    source: str = "none"
 
 
-class GoogleAdminConfigIn(SQLModel):
+class GoogleUserConfigIn(SQLModel):
     client_id: str = Field(min_length=1, max_length=500)
-    # Vide/absent => on garde le secret déjà enregistré (voir set_admin_config
+    # Vide/absent => on garde le secret déjà enregistré (voir set_my_config
     # dans routers/google.py) : évite d'avoir à le retaper si seul le Client
     # ID change, et permet à l'UI de ne jamais réafficher le secret existant
     # en clair dans le champ.

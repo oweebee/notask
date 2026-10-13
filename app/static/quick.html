@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>notask — rapide</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="stylesheet" href="/static/style.css?v=2.9105">
+<link rel="stylesheet" href="/static/style.css?v=2.9106">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -501,17 +501,16 @@
   <h2>Profil</h2>
   <dl class="profil-infos" id="profil-infos"></dl>
 
-  <!-- Identifiants OAuth Google (Client ID/Secret) pour toute l'installation
-       — voir /api/google/admin-config. Réservés aux administrateurs côté
-       serveur (get_current_admin) ; masqué en entier ici pour un compte non
-       admin (voir refreshGoogleStatus() dans app.js), alternative aux
-       variables d'environnement GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET
-       (Coolify), pour ne pas avoir à en sortir de l'appli. Placé avant la
-       connexion personnelle ci-dessous : il faut ces identifiants avant de
-       pouvoir connecter quoi que ce soit. -->
-  <div class="admin-google" id="admin-google" hidden>
-    <h3>Google Calendar — identifiants de l'installation</h3>
-    <p class="aide">Créés dans Google Cloud Console. Communs à tous les comptes.</p>
+  <!-- Identifiants OAuth Google (Client ID/Secret) PERSONNELS — voir
+       /api/google/my-config. Bascule franche : plus de réglage partagé pour
+       toute l'installation ni de repli sur variables d'environnement
+       (ancien #admin-google, réservé aux administrateurs). Visible de tous,
+       n'affecte que le compte connecté. Placé avant la connexion
+       personnelle ci-dessous : il faut ces identifiants avant de pouvoir
+       connecter quoi que ce soit. -->
+  <div class="admin-google" id="admin-google">
+    <h3>Google Calendar — vos identifiants personnels</h3>
+    <p class="aide">Créés dans Google Cloud Console. Propres à votre compte — n'affectent aucun autre utilisateur.</p>
     <p class="admin-google-hint" id="admin-google-source"></p>
     <div class="field"><label for="ga-client-id">Client ID</label><input id="ga-client-id" type="text" autocomplete="off"></div>
     <div class="field"><label for="ga-client-secret">Client Secret</label><input id="ga-client-secret" type="password" autocomplete="off" placeholder="(inchangé si laissé vide)"></div>
@@ -519,18 +518,15 @@
   </div>
 
   <!-- Rangée d'actions unique : Effacer / Déconnecter / Enregistrer sur la
-       même ligne, pour ne pas empiler trois rangées de boutons. Elle est
-       VOLONTAIREMENT hors du bloc #admin-google (masqué en entier pour un
-       compte non admin) : sinon un utilisateur non admin perdrait le bouton
-       Déconnecter, seul moyen de délier son propre compte Google. Les deux
-       boutons réservés aux admins sont donc masqués individuellement, voir
-       l'ouverture de Profil dans app.js. -->
+       même ligne, pour ne pas empiler trois rangées de boutons. Effacer et
+       Enregistrer sont désormais visibles de tous (identifiants perso, plus
+       de masquage non-admin). -->
   <div class="dialog-actions profil-google-actions">
-    <button class="btn danger" id="ga-clear" type="button" hidden>Effacer</button>
+    <button class="btn danger" id="ga-clear" type="button">Effacer</button>
     <span class="spacer" style="flex:1"></span>
     <button class="btn ghost" id="profil-google-connect" type="button" hidden>Connecter Google Calendar</button>
     <button class="btn danger" id="profil-google-disconnect" type="button" hidden>Déconnecter</button>
-    <button class="btn" id="ga-save" type="button" hidden>Enregistrer</button>
+    <button class="btn" id="ga-save" type="button">Enregistrer</button>
   </div>
 
   <!-- Connexion Google Calendar personnelle (voir /api/google/* et
@@ -661,6 +657,6 @@
 </dialog>
 
 <script>window.NOTASK_QUICK_CAPTURE = true;</script>
-<script src="/static/app.js?v=0.9107"></script>
+<script src="/static/app.js?v=0.9108"></script>
 </body>
 </html>

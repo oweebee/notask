@@ -33,7 +33,7 @@ from urllib.parse import urlencode
 import httpx
 from sqlmodel import Session, select
 
-from app.models import GoogleAccount, GoogleAppConfig, Note, NoteItem, User, utcnow
+from app.models import GoogleAccount, GoogleAppConfig, GoogleUserAppConfig, Note, NoteItem, User, utcnow
 
 log = logging.getLogger("notask.google_calendar")
 
@@ -98,34 +98,35 @@ REMINDER_MINUTES_ALL_DAY = 4 * 60
 HTTP_TIMEOUT = 10.0
 
 
-def _client_config(session: Session):
-    """Base d'abord (réglage admin, voir GoogleAppConfig/routers/google.py
-    admin-config), variables d'environnement en repli — permet de configurer
-    soit depuis l'écran admin, soit via Coolify, sans que l'un empêche
-    l'autre (pratique en développement local, où les variables restent plus
-    simples que de passer par l'UI)."""
-    row = session.exec(select(GoogleAppConfig)).first()
-    if row and row.client_id and row.client_secret:
+def _client_config(session: Session, user_id: int):
+    """Identifiants OAuth de CET utilisateur (GoogleUserAppConfig) — plus de
+    réglage global ni de repli sur variables d'environnement (bascule
+    franche demandée : chaque utilisateur doit renseigner les siens, pas de
+    repli partagé)."""
+    row = session.exec(
+        select(GoogleUserAppConfig).where(GoogleUserAppConfig.user_id == user_id)
+    ).first()
+    if row:
         return row.client_id, row.client_secret
-    return os.getenv("GOOGLE_CLIENT_ID"), os.getenv("GOOGLE_CLIENT_SECRET")
+    return None, None
 
 
-def is_configured(session: Session) -> bool:
-    client_id, client_secret = _client_config(session)
+def is_configured(session: Session, user_id: int) -> bool:
+    client_id, client_secret = _client_config(session, user_id)
     return bool(client_id and client_secret)
 
 
-def config_status(session: Session) -> Dict[str, Any]:
-    """Pour l'écran admin : d'où vient la configuration actuelle (jamais le
-    secret lui-même, voir GoogleAdminConfigOut dans app/models.py)."""
-    row = session.exec(select(GoogleAppConfig)).first()
-    if row and row.client_id and row.client_secret:
-        return {"client_id": row.client_id, "has_secret": True, "source": "database"}
-    env_id = os.getenv("GOOGLE_CLIENT_ID")
-    env_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    if env_id and env_secret:
-        return {"client_id": env_id, "has_secret": True, "source": "environment"}
-    return {"client_id": row.client_id if row else None, "has_secret": False, "source": "none"}
+def config_status(session: Session, user_id: int) -> Dict[str, Any]:
+    """Pour l'écran Profil : les identifiants déjà enregistrés par CET
+    utilisateur (jamais le secret lui-même, voir GoogleUserConfigOut dans
+    app/models.py)."""
+    row = session.exec(
+        select(GoogleUserAppConfig).where(GoogleUserAppConfig.user_id == user_id)
+    ).first()
+    return {
+        "client_id": row.client_id if row else None,
+        "has_secret": bool(row and row.client_secret),
+    }
 
 
 # ================================ OAuth ================================
@@ -134,8 +135,8 @@ def new_state_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def build_authorize_url(redirect_uri: str, state: str, session: Session) -> str:
-    client_id, _ = _client_config(session)
+def build_authorize_url(redirect_uri: str, state: str, session: Session, user_id: int) -> str:
+    client_id, _ = _client_config(session, user_id)
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -152,8 +153,8 @@ def build_authorize_url(redirect_uri: str, state: str, session: Session) -> str:
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str, redirect_uri: str, session: Session) -> Dict[str, Any]:
-    client_id, client_secret = _client_config(session)
+def exchange_code(code: str, redirect_uri: str, session: Session, user_id: int) -> Dict[str, Any]:
+    client_id, client_secret = _client_config(session, user_id)
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(TOKEN_URL, data={
             "code": code,
@@ -177,8 +178,8 @@ def fetch_email(access_token: str) -> Optional[str]:
         return None
 
 
-def _refresh_access_token(refresh_token: str, session: Session) -> Dict[str, Any]:
-    client_id, client_secret = _client_config(session)
+def _refresh_access_token(refresh_token: str, session: Session, user_id: int) -> Dict[str, Any]:
+    client_id, client_secret = _client_config(session, user_id)
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(TOKEN_URL, data={
             "refresh_token": refresh_token,
@@ -231,8 +232,20 @@ def _valid_access_token(account: GoogleAccount, session: Session) -> Optional[st
     if account.access_token and expires_at and expires_at > now + timedelta(seconds=30):
         return account.access_token
 
+    # Vérifié AVANT d'appeler Google : si cet utilisateur n'a plus (ou pas
+    # encore) ses propres identifiants Client ID/Secret enregistrés (voir
+    # GoogleUserAppConfig — bascule franche, plus de repli global), on le
+    # signale clairement via needs_reauth plutôt que de laisser partir une
+    # requête vouée à échouer côté Google (client_id/secret vides) et faire
+    # remonter une erreur réseau opaque.
+    if not is_configured(session, account.user_id):
+        account.needs_reauth = True
+        session.add(account)
+        session.commit()
+        return None
+
     try:
-        payload = _refresh_access_token(account.refresh_token, session)
+        payload = _refresh_access_token(account.refresh_token, session, account.user_id)
     except httpx.HTTPStatusError as exc:
         # 400/401 typique d'un refresh_token révoqué ou expiré côté Google.
         if exc.response is not None and exc.response.status_code in (400, 401):

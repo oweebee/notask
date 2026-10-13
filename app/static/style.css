@@ -2836,11 +2836,11 @@ table.users th { color: var(--md-on-surface-variant); font-weight: 500; font-siz
 .badge.admin { background: var(--md-primary-container); color: var(--md-on-primary-container); }
 .badge.off { background: var(--md-error-container); color: #f9dedc; }
 
-/* Config Google Calendar (identifiants OAuth de l'installation) dans la
-   boîte Profil — voir /api/google/admin-config. Masqué en entier pour un
-   compte non admin (voir #btn-profil dans app.js). Empilé juste au-dessus
-   de .profil-google (connexion personnelle) : même gabarit de bordures,
-   pour que les deux sections s'enchaînent proprement. */
+/* Config Google Calendar (identifiants OAuth PERSONNELS) dans la boîte
+   Profil — voir /api/google/my-config. Visible de tous (bascule franche,
+   plus de réglage d'installation réservé aux admins). Empilé juste
+   au-dessus de .profil-google (connexion personnelle) : même gabarit de
+   bordures, pour que les deux sections s'enchaînent proprement. */
 .admin-google {
   padding: 1rem 0;
   border-top: 1px solid var(--md-outline-variant);
