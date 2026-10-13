@@ -35,6 +35,7 @@ from app.deps import get_current_user
 from app.models import (
     GoogleAccount,
     GoogleAccountStatus,
+    GoogleAppConfig,
     GoogleCalendarIn,
     GoogleFeaturesIn,
     GoogleOAuthState,
