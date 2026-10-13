@@ -7550,8 +7550,24 @@ function assurerLigneApresBloc(el) {
 
   if (dernierEstBr && avantDernierEstBr) return; // déjà les deux <br> : rien à faire
 
-  if (!dernierEstBr) el.appendChild(document.createElement('br'));
-  el.appendChild(document.createElement('br'));
+  if (!dernierEstBr) el.appendChild(brLigneLibre());
+  el.appendChild(brLigneLibre());
+}
+
+/* <br> de LIGNE LIBRE (voir assurerLigneApresBloc/assurerLigneAvantBloc) :
+   marqué data-libre pour que richToText() retire EXACTEMENT ceux-là, et
+   aucun <br> de contenu. Avant ce marquage, richToText devinait en gardant
+   « un <br> sur la série » : faux dès que le contenu commençait/finissait
+   lui-même par un saut de ligne (ex. « a » et « a\n » donnaient le même DOM)
+   — mesuré au banc d'essai aller-retour : « a » devenait « a\n » au premier
+   enregistrement (instantané d'historique parasite à la simple
+   consultation), et chaque ouverture/fermeture MANGEAIT une ligne vide de
+   tête (« \n\na » -> « \na » -> « a »). Les <br> de conversion d'un \n de
+   texte (début/fin) restent, eux, NON marqués : ce sont du contenu. */
+function brLigneLibre() {
+  const br = document.createElement('br');
+  br.dataset.libre = '1';
+  return br;
 }
 
 /* Symétrique de assurerLigneApresBloc() ci-dessus, pour le DÉBUT de la
@@ -7588,8 +7604,8 @@ function assurerLigneAvantBloc(el) {
 
   if (premierEstBr && apresPremierEstBr) return; // déjà les deux <br> : rien à faire
 
-  if (!premierEstBr) el.insertBefore(document.createElement('br'), el.firstChild);
-  el.insertBefore(document.createElement('br'), el.firstChild);
+  if (!premierEstBr) el.insertBefore(brLigneLibre(), el.firstChild);
+  el.insertBefore(brLigneLibre(), el.firstChild);
 }
 
 /* Cliquer dans le vide SOUS le texte place le curseur à la fin, comme dans
@@ -7855,61 +7871,18 @@ brancherBarreFormat('#dns-fmt-toolbar', '#dns-content', '#dns-text-colors', '#dn
 /* Inverse de renderFormatted() : reconvertit le HTML de la zone
    contenteditable en texte façon markdown pour l'enregistrement. */
 function richToText(root) {
-  /* Ligne libre en fin de zone (voir assurerLigneApresBloc) : en édition, la
-     zone se termine TOUJOURS par DEUX <br> — un seul ne suffit pas pour que
-     Chrome pose le curseur/le texte tapé SUR la ligne libre plutôt qu'avant
-     elle (constaté). Ce doublon est un pur besoin de saisie, jamais du
-     contenu : on ne garde ici que le PREMIER des <br> terminaux (le plus
-     proche du vrai contenu, qui clôt sa dernière ligne) et on retire les
-     autres avant de convertir — sans ça, chaque enregistrement ajouterait un
-     saut de ligne de plus au texte sauvegardé (dérive de contenu).
-     Opère directement sur `root` : sans conséquence, richToText() n'est
-     appelé qu'au moment d'enregistrer/créer, jamais pendant la frappe. */
-  {
-    const finaux = [];
-    let n = root.lastChild;
-    while (n) {
-      if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') {
-        finaux.push(n);
-        n = n.previousSibling;
-        continue;
-      }
-      // Nœud texte vide (reliquat d'une frappe effacée) : transparent, ne
-      // casse pas la série de <br> terminaux, mais ne compte pas dedans.
-      if (n.nodeType === Node.TEXT_NODE && n.textContent === '') {
-        n = n.previousSibling;
-        continue;
-      }
-      break;
-    }
-    // finaux[0] = le tout dernier <br> (le plus externe) … finaux[last] =
-    // celui collé au vrai contenu, à garder. On retire tous les autres.
-    for (let i = 0; i < finaux.length - 1; i++) finaux[i].remove();
-  }
-
-  /* Même purge, symétrique, pour la ligne libre DE TÊTE (voir
-     assurerLigneAvantBloc) : la zone commence TOUJOURS par DEUX <br>, on ne
-     garde que le DERNIER des <br> initiaux (le plus proche du vrai contenu,
-     qui l'ouvre) et on retire les autres avant de convertir. */
-  {
-    const initiaux = [];
-    let n = root.firstChild;
-    while (n) {
-      if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') {
-        initiaux.push(n);
-        n = n.nextSibling;
-        continue;
-      }
-      if (n.nodeType === Node.TEXT_NODE && n.textContent === '') {
-        n = n.nextSibling;
-        continue;
-      }
-      break;
-    }
-    // initiaux[0] = le tout premier <br> (le plus externe) … initiaux[last] =
-    // celui collé au vrai contenu, à garder. On retire tous les autres.
-    for (let i = 0; i < initiaux.length - 1; i++) initiaux[i].remove();
-  }
+  /* Lignes libres de tête et de fin (voir assurerLigneAvantBloc /
+     assurerLigneApresBloc, et brLigneLibre) : pur besoin de saisie, jamais du
+     contenu. On ignore la série de <br> MARQUÉS data-libre collée au bord de
+     la zone (nœuds texte vides transparents) — et seulement elle : un <br>
+     marqué qui n'est plus au bord (on a tapé sur la ligne libre, le texte
+     s'est glissé entre deux <br>) est redevenu un vrai saut de ligne, et un
+     <br> non marqué est toujours du contenu. Ne modifie plus `root`. */
+  const ignores = new Set();
+  const estLibreOuVide = (n) => (n.nodeType === Node.TEXT_NODE && n.textContent === '')
+    || (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR' && n.dataset.libre === '1');
+  for (let n = root.lastChild; n && estLibreOuVide(n); n = n.previousSibling) ignores.add(n);
+  for (let n = root.firstChild; n && estLibreOuVide(n); n = n.nextSibling) ignores.add(n);
 
   function walk(node) {
     // \u00c9chappement des d\u00e9limiteurs : un * / _ / ` tap\u00e9 comme texte normal
@@ -8026,7 +7999,19 @@ function richToText(root) {
       default: return inner();
     }
   }
-  return Array.from(root.childNodes).map(walk).join('').replace(/^\n/, '');
+  /* Un bloc (<div>/<p>, ligne à cocher, note vocale) écrit son propre '\n'
+     DEVANT lui : en tout début de contenu, ce saut-là ne sépare rien et
+     doit tomber. Mais seulement s'il vient d'un tel bloc — l'ancien
+     `.replace(/^\n/, '')` global retirait aussi un vrai saut de ligne de
+     tête tapé par l'utilisateur (texte ou <br> de contenu). */
+  const enfants = Array.from(root.childNodes);
+  const morceaux = enfants.map((n) => (ignores.has(n) ? '' : walk(n)));
+  const premier = morceaux.findIndex((m) => m !== '');
+  if (premier >= 0 && enfants[premier].nodeType === Node.ELEMENT_NODE
+      && /^(DIV|P)$/.test(enfants[premier].tagName)) {
+    morceaux[premier] = morceaux[premier].replace(/^\n/, '');
+  }
+  return morceaux.join('');
 }
 
 /* Rendu markdown minimal (gras/italique/souligné/code) pour l'affichage des
@@ -8431,13 +8416,16 @@ function ajouterBoutonsCopieCode(root) {
         afficherBulleCopie(x, y, 'Copie impossible');
       }
     });
-    // Bloc : le bouton est placé EN TÊTE et flotte à droite (voir le CSS),
-    // pour rester en haut à droite du bloc et suivre le défilement d'un
-    // code sur plusieurs lignes. Placé en fin, il se serait retrouvé tout
-    // en bas, hors de vue. Code en ligne : à la suite du texte, là où on
-    // l'attend.
-    if (zone.tagName === 'PRE') zone.prepend(btn);
-    else zone.appendChild(btn);
+    // Code (bloc <pre> ET code en ligne) : bouton placé EN TÊTE, il flotte
+    // à droite (voir .code-copy-btn dans le CSS) et reste donc en haut à
+    // droite. Le code en ligne est rendu en barre pleine largeur
+    // (display:block, harmonisé avec les blocs) : ajouté EN FIN, le float
+    // se posait après le texte, donc EN BAS dès que le texte passait sur
+    // plusieurs lignes — d'où un bouton tantôt en haut (bloc ```), tantôt
+    // en bas (code `en ligne` long) dans la même carte. Lien : à la suite
+    // du libellé (inline-flex, pas de float), là où on l'attend.
+    if (estLien) zone.appendChild(btn);
+    else zone.prepend(btn);
   });
 }
 
@@ -8460,10 +8448,17 @@ function protegerCopieCodeBackspace(e) {
   if (!sel.rangeCount || !sel.isCollapsed) return;
   const range = sel.getRangeAt(0);
   const { startContainer, startOffset } = range;
-  if (startOffset !== 0) return;
   const code = (startContainer.nodeType === 1 ? startContainer : startContainer.parentNode)
     ?.closest('code');
-  const bloc = code && code.closest('pre.note-code-block');
+  if (!code) return;
+  // Bloc (<pre><code>) ET code en ligne (<code class="note-code-inline">) :
+  // le bouton est désormais en tête des deux (voir ajouterBoutonsCopieCode).
+  // Pour le code en ligne, le bouton est DANS le <code> : le curseur juste
+  // après lui peut être (code, 1) et non (texte, 0) — d'où l'abandon du
+  // test startOffset !== 0, remplacé par le seul test "rien de texte avant"
+  // ci-dessous (le SVG du bouton n'a aucun texte).
+  const enLigne = code.classList.contains('note-code-inline');
+  const bloc = enLigne ? code : code.closest('pre.note-code-block');
   if (!bloc || !bloc.contains(code)) return;
   // Rien avant le point de coupure À L'INTÉRIEUR du <code> : c'est bien le
   // tout début du texte, la position qui menace le bouton.
@@ -9224,12 +9219,31 @@ function brancherLecteurAudio(bloc, url, blob) {
    geste courant — mais rien d'autre. */
 function renderFormatted(text, archivesDepliees = false, lignesEditables = false) {
   let html = escapeHtml(text);
-  html = html.replace(NOTE_IMG_MARK, (m, id) => `<img class="note-inline-img" data-att="${id}" alt="">`);
-  html = html.replace(NOTE_AUDIO_MARK, (m, id) => audioBlockHtml(id));
+  /* Mise en RÉSERVE : tout fragment déjà définitif (code, HTML généré) est
+     remplacé par un jeton opaque, que les regex suivantes ne peuvent plus
+     relire, puis restitué tout à la fin. Sans ça (mesuré au banc d'essai
+     aller-retour), les regex de gras/italique/souligné/déséchappement
+     repassaient DANS le code et DANS les attributs HTML générés :
+     `a*b*c` -> `abc`, `__init__` -> `init`, `a\\b` -> `a\b` (code en
+     ligne ET bloc, perte définitive au premier enregistrement), et une
+     adresse contenant * finissait avec un <em> dans son href. Tout est
+     local à la fonction (elle est aussi recopiée par .toString() dans la
+     copie locale, voir construireVisionneuseHTML). */
+  const reserve = [];
+  const reserver = (fragment) => '\uE000' + (reserve.push(fragment) - 1) + '\uE001';
+  const restituer = (h) => h.replace(/\uE000(\d+)\uE001/g, (m, i) => (Number(i) < reserve.length ? restituer(reserve[Number(i)]) : m));
+  // Code d'abord : son contenu est du texte BRUT (richToText ne l'échappe
+  // pas, voir texteCodeSansBouton) — aucun autre marqueur ne doit y être
+  // reconnu, pas même [c:…]/[url:…]/[ligne:…] écrits littéralement.
+  html = html.replace(/```([\s\S]+?)```/g, (m, code) => reserver(`<pre class="note-code-block"><code>${code}</code></pre>`));
+  // Garde (?<!\\) : voir plus bas, à l'emplacement d'origine de cette regex.
+  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, (m, code) => reserver(`<code class="note-code-inline">${code}</code>`));
+  html = html.replace(NOTE_IMG_MARK, (m, id) => reserver(`<img class="note-inline-img" data-att="${id}" alt="">`));
+  html = html.replace(NOTE_AUDIO_MARK, (m, id) => reserver(audioBlockHtml(id)));
   // Avant les marqueurs de mise en forme : le bloc produit ici ne contient
   // aucun texte de la notask (il est rempli à l'hydratation), donc rien à
   // l'intérieur ne doit être relu par les regex de gras/italique/code.
-  html = html.replace(NOTE_LINE_MARK, (m, id) => ligneBlockHtml(id, lignesEditables));
+  html = html.replace(NOTE_LINE_MARK, (m, id) => reserver(ligneBlockHtml(id, lignesEditables)));
   // Couleur avant les autres marqueurs : son contenu peut lui-même être en
   // gras/italique, qui seront traités ensuite à l'intérieur du span.
   html = html.replace(NOTE_COLOR_MARK, (m, hex, contenu) => `<span style="color:#${hex}">${contenu}</span>`);
@@ -9246,8 +9260,8 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   html = html.replace(NOTE_URL_MARK, (m, href, texte) => {
     const url = urlSure(href);
     if (!url) return texte;  // adresse refusée : on garde le texte, sans lien
-    return `<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer"`
-      + ` title="${escapeHtml(url)}\n(Alt+clic pour éditer)">${texte}</a>`;
+    return reserver(`<a class="note-url" href="${url}" target="_blank" rel="noopener noreferrer"`
+      + ` title="${escapeHtml(url)}\n(Alt+clic pour éditer)">`) + `${texte}</a>`;
   });
   html = html.replace(NOTE_ARCHIVE_MARK, (m, plie, contenu) => {
     const bloc = /\n/.test(contenu);
@@ -9269,7 +9283,7 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
     // .is-closed qui le masque) : déplier ne coûte qu'un changement de
     // classe, rien n'est reconstruit.
     const classes = `note-archive-zone${bloc ? ' note-archive-block' : ' note-archive-inline'}${archivesDepliees ? '' : ' is-closed'}`;
-    return `<${tag} class="${classes}">${contenu}${ARCHIVE_ICON_HTML}</${tag}>`;
+    return `<${tag} class="${classes}">${contenu}${reserver(ARCHIVE_ICON_HTML)}</${tag}>`;
   });
   /* Rattrapage RETIRÉ : la version précédente promeut en bloc TOUTE paire
      de `…` séparée par un \n sans backtick entre — donc deux codes en ligne
@@ -9279,7 +9293,7 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
      donc les retours à la ligne autour disparaissaient.
      Le contenu ancien buggé (`…\n…`) reste lisible en clair (backticks
      visibles) — moindre mal comparé à la corruption des notasks courantes. */
-  html = html.replace(/```([\s\S]+?)```/g, (m, code) => `<pre class="note-code-block"><code>${code}</code></pre>`);
+  // (Bloc de code : déjà traité et mis en réserve en tête de fonction.)
   // Garde (?<!\\) sur le code EN LIGNE et l'italique : ce sont les deux
   // seuls délimiteurs d'UN SEUL caractère. Un */_/` échappé par
   // richToText() (voir plus haut) reste malgré tout le caractère * ou `
@@ -9289,7 +9303,7 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   // entre deux au passage. Gras/souligné/bloc de code n'en ont pas besoin :
   // ce sont des délimiteurs à 2-3 caractères IDENTIQUES consécutifs, que
   // l'échappement (caractère par caractère) empêche déjà de se reformer.
-  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, '<code class="note-code-inline">$1</code>');
+  // (Code en ligne : déjà traité et mis en réserve en tête de fonction.)
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
   html = html.replace(/(?<!\\)\*([^\n*]+?)(?<!\\)\*/g, '<em>$1</em>');
@@ -9298,7 +9312,7 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   // délimiteurs d'abord (\* → *), le doublement du backslash ensuite
   // (\\ → \), sinon un backslash tapé littéralement ressortirait mal.
   html = html.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\');
-  return html;
+  return restituer(html);
 }
 
 /* Couleur en édition rapide : elle n'y était pas (réservée à la boîte
