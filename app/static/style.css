@@ -107,24 +107,28 @@ html.mode-gris .agenda-col .agenda-item::before,
 html.mode-gris #view-tasks .agenda-item::before { background: #3d3d3d; }
 html.mode-gris .agenda-col .agenda-item > *:not(.agenda-item-icon),
 html.mode-gris #view-tasks .agenda-item > *:not(.agenda-item-icon) { filter: grayscale(1); }
-/* Exception : les lignes "en retard" gardent leur rouge même en mode gris
-   (voir .agenda-item.late .agenda-item-due plus bas). On ne peut pas
-   repasser en couleur un enfant déjà grisé par le filtre de son parent
-   (un filter CSS rasterise tout le sous-arbre, un filter:none posé dessus
-   ne l'annule pas — même piège que le filtre global sur <html>) : il faut
-   donc exclure .agenda-item-body du filtre, pas le recolorer après coup.
-   Le texte du titre n'y perd rien, il n'a pas de teinte propre. Même
-   logique pour le h2 de la colonne "en retard", déjà rouge via
-   .agenda-group.late h2 (règle juste au-dessus). */
+/* Exception : les lignes "en retard"/"du jour" gardent leur fond rouge/vert
+   même en mode gris (voir .agenda-item.late/.today plus bas) — toute la
+   ligne, pas juste la date, depuis la correction. On ne peut pas repasser
+   en couleur un enfant déjà grisé par le filtre de son parent (un filter
+   CSS rasterise tout le sous-arbre, un filter:none posé dessus ne l'annule
+   pas — même piège que le filtre global sur <html>) : il faut donc exclure
+   .agenda-item lui-même (et son ::before, qui duplique son fond) des deux
+   règles génériques juste au-dessus, pas le recolorer après coup. Le texte
+   passe en blanc par la règle .agenda-item.late/.today (plus bas) — du
+   blanc grisé reste du blanc, aucune exception n'est donc nécessaire sur
+   les enfants pour le texte. Même logique pour le h2 de la colonne,
+   déjà coloré via .agenda-group.late/.today h2. */
 html.mode-gris .agenda-col .agenda-group.late > h2,
 html.mode-gris #view-tasks .agenda-group.late > h2 { filter: none; }
-html.mode-gris .agenda-col .agenda-item.late > *:not(.agenda-item-icon),
-html.mode-gris #view-tasks .agenda-item.late > *:not(.agenda-item-icon) { filter: none; }
-/* Même chose pour les lignes "du jour" (fond vert, voir
-   .agenda-item.today .agenda-item-due plus bas) — exclusion du filtre,
-   même raison que ci-dessus. */
-html.mode-gris .agenda-col .agenda-item.today > *:not(.agenda-item-icon),
-html.mode-gris #view-tasks .agenda-item.today > *:not(.agenda-item-icon) { filter: none; }
+html.mode-gris .agenda-col .agenda-item.late,
+html.mode-gris #view-tasks .agenda-item.late { background: #ab4047 !important; }
+html.mode-gris .agenda-col .agenda-item.late::before,
+html.mode-gris #view-tasks .agenda-item.late::before { background: #ab4047 !important; }
+html.mode-gris .agenda-col .agenda-item.today,
+html.mode-gris #view-tasks .agenda-item.today { background: #2f7a3c !important; }
+html.mode-gris .agenda-col .agenda-item.today::before,
+html.mode-gris #view-tasks .agenda-item.today::before { background: #2f7a3c !important; }
 
 /* Boîtes de dialogue (édition, profil, outils, historique…) : hors de la
    chaîne ci-dessus (siblings de #screen-app), grisées en bloc. */
@@ -1276,13 +1280,21 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   white-space: nowrap;
 }
 /* En retard / du jour (t.bucket === 'late'/'today', voir creerLigneAgenda()
-   dans app.js) : fond coloré + texte blanc sur la date, pas juste le texte
-   — à la demande. Teintes reprises des VRAIES couleurs de carte .c-red et
-   .c-green (pas de couleur inventée), donc lisibles quelle que soit la
-   couleur propre de la ligne (le fond devient opaque, il n'est plus
-   besoin d'une variante .c-white séparée comme avant). */
-.agenda-item.late .agenda-item-due { background: #ab4047; color: #fff; font-weight: 600; padding: 0 .35rem; border-radius: var(--shape-sm); }
-.agenda-item.today .agenda-item-due { background: #2f7a3c; color: #fff; font-weight: 600; padding: 0 .35rem; border-radius: var(--shape-sm); }
+   dans app.js) : fond coloré sur TOUTE la ligne (pas juste la pastille de
+   date) — à la demande, après correction (le premier jet ne colorait que
+   .agenda-item-due). Teintes reprises des VRAIES couleurs de carte .c-red
+   et .c-green (pas de couleur inventée). !important nécessaire : le fond
+   normal de la ligne est posé en style INLINE par JS (teinte de catégorie,
+   voir creerLigneAgenda()), qui l'emporterait sinon sur une simple classe.
+   .agenda-item::before duplique ensuite ce fond via `background: inherit`
+   (voir la règle juste au-dessus) : il suffit de changer le fond de
+   .agenda-item lui-même, ::before suit automatiquement. La pastille
+   d'icône (.agenda-item-icon) garde son propre disque sombre par-dessus,
+   donc reste visible sans règle supplémentaire. */
+.agenda-item.late { background: #ab4047 !important; color: #fff; }
+.agenda-item.today { background: #2f7a3c !important; color: #fff; }
+.agenda-item.late .agenda-item-due,
+.agenda-item.today .agenda-item-due { color: #fff; font-weight: 600; }
 .agenda-empty { padding: 0 0 0 .125rem; text-align: left; font-size: .8125rem; }
 
 /* Le composeur et la recherche vivent DANS la mosaïque (voir .notes-grid),
