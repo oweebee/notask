@@ -7575,11 +7575,15 @@ function brLigneLibre() {
    contenu "par le haut", sans avoir à placer le curseur au tout début et
    décaler le reste à la main. Même raisonnement, même garanties
    (idempotente, aucune dérive de contenu), simplement en tête plutôt
-   qu'en fin de zone : un <br> ouvre la première ligne de contenu si elle
-   n'en avait pas déjà un, et un second, toujours ajouté, devient la ligne
-   libre proprement dite — celle sur laquelle on clique et on tape "avant"
-   le reste. Voir richToText() pour la purge symétrique au moment
-   d'enregistrer (sinon ce doublon finirait dans le contenu sauvegardé). */
+   qu'en fin de zone — avec UNE différence : en tête, chaque <br> crée sa
+   propre ligne visible (en fin de zone, le dernier <br> n'en crée pas,
+   d'où les deux <br> du bas). Un seul <br data-libre> suffit donc ici ;
+   deux en donnaient deux lignes vides en haut (constaté dans le
+   navigateur). Taper sur cette ligne place le texte AVANT ce <br> : la
+   zone ne commence plus par un <br> marqué, un nouveau est reposé
+   au-dessus au prochain `input`, et l'ancien, désormais au milieu, devient
+   un vrai saut de ligne. Voir richToText() : seuls les <br> marqués collés
+   au bord sont retirés à l'enregistrement. */
 function assurerLigneAvantBloc(el) {
   if (!el) return;
   while (el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE && el.firstChild.textContent === '') {
@@ -7597,14 +7601,8 @@ function assurerLigneAvantBloc(el) {
     premier = el.firstChild;
   }
 
-  const premierEstBr = premier.nodeType === Node.ELEMENT_NODE && premier.tagName === 'BR';
-  const apresPremier = premierEstBr ? premier.nextSibling : null;
-  const apresPremierEstBr = !!apresPremier
-    && apresPremier.nodeType === Node.ELEMENT_NODE && apresPremier.tagName === 'BR';
-
-  if (premierEstBr && apresPremierEstBr) return; // déjà les deux <br> : rien à faire
-
-  if (!premierEstBr) el.insertBefore(brLigneLibre(), el.firstChild);
+  // Idempotente : déjà une ligne libre en tête -> rien à faire.
+  if (premier.nodeType === Node.ELEMENT_NODE && premier.tagName === 'BR' && premier.dataset.libre === '1') return;
   el.insertBefore(brLigneLibre(), el.firstChild);
 }
 
