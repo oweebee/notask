@@ -1577,9 +1577,23 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
      appliquerCouleurComposeur() dans app.js (composerColor==='default' &&
      composeur replié = AUCUN style inline, donc CETTE règle décide — il
      lui faut donc le même texte foncé que le thème clair). */
-  background: var(--spoon-jaune);
+  /* Jaune un peu atténué (85 % jaune cuillère + 15 % noir), sur demande :
+     le jaune littéral était trop "pétant" sur une grande surface. */
+  background: color-mix(in srgb, var(--spoon-jaune) 85%, #000);
   border-radius: var(--shape-md);
   box-shadow: var(--elev-1);
+}
+/* Texte foncé sur ce fond jaune par défaut, en CSS pur : ne dépend plus de
+   la classe .composeur-clair posée par JS (pas posée au premier
+   affichage -> texte clair illisible, constaté). Dès qu'une teinte inline
+   est posée (couleur choisie ou composeur déplié), ce sélecteur ne
+   s'applique plus. */
+.nc-card:not([style*="background"]),
+.nc-toolbar-block:not([style*="background"]) {
+  --md-on-surface: #16151a;
+  --md-on-surface-variant: #46454d;
+  --md-outline-variant: rgba(0,0,0,.25);
+  color: var(--md-on-surface);
 }
 .nc-card { padding: 1rem 1.25rem; }
 .nc-toolbar-block { padding: .625rem 1rem; }
