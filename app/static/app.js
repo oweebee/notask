@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9113';
+const APP_VERSION = '0.9114';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -497,6 +497,13 @@ let state = {
   visibleCheckedNoteIds: new Set(),
   composerIcon: null,
   editingIcon: null,
+  // Entrée virtuelle "Sans catégorie" (voir SANS_CATEGORIE_ID) : nom/couleur/
+  // position personnalisables par l'utilisateur, persistés côté serveur dans
+  // UserSettings.data.sans_categorie (PATCH /settings) — jamais une colonne
+  // Label. position: Infinity tant qu'aucun réglage n'a été enregistré (la
+  // place en tête, comportement historique), remplacé par un nombre réel dès
+  // que l'utilisateur la glisse une première fois — voir loadLabels().
+  sansCategorie: { name: 'Sans catégorie', color: null, position: Infinity },
 };
 
 /* Filtre par libellé (state.labelFilters) : persistant PAR ONGLET, pas
@@ -3935,7 +3942,20 @@ async function loadTrashedItems() {
    libellé filtre les notes ; une note peut en porter plusieurs. */
 
 async function loadLabels() {
-  state.labels = await api('/labels');
+  const [labels, reglages] = await Promise.all([
+    api('/labels'),
+    api('/settings').catch(() => ({})),
+  ]);
+  state.labels = labels;
+  // Voir state.sansCategorie : fusion des réglages serveur (s'ils existent)
+  // avec les valeurs par défaut — jamais de valeur absente/indéfinie à
+  // consommer plus loin (renderLabelsDrawer, commitLabelOrder, etc).
+  const sc = (reglages && reglages.sans_categorie) || {};
+  state.sansCategorie = {
+    name: (typeof sc.name === 'string' && sc.name.trim()) ? sc.name : 'Sans catégorie',
+    color: sc.color || null,
+    position: (typeof sc.position === 'number') ? sc.position : Infinity,
+  };
   renderLabelsDrawer();
   // La rangée de libellés du composeur est persistante : elle doit refléter
   // tout de suite un libellé créé/renommé/supprimé depuis le menu latéral.
@@ -3946,33 +3966,28 @@ function renderLabelsDrawer() {
   const box = $('#labels-list');
   box.innerHTML = '';
 
-  const sansCatRow = document.createElement('div');
-  sansCatRow.className = 'label-row';
-  const sansCatBtn = document.createElement('button');
-  sansCatBtn.className = 'drawer-item label-item'
-    + (state.labelFilters.has(SANS_CATEGORIE_ID) ? ' active' : '');
-  // Attribut `style` posé même sans couleur propre (fond transparent, sans
-  // effet visuel en soi) : .drawer-item.label-item[style] (voir style.css)
-  // réserve le texte bien lisible (--md-on-surface) et le contour bleu
-  // quand actif aux libellés qui ONT cet attribut — posé ici par
-  // app.js pour chaque vrai libellé via btn.style.background, jamais pour
-  // cette entrée virtuelle jusqu'ici. Sans lui, "Sans catégorie" retombait
-  // sur la couleur par défaut (--md-on-surface-variant, plus terne) et ne
-  // montrait AUCUN contour une fois sélectionnée, contrairement à un vrai
-  // libellé filtré — d'où l'impression qu'elle n'apparaissait pas/ne
-  // réagissait pas au clic.
-  sansCatBtn.style.background = 'transparent';
-  sansCatBtn.innerHTML = '<span class="label">Sans catégorie</span>';
-  sansCatBtn.onclick = () => {
-    toggleLabelFilter(SANS_CATEGORIE_ID);
-    if (state.view === 'tasks') { renderLabelsDrawer(); loadTasks(); fermerMenuMobile(); }
-    else if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
-    else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
+  /* "Sans catégorie" (SANS_CATEGORIE_ID) traitée comme un libellé réel pour
+     l'affichage/le tri/le glisser-déposer : fusionnée dans le même tableau,
+     triée par position comme le fait le serveur pour les vrais libellés
+     (position DESC, nom) — elle n'a donc plus de place figée en tête, sauf
+     tant qu'aucune position n'a été enregistrée (Infinity, voir
+     state.sansCategorie). Reste 100% virtuelle : jamais envoyée à /labels. */
+  const virtuelle = {
+    id: SANS_CATEGORIE_ID,
+    name: state.sansCategorie.name,
+    color: state.sansCategorie.color,
+    position: state.sansCategorie.position,
+    hidden: false,
+    virtual: true,
   };
-  sansCatRow.appendChild(sansCatBtn);
-  box.appendChild(sansCatRow);
+  const merged = [...state.labels, virtuelle].sort((a, b) => {
+    const pa = (typeof a.position === 'number') ? a.position : 0;
+    const pb = (typeof b.position === 'number') ? b.position : 0;
+    if (pb !== pa) return pb - pa;
+    return a.name.localeCompare(b.name);
+  });
 
-  for (const l of state.labels) {
+  for (const l of merged) {
     const row = document.createElement('div');
     row.className = 'label-row';
 
@@ -3990,6 +4005,13 @@ function renderLabelsDrawer() {
     // la valeur.
     if (l.color && LABEL_COLOR_HEX[l.color]) {
       btn.style.background = hexToRgba(LABEL_COLOR_HEX[l.color], ATTENUATION_PASTILLE);
+    } else if (l.virtual) {
+      // Entrée virtuelle sans couleur propre : fond transparent posé quand
+      // même (voir l'historique de ce commentaire plus haut dans ce fichier
+      // avant la fusion) pour hériter du style [style] de .drawer-item.label-item
+      // (texte lisible + contour actif) — un vrai libellé sans couleur, lui,
+      // n'a jamais cet attribut et garde son style par défaut.
+      btn.style.background = 'transparent';
     }
     btn.innerHTML = `<span class="label">${escapeHtml(l.name)}</span>`;
     btn.onclick = () => {
@@ -4003,14 +4025,18 @@ function renderLabelsDrawer() {
       else if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
       else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
     };
-    btn.oncontextmenu = async (e) => {
-      e.preventDefault();
-      if (!confirm(`Supprimer le libellé « ${l.name} » ?`)) return;
-      await api('/labels/' + l.id, { method: 'DELETE' });
-      removeLabelFilter(l.id);
-      loadLabels();
-      loadNotes();
-    };
+    if (!l.virtual) {
+      btn.oncontextmenu = async (e) => {
+        e.preventDefault();
+        if (!confirm(`Supprimer le libellé « ${l.name} » ?`)) return;
+        await api('/labels/' + l.id, { method: 'DELETE' });
+        removeLabelFilter(l.id);
+        loadLabels();
+        loadNotes();
+      };
+    }
+
+    row.appendChild(btn);
 
     /* Œil : masque purement visuellement les notes de ce libellé dans la
        page principale (transparence, voir renderNotes()) — ça ne filtre
@@ -4018,71 +4044,78 @@ function renderLabelsDrawer() {
        survol comme le crayon, MAIS reste affiché même hors survol quand le
        libellé est déjà masqué : sinon, impossible de savoir d'un coup
        d'œil quelles catégories sont estompées, ni de les réactiver sans
-       d'abord survoler chaque ligne une à une. */
-    const eye = document.createElement('button');
-    eye.className = 'label-eye-btn' + (l.hidden ? ' active' : '');
-    eye.type = 'button';
-    eye.setAttribute('aria-label', l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie');
-    eye.title = l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie';
-    eye.innerHTML = l.hidden ? ICONS.eyeOff : ICONS.eye;
-    eye.onclick = async (e) => {
-      e.stopPropagation();
-      const neuf = !l.hidden;
-      const grid = $('#notes-grid');
+       d'abord survoler chaque ligne une à une. Pas de sens pour l'entrée
+       virtuelle (masquer "pas de catégorie" masquerait toutes les notasks
+       sans libellé, jamais demandé) : absente pour elle. */
+    if (!l.virtual) {
+      const eye = document.createElement('button');
+      eye.className = 'label-eye-btn' + (l.hidden ? ' active' : '');
+      eye.type = 'button';
+      eye.setAttribute('aria-label', l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie');
+      eye.title = l.hidden ? 'Réafficher la catégorie' : 'Masquer la catégorie';
+      eye.innerHTML = l.hidden ? ICONS.eyeOff : ICONS.eye;
+      eye.onclick = async (e) => {
+        e.stopPropagation();
+        const neuf = !l.hidden;
+        const grid = $('#notes-grid');
 
-      /* Positions relevées AVANT tout changement : les cartes qui restent
-         affichées vont se déplacer pour combler/accueillir un vide une fois
-         le libellé masqué/démasqué, et renderNotes() reconstruit TOUTES les
-         cartes de zéro (voir son 1er querySelectorAll('.note').remove()) —
-         les nouvelles n'ont donc aucune position de départ à faire glisser
-         sans ce relevé préalable, clé-id par clé-id. */
-      const aDisparaitre = [];
-      const positionsAvant = new Map();
-      if (grid) {
-        for (const el of $$('.note', grid)) {
-          const note = state.notes.find((nn) => String(nn.id) === el.dataset.id);
-          const concernee = note && (note.label_ids || []).includes(l.id);
-          if (neuf && concernee) aDisparaitre.push(el);
-          else positionsAvant.set(el.dataset.id, { left: el.style.left, top: el.style.top });
+        /* Positions relevées AVANT tout changement : les cartes qui restent
+           affichées vont se déplacer pour combler/accueillir un vide une fois
+           le libellé masqué/démasqué, et renderNotes() reconstruit TOUTES les
+           cartes de zéro (voir son 1er querySelectorAll('.note').remove()) —
+           les nouvelles n'ont donc aucune position de départ à faire glisser
+           sans ce relevé préalable, clé-id par clé-id. */
+        const aDisparaitre = [];
+        const positionsAvant = new Map();
+        if (grid) {
+          for (const el of $$('.note', grid)) {
+            const note = state.notes.find((nn) => String(nn.id) === el.dataset.id);
+            const concernee = note && (note.label_ids || []).includes(l.id);
+            if (neuf && concernee) aDisparaitre.push(el);
+            else positionsAvant.set(el.dataset.id, { left: el.style.left, top: el.style.top });
+          }
         }
-      }
 
-      /* Masquage : chaque carte du libellé se replie sur elle-même et
-         s'efface avant de quitter la grille — même animation que la
-         suppression définitive (voir disparaitreCarte) — plutôt que de
-         disparaître sèchement au prochain renderNotes(). Démasquage :
-         rien à animer ici, les cartes réapparaissent directement avec le
-         re-rendu (voir tâche associée). */
-      if (aDisparaitre.length) await Promise.all(aDisparaitre.map((el) => disparaitreCarte(el)));
+        /* Masquage : chaque carte du libellé se replie sur elle-même et
+           s'efface avant de quitter la grille — même animation que la
+           suppression définitive (voir disparaitreCarte) — plutôt que de
+           disparaître sèchement au prochain renderNotes(). Démasquage :
+           rien à animer ici, les cartes réapparaissent directement avec le
+           re-rendu (voir tâche associée). */
+        if (aDisparaitre.length) await Promise.all(aDisparaitre.map((el) => disparaitreCarte(el)));
 
-      l.hidden = neuf;   // optimiste : pas d'attente réseau pour un simple bascule visuel
-      renderLabelsDrawer();
-      renderNotes();
-      // Les cartes restées affichées glissent vers leur nouvel emplacement
-      // au lieu d'y sauter (layoutMosaic(true), appelé par renderNotes(),
-      // les y a déjà posées sans transition — voir animerReorganisationApresMasquage()).
-      animerReorganisationApresMasquage(grid, positionsAvant);
-      try {
-        await api('/labels/' + l.id, { method: 'PATCH', body: { hidden: neuf } });
-      } catch {
-        l.hidden = !neuf;   // le serveur n'a pas pris : on revient en arrière
+        l.hidden = neuf;   // optimiste : pas d'attente réseau pour un simple bascule visuel
         renderLabelsDrawer();
         renderNotes();
-      }
-    };
+        // Les cartes restées affichées glissent vers leur nouvel emplacement
+        // au lieu d'y sauter (layoutMosaic(true), appelé par renderNotes(),
+        // les y a déjà posées sans transition — voir animerReorganisationApresMasquage()).
+        animerReorganisationApresMasquage(grid, positionsAvant);
+        try {
+          await api('/labels/' + l.id, { method: 'PATCH', body: { hidden: neuf } });
+        } catch {
+          l.hidden = !neuf;   // le serveur n'a pas pris : on revient en arrière
+          renderLabelsDrawer();
+          renderNotes();
+        }
+      };
+      row.appendChild(eye);
+    }
 
     // Crayon visible au survol de la ligne : renommer et choisir la couleur
     // du libellé, dans la MÊME palette que les notasks (voir COLORS et les
     // classes .c-* — le sélecteur de openLabelEditPopup les réutilise telles
-    // quelles, il n'y a qu'une palette dans toute l'application).
+    // quelles, il n'y a qu'une palette dans toute l'application). Disponible
+    // aussi pour l'entrée virtuelle : openLabelEditPopup() sait la traiter
+    // (voir label.virtual) et PATCH /settings à la place de /labels/:id.
     const edit = document.createElement('button');
     edit.className = 'label-edit-btn';
     edit.type = 'button';
     edit.setAttribute('aria-label', 'Modifier le libellé');
     edit.innerHTML = ICONS.pencil;
     edit.onclick = (e) => { e.stopPropagation(); openLabelEditPopup(edit, l); };
+    row.appendChild(edit);
 
-    row.append(btn, eye, edit);
     box.appendChild(row);
   }
 }
@@ -4101,18 +4134,40 @@ enablePointerReorder($('#labels-list'), '.label-row', {
 });
 
 /* Comme commitNoteOrder() : l'ordre visuel du DOM fait foi une fois le
-   geste terminé, on ne PATCH que les libellés dont la position a changé. */
+   geste terminé, on ne PATCH que les libellés dont la position a changé.
+   L'entrée virtuelle "Sans catégorie" (id 0, voir SANS_CATEGORIE_ID) est
+   mélangée aux vrais libellés dans cette liste (même ligne .label-row,
+   même dataset.id) : elle suit donc le même calcul de position, mais part
+   vers /settings (state.sansCategorie) plutôt que /labels/:id. */
 async function commitLabelOrder() {
   const ids = [...$('#labels-list').querySelectorAll('.label-row')].map((row) => {
     const btn = row.querySelector('.label-item');
     return btn ? Number(btn.dataset.id) : null;
-  }).filter((id) => id !== null);
+  }).filter((id) => id !== null && !Number.isNaN(id));
   const total = ids.length;
   const updates = [];
   ids.forEach((id, idx) => {
+    const newPos = (total - idx) * 1000;
+    if (id === SANS_CATEGORIE_ID) {
+      const posActuelle = Math.round(
+        Number.isFinite(state.sansCategorie.position) ? state.sansCategorie.position : -Infinity
+      );
+      if (posActuelle !== newPos) {
+        updates.push(api('/settings', {
+          method: 'PATCH',
+          body: {
+            sans_categorie: {
+              name: state.sansCategorie.name,
+              color: state.sansCategorie.color,
+              position: newPos,
+            },
+          },
+        }));
+      }
+      return;
+    }
     const label = state.labels.find((x) => x.id === id);
     if (!label) return;
-    const newPos = (total - idx) * 1000;
     if (Math.round(label.position || 0) !== newPos) {
       updates.push(api('/labels/' + id, { method: 'PATCH', body: { position: newPos } }));
     }
@@ -4127,10 +4182,15 @@ async function commitLabelOrder() {
   }
 }
 
-/* Popover de renommage + couleur d'un libellé, ancré sous le crayon. */
+/* Popover de renommage + couleur d'un libellé, ancré sous le crayon.
+   `label` peut être l'entrée virtuelle "Sans catégorie" (label.virtual ===
+   true, voir renderLabelsDrawer) : même popover, mais sans bouton Supprimer
+   (demande explicite — rien à supprimer, ce n'est pas un vrai libellé) et
+   enregistrement vers /settings plutôt que /labels/:id (voir save()). */
 function openLabelEditPopup(anchor, label) {
   closeCalPopup();
   closeIconPopup();
+  const estVirtuelle = !!label.virtual;
 
   const pop = document.createElement('div');
   pop.className = 'cal-popup label-edit-popup';
@@ -4144,7 +4204,7 @@ function openLabelEditPopup(anchor, label) {
       ).join('')}
     </div>
     <div class="cal-popup-actions">
-      <button type="button" class="label-delete-btn" data-act="delete" title="Supprimer le libellé" aria-label="Supprimer le libellé">${ICONS.close}</button>
+      ${estVirtuelle ? '' : `<button type="button" class="label-delete-btn" data-act="delete" title="Supprimer le libellé" aria-label="Supprimer le libellé">${ICONS.close}</button>`}
       <span class="cal-popup-actions-spacer"></span>
       <button type="button" class="btn ghost sm" data-act="close">Fermer</button>
       <button type="button" class="btn sm" data-act="save">Enregistrer</button>
@@ -4179,10 +4239,25 @@ function openLabelEditPopup(anchor, label) {
   // puisque seul le bouton "Enregistrer" appelait l'API.
   const save = async () => {
     try {
-      await api('/labels/' + label.id, {
-        method: 'PATCH',
-        body: { name: input.value.trim() || label.name, color: chosenColor },
-      });
+      if (estVirtuelle) {
+        await api('/settings', {
+          method: 'PATCH',
+          body: {
+            sans_categorie: {
+              name: input.value.trim() || label.name,
+              color: chosenColor,
+              // Position inchangée : ce popover ne modifie que nom/couleur
+              // (voir commitLabelOrder() pour la position, via le glisser).
+              position: state.sansCategorie.position,
+            },
+          },
+        });
+      } else {
+        await api('/labels/' + label.id, {
+          method: 'PATCH',
+          body: { name: input.value.trim() || label.name, color: chosenColor },
+        });
+      }
     } catch (err) {
       alert(err.message);
     }
@@ -4196,18 +4271,23 @@ function openLabelEditPopup(anchor, label) {
   // Même geste que le clic droit sur le libellé dans le menu (raccourci
   // existant, conservé) : confirmation puis suppression, sans passer par
   // save() — un libellé supprimé n'a plus de nom/couleur à enregistrer.
-  pop.querySelector('[data-act=delete]').onclick = async () => {
-    if (!confirm(`Supprimer définitivement le libellé « ${label.name} » ?`)) return;
-    close();
-    try {
-      await api('/labels/' + label.id, { method: 'DELETE' });
-    } catch (err) {
-      alert(err.message);
-    }
-    removeLabelFilter(label.id);
-    loadLabels();
-    loadNotes();
-  };
+  // Absent du DOM pour l'entrée virtuelle (voir le template plus haut) :
+  // querySelector renvoie alors null, d'où ce garde-fou.
+  const deleteBtn = pop.querySelector('[data-act=delete]');
+  if (deleteBtn) {
+    deleteBtn.onclick = async () => {
+      if (!confirm(`Supprimer définitivement le libellé « ${label.name} » ?`)) return;
+      close();
+      try {
+        await api('/labels/' + label.id, { method: 'DELETE' });
+      } catch (err) {
+        alert(err.message);
+      }
+      removeLabelFilter(label.id);
+      loadLabels();
+      loadNotes();
+    };
+  }
 
   const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) save(); };
   const onKey = (e) => { if (e.key === 'Escape') save(); };
