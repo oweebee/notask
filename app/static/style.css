@@ -1449,18 +1449,23 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
    bien plus petit que le rond jaune, avec une bande vide tout autour. */
 .eclair-submit svg {
   /* Centrage par position absolue + transform, PAS place-items:center du
-     parent : ce SVG (35px) dépasse volontairement son rond (28px, voir
-     commentaire plus haut), et Chrome applique un centrage "safe" aux
-     enfants de grille qui débordent — il retombe alors sur un alignement
-     en haut-gauche ("start") au lieu de centrer vraiment, ce qui décalait
-     la coche hors du rond jaune (bug réel observé, vérifié au pixel près).
-     position:absolute + translate(-50%,-50%) n'est pas concerné par cette
-     règle de secours : centrage garanti même en cas de débordement. */
+     parent : Chrome applique un centrage "safe" aux enfants de grille
+     qui débordent — il retombe alors sur un alignement haut-gauche
+     ("start") au lieu de centrer vraiment, ce qui décalait la coche hors
+     du rond jaune (bug réel observé, vérifié au pixel près).
+     position:absolute + translate(-50%,-50%) n'est pas concerné.
+     Taille 31px (pas 35px) : à 35px la marge théorique ne faisait que
+     ~0.44px de chaque côté — sous l'anti-crénelage réel de l'écran (pas
+     le rendu lissé x8 d'une capture de test), cette marge quasi nulle
+     donnait l'impression que le trait débordait du rond jaune (signalé
+     par l'utilisateur, confirmé par comparaison des deux rendus). 31px
+     laisse une marge franche (~2px) tout en restant nettement plus grand
+     que l'ancien 18px (qui laissait un vide disproportionné). */
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 35px;
-  height: 35px;
+  width: 31px;
+  height: 31px;
   transform: translate(-50%, -50%);
   display: block;
 }
