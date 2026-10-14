@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9116';
+const APP_VERSION = '0.9117';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5956,11 +5956,16 @@ function appliquerCouleurComposeur() {
 
   for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
     bloc.style.background = teinte;
-    // Texte noir sur composeur blanc — même raison que pour les cartes (voir
-    // .c-white dans style.css). La teinte arrive ici en style inline et non
-    // par une classe .c-*, d'où cette classe dédiée : sans elle le composeur
-    // blanc garderait le texte clair de l'appli, donc illisible.
-    bloc.classList.toggle('composeur-clair', composerColor === 'white');
+    // Texte noir sur composeur blanc OU sur le jaune cuillère littéral par
+    // défaut (composerColor==='default' ET composeur replié : aucun style
+    // inline ci-dessus, donc le fond jaune de la feuille de style — voir
+    // .nc-card dans style.css — reprend la main) — même raison que pour les
+    // cartes (voir .c-white dans style.css). Sans ce dernier cas, le fond
+    // jaune par défaut gardait le texte clair de l'appli, donc illisible.
+    bloc.classList.toggle(
+      'composeur-clair',
+      composerColor === 'white' || (composerColor === 'default' && !teinte)
+    );
   }
 }
 
