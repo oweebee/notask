@@ -474,7 +474,6 @@ let state = {
   // loadAgenda, jamais deviné.
   googleReauth: false,
   showFavoritesOnly: false,
-  search: '',
   // Recherche en profondeur (seconde barre) : terme cherché, et rang de
   // l'occurrence affichée pour chaque notask (clé = id de la notask).
   deepSearch: '',
@@ -512,6 +511,26 @@ let state = {
    /labels/:id), partagé entre tous les onglets ET tous les appareils :
    rien à faire dessus. */
 const LABEL_FILTER_KEY = 'notask_label_filter';
+/* Catégorie virtuelle "Sans catégorie" : id 0, jamais attribué à un vrai
+   libellé (clé primaire SQL auto-incrémentée, Label.id démarre à 1 — voir
+   app/models.py). Filtre 100% CLIENT, jamais envoyé au serveur : /labels
+   ne connaît pas cet id, et /notes?label= planterait ou l'ignorerait.
+   Union avec les vrais libellés sélectionnés (même logique OU que le
+   reste) : une notask correspond si elle n'a AUCUN libellé, OU si elle
+   porte au moins un des vrais ids filtrés. */
+const SANS_CATEGORIE_ID = 0;
+function labelFiltersReels() {
+  return [...state.labelFilters].filter((id) => id !== SANS_CATEGORIE_ID);
+}
+function sansCategorieActif() {
+  return state.labelFilters.has(SANS_CATEGORIE_ID);
+}
+function noteCorrespondFiltreLabel(n) {
+  if (!state.labelFilters.size) return true;
+  const ids = n.label_ids || [];
+  if (sansCategorieActif() && ids.length === 0) return true;
+  return labelFiltersReels().some((id) => ids.includes(id));
+}
 function persisterLabelFilters() {
   try {
     if (state.labelFilters.size) {
@@ -544,13 +563,13 @@ function chargerLabelFilter() {
       let ids = null;
       try { ids = JSON.parse(sauve); } catch { ids = null; }
       if (Array.isArray(ids)) {
-        for (const n of ids) { const v = Number(n); if (v) state.labelFilters.add(v); }
+        for (const n of ids) { const v = Number(n); if (Number.isFinite(v)) state.labelFilters.add(v); }
       } else {
         // Ancien format (scalaire, avant la multi-sélection) : un simple
         // nombre stocké tel quel par l'ancien setLabelFilter(). On le
         // migre en filtre à un seul id plutôt que de le jeter.
         const v = Number(sauve);
-        if (v) state.labelFilters.add(v);
+        if (Number.isFinite(v)) state.labelFilters.add(v);
       }
     }
   } catch { /* stockage refusé : filtre reparti à vide, sans conséquence grave */ }
@@ -3582,15 +3601,20 @@ async function loadNotes() {
   // toute nouvelle liste repart avec l'icône barrée et les lignes masquées.
   state.visibleCheckedNoteIds.clear();
   const params = new URLSearchParams({ archived: state.showArchived });
-  for (const id of state.labelFilters) params.append('label', id);
+  // "Sans catégorie" actif : on ne peut pas demander au serveur "les
+  // notasks sans libellé" (label= n'accepte que de vrais ids), donc on
+  // récupère tout sans filtre serveur et on filtre nous-mêmes ci-dessous.
+  if (!sansCategorieActif()) {
+    for (const id of labelFiltersReels()) params.append('label', id);
+  }
   const notes = await api('/notes?' + params);
   await Promise.all(notes.map(decryptNote));
   let filtered = notes;
+  if (sansCategorieActif()) filtered = filtered.filter(noteCorrespondFiltreLabel);
   // Favoris : pas de paramètre côté serveur, la liste des notes non
   // archivées est déjà chargée — filtrer ici sur `pinned` suffit, comme la
   // recherche juste en dessous.
   if (state.showFavoritesOnly) filtered = filtered.filter((n) => n.pinned);
-  if (state.search) filtered = filtered.filter((n) => noteMatchesSearch(n, state.search));
   state.notes = filtered;
   /* Rendu isolé du reste du chargement. Leçon d'une panne réelle : une
      exception levée dans renderNotes() (une seule carte mal formée suffit)
@@ -3902,6 +3926,22 @@ async function loadLabels() {
 function renderLabelsDrawer() {
   const box = $('#labels-list');
   box.innerHTML = '';
+
+  const sansCatRow = document.createElement('div');
+  sansCatRow.className = 'label-row';
+  const sansCatBtn = document.createElement('button');
+  sansCatBtn.className = 'drawer-item label-item'
+    + (state.labelFilters.has(SANS_CATEGORIE_ID) ? ' active' : '');
+  sansCatBtn.innerHTML = '<span class="label">Sans catégorie</span>';
+  sansCatBtn.onclick = () => {
+    toggleLabelFilter(SANS_CATEGORIE_ID);
+    if (state.view === 'tasks') { renderLabelsDrawer(); loadTasks(); fermerMenuMobile(); }
+    else if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
+    else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
+  };
+  sansCatRow.appendChild(sansCatBtn);
+  box.appendChild(sansCatRow);
+
   for (const l of state.labels) {
     const row = document.createElement('div');
     row.className = 'label-row';
@@ -3929,7 +3969,8 @@ function renderLabelsDrawer() {
       // libellé le filtrerait aussi, ce qui n'est pas le geste voulu.
       if (geleParGlisser(row)) return;
       toggleLabelFilter(l.id);
-      if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
+      if (state.view === 'tasks') { renderLabelsDrawer(); loadTasks(); fermerMenuMobile(); }
+      else if (state.view !== 'notes' && state.view !== 'archives') switchView('notes');
       else { renderLabelsDrawer(); loadNotes(); fermerMenuMobile(); }
     };
     btn.oncontextmenu = async (e) => {
@@ -4170,7 +4211,7 @@ function notesReorderable() {
      sans risque de mélanger l'ordre d'un sous-ensemble avec celui des
      notasks non affichées. Restent exclus les vrais sous-ensembles filtrés
      — favoris, recherche, libellé — pour cette raison-là précisément. */
-  return !state.showFavoritesOnly && !state.search
+  return !state.showFavoritesOnly
     && !state.deepSearch && !state.labelFilters.size;
 }
 
@@ -4433,20 +4474,59 @@ function noteLines(n) {
   return lignes;
 }
 
+/* Construit la requête à partir du texte tapé dans #notes-deep-search.
+   Sans joker : simple recherche de sous-chaîne (comportement d'origine,
+   inchangé — pas de regex forcée pour rien). Avec $ ou * : motif, où
+   $ = exactement un caractère, * = zéro ou plusieurs caractères — tout le
+   reste du texte tapé est pris au pied de la lettre, donc échappé avant de
+   devenir une regex (un "." ou un "+" tapés par l'utilisateur ne doivent
+   pas se comporter comme des métacaractères regex, seuls $ et * le sont
+   ici). Accent-insensible dans les deux cas (sansAccents()), comme le
+   reste de la recherche. */
+function construireRequeteRecherche(terme) {
+  const plat = sansAccents((terme || '').toLowerCase());
+  if (!/[$*]/.test(plat)) return { motif: false, valeur: plat };
+  const motifSrc = plat
+    // Échappe tout métacaractère regex SAUF $ et *, qui ont leur propre
+    // sens ci-dessous (ordre important : on échappe avant de les traduire,
+    // sans quoi les backslashes ajoutés seraient eux-mêmes retraduits).
+    .replace(/[\\^.|?+()[\]{}]/g, '\\$&')
+    .replace(/\$/g, '.')
+    .replace(/\*/g, '.*?');
+  return { motif: true, valeur: new RegExp(motifSrc, 'g') };
+}
+
 /* Toutes les occurrences du terme dans une notask, dans l'ordre de
-   lecture. Recherche insensible à la casse, sur du texte déjà déchiffré. */
+   lecture. Recherche insensible à la casse ET aux accents, sur du texte
+   déjà déchiffré (sansAccents() préserve la longueur caractère par
+   caractère pour le français — les positions debut/fin retombent donc
+   juste sur le texte ORIGINAL, non filtré, utilisé pour le surlignage). */
 function findHits(n, terme) {
   const lignes = noteLines(n);
-  const cible = terme.toLowerCase();
+  const req = construireRequeteRecherche(terme);
   const hits = [];
   lignes.forEach((ligne, idx) => {
-    const bas = (ligne || '').toLowerCase();
-    let from = 0;
-    for (;;) {
-      const p = bas.indexOf(cible, from);
-      if (p === -1) break;
-      hits.push({ ligne: idx, debut: p, fin: p + cible.length });
-      from = p + cible.length;
+    const bas = sansAccents((ligne || '').toLowerCase());
+    if (!req.motif) {
+      const cible = req.valeur;
+      if (!cible) return;
+      let from = 0;
+      for (;;) {
+        const p = bas.indexOf(cible, from);
+        if (p === -1) break;
+        hits.push({ ligne: idx, debut: p, fin: p + cible.length });
+        from = p + cible.length;
+      }
+      return;
+    }
+    // Motif avec joker(s) : "*" peut matcher zéro caractère, donc exec()
+    // peut renvoyer une occurrence vide — sans avancer lastIndex à la main
+    // dans ce cas, la boucle ne progresserait jamais (boucle infinie).
+    req.valeur.lastIndex = 0;
+    let m;
+    while ((m = req.valeur.exec(bas))) {
+      hits.push({ ligne: idx, debut: m.index, fin: m.index + m[0].length });
+      if (m[0].length === 0) req.valeur.lastIndex += 1;
     }
   });
   return { lignes, hits };
@@ -4871,7 +4951,7 @@ function renderNotes() {
       // plus bas une fois la carte dans le DOM.
       // Archives dépliées uniquement quand une recherche est en cours :
       // c'est peut-être un mot d'archive qui a fait ressortir cette notask.
-      inner += `<div class="body${(n.items || []).length ? ' has-note-lines' : ''}">${renderFormatted(n.content, !!(state.search || state.deepSearch))}</div>`;
+      inner += `<div class="body${(n.items || []).length ? ' has-note-lines' : ''}">${renderFormatted(n.content, !!state.deepSearch)}</div>`;
     }
 
     // Sous le trait : aucun rendu visuel (plus de vignettes d'images). Le
@@ -5663,8 +5743,8 @@ function composerExpand() {
      ré-étiqueter à la main après coup. TOUS les libellés filtrés sont
      repris, pas juste un. Rien ne s'applique si aucun filtre n'est actif
      (composerLabelIds reste tel que resetComposer() l'a laissé). */
-  if (state.labelFilters.size) {
-    composerLabelIds = [...state.labelFilters];
+  if (labelFiltersReels().length) {
+    composerLabelIds = labelFiltersReels();
     renderComposerLabelChips();
   }
   // Démarrer une nouvelle notask pendant qu'une recherche filtre encore la
@@ -6428,17 +6508,52 @@ function brancherEffacementRecherche(inputSel, btnSel, onClear) {
   sync();
 }
 
-let searchTimer;
-$('#notes-search').addEventListener('input', (e) => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.search = e.target.value.trim(); loadNotes(); }, 250);
-});
-function viderRechercheSimple() {
-  clearTimeout(searchTimer);
-  state.search = '';
-  loadNotes();
+/* Notask Éclair : remplace l'ancienne barre "Trier les notasks" (un
+   simple filtre texte, redondant avec la recherche en profondeur
+   ci-dessous — voir state.search, supprimé). Taper un titre puis valider
+   (bouton rond ou Entrée) crée directement une notask datée à l'instant
+   présent, sans ouvrir le composeur complet. Payload aligné sur
+   creerNotaskDepuisComposeur() (même endpoint, même champs) : aucun champ
+   serveur inventé ici, due_at est le même ISO que partout ailleurs. */
+let eclairEnCours = false;
+async function creerNotaskEclair() {
+  if (eclairEnCours) return;
+  const input = $('#eclair-input');
+  const titre = input.value.trim();
+  if (!titre) return;
+  eclairEnCours = true;
+  try {
+    const maintenant = new Date().toISOString();
+    const body = {
+      title: await encryptField(titre),
+      description: await encryptField(''),
+      content: await encryptField(''),
+      is_checklist: false,
+      items: [],
+      color: 'default',
+      due_at: maintenant,
+      due_end_at: null,
+      all_day: false,
+      recur: null,
+      calendar_title: titre,
+      label_ids: [],
+      masked: false,
+    };
+    await api('/notes', { method: 'POST', body });
+    input.value = '';
+    $('#eclair-submit').blur();
+    if (state.view === 'notes' || state.view === 'archives' || state.view === 'favorites') loadNotes();
+  } catch (err) {
+    alert('Création impossible : ' + err.message);
+  } finally {
+    eclairEnCours = false;
+  }
 }
-brancherEffacementRecherche('#notes-search', '#notes-search-clear', viderRechercheSimple);
+$('#eclair-submit').innerHTML = ICONS.check;
+$('#eclair-submit').addEventListener('click', creerNotaskEclair);
+$('#eclair-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); creerNotaskEclair(); }
+});
 
 /* Seconde barre : recherche en profondeur, qui ne filtre pas la mosaïque
    mais la remplace par des cartes larges centrées sur chaque occurrence
@@ -6469,11 +6584,6 @@ brancherEffacementRecherche('#notes-deep-search', '#notes-deep-search-clear', vi
    si les deux champs sont déjà vides, pour ne pas relancer un rendu inutile
    à chaque clic sur "Notasks" ou chaque frappe dans le composeur. */
 function viderRecherches() {
-  if ($('#notes-search').value || state.search) {
-    $('#notes-search').value = '';
-    $('#notes-search-clear').hidden = true;
-    viderRechercheSimple();
-  }
   if ($('#notes-deep-search').value || state.deepSearch) {
     $('#notes-deep-search').value = '';
     $('#notes-deep-search-clear').hidden = true;
@@ -10742,13 +10852,16 @@ async function loadAgenda() {
   });
   if (state.labelFilters.size) {
     const params = new URLSearchParams({ archived: state.showArchived });
-    for (const id of state.labelFilters) params.append('label', id);
+    if (!sansCategorieActif()) {
+      for (const id of labelFiltersReels()) params.append('label', id);
+    }
     let notesDuLibelle;
     try {
       notesDuLibelle = await api('/notes?' + params);
     } catch {
       notesDuLibelle = [];
     }
+    if (sansCategorieActif()) notesDuLibelle = notesDuLibelle.filter(noteCorrespondFiltreLabel);
     const idsAutorises = new Set(notesDuLibelle.map((n) => n.id));
     items = items.filter((t) => idsAutorises.has(t.note_id));
   }
@@ -10800,10 +10913,25 @@ async function loadTasks() {
   // "done" inclus ici, contrairement à la colonne d'échéances : cette vue a
   // sa propre colonne "terminées". Même filtre d'un mois sur "upcoming".
   const limiteUnMois = Date.now() + 31 * 24 * 60 * 60 * 1000;
-  const filtered = tasks.filter((t) => {
+  let filtered = tasks.filter((t) => {
     if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
     return true;
   });
+  if (state.labelFilters.size) {
+    const params = new URLSearchParams({ archived: state.showArchived });
+    if (!sansCategorieActif()) {
+      for (const id of labelFiltersReels()) params.append('label', id);
+    }
+    let notesDuLibelle;
+    try {
+      notesDuLibelle = await api('/notes?' + params);
+    } catch {
+      notesDuLibelle = [];
+    }
+    if (sansCategorieActif()) notesDuLibelle = notesDuLibelle.filter(noteCorrespondFiltreLabel);
+    const idsAutorises = new Set(notesDuLibelle.map((n) => n.id));
+    filtered = filtered.filter((t) => idsAutorises.has(t.note_id));
+  }
   renderTasks(filtered);
 }
 

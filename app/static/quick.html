@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>notask — rapide</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="stylesheet" href="/static/style.css?v=2.9107">
+<link rel="stylesheet" href="/static/style.css?v=2.9108">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -255,14 +255,16 @@
         </div>
 
         <!-- Deux barres distinctes, volontairement :
-             - "Trier" (bleu cuillère) filtre la mosaïque, affichage normal ;
+             - "Notask Éclair" (bleu cuillère) crée directement une notask
+               datée à l'instant présent (voir creerNotaskEclair() dans
+               app.js) — remplace l'ancien filtre "Trier les notasks" ;
              - "Rechercher" (jaune cuillère) affiche des cartes deux fois
                plus larges, centrées sur l'occurrence trouvée avec son
                contexte — voir renderSearchHits() dans app.js. -->
         <div class="toolbar search-toolbar">
-          <input type="search" id="notes-search" placeholder="Trier les notasks…">
-          <button type="button" class="search-clear" id="notes-search-clear" hidden
-                  title="Effacer" aria-label="Effacer le tri"></button>
+          <input type="text" id="eclair-input" placeholder="Notask Éclair : titre…" maxlength="2000">
+          <button type="button" class="eclair-submit" id="eclair-submit"
+                  title="Créer maintenant" aria-label="Créer une notask maintenant"></button>
         </div>
         <div class="toolbar search-toolbar deep-search-toolbar">
           <input type="search" id="notes-deep-search" placeholder="Rechercher dans les notasks…">
@@ -657,6 +659,6 @@
 </dialog>
 
 <script>window.NOTASK_QUICK_CAPTURE = true;</script>
-<script src="/static/app.js?v=0.9109"></script>
+<script src="/static/app.js?v=0.9110"></script>
 </body>
 </html>
