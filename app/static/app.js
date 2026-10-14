@@ -511,6 +511,25 @@ let state = {
    /labels/:id), partagé entre tous les onglets ET tous les appareils :
    rien à faire dessus. */
 const LABEL_FILTER_KEY = 'notask_label_filter';
+/* Couleur par défaut d'une nouvelle notask, quand l'utilisateur n'en a pas
+   choisi explicitement (voir son appel dans creerNotaskDepuisComposeur() et
+   creerNotaskEclair()) :
+   - Aucun libellé (réel) : jaune notask (voir COLORS — 'yellow' est la
+     version de ce jaune pour le fond plein d'une carte, --spoon-jaune étant
+     réservé aux petits accents d'interface ; même principe déjà en place
+     pour les barres Éclair/Rechercher, voir leur CSS).
+   - Un ou plusieurs libellés : la couleur du PREMIER d'entre eux dans
+     l'ordre d'AFFICHAGE du tiroir (state.labels, pas l'ordre d'ajout dans
+     labelIds) qui a une couleur propre — un libellé sans couleur (l.color
+     vide) est sauté, pas traité comme un blocage. */
+function couleurParDefautDepuisLabels(labelIds) {
+  if (!labelIds || !labelIds.length) return 'yellow';
+  for (const l of state.labels) {
+    if (labelIds.includes(l.id) && l.color) return l.color;
+  }
+  return 'default';
+}
+
 /* Catégorie virtuelle "Sans catégorie" : id 0, jamais attribué à un vrai
    libellé (clé primaire SQL auto-incrémentée, Label.id démarre à 1 — voir
    app/models.py). Filtre 100% CLIENT, jamais envoyé au serveur : /labels
@@ -3932,6 +3951,17 @@ function renderLabelsDrawer() {
   const sansCatBtn = document.createElement('button');
   sansCatBtn.className = 'drawer-item label-item'
     + (state.labelFilters.has(SANS_CATEGORIE_ID) ? ' active' : '');
+  // Attribut `style` posé même sans couleur propre (fond transparent, sans
+  // effet visuel en soi) : .drawer-item.label-item[style] (voir style.css)
+  // réserve le texte bien lisible (--md-on-surface) et le contour bleu
+  // quand actif aux libellés qui ONT cet attribut — posé ici par
+  // app.js pour chaque vrai libellé via btn.style.background, jamais pour
+  // cette entrée virtuelle jusqu'ici. Sans lui, "Sans catégorie" retombait
+  // sur la couleur par défaut (--md-on-surface-variant, plus terne) et ne
+  // montrait AUCUN contour une fois sélectionnée, contrairement à un vrai
+  // libellé filtré — d'où l'impression qu'elle n'apparaissait pas/ne
+  // réagissait pas au clic.
+  sansCatBtn.style.background = 'transparent';
   sansCatBtn.innerHTML = '<span class="label">Sans catégorie</span>';
   sansCatBtn.onclick = () => {
     toggleLabelFilter(SANS_CATEGORIE_ID);
@@ -6364,7 +6394,7 @@ async function creerNotaskDepuisComposeur() {
       // correspondant. Logique inchangée.
       items: await Promise.all(lignesMixtes.map((l) => serialiserLigne(l))),
       icon: state.composerIcon,
-      color: composerColor,
+      color: composerColor === 'default' ? couleurParDefautDepuisLabels(composerLabelIds) : composerColor,
       due_at: $('#nc-due').value || null,
       // Fin de plage : n'a de sens qu'avec un début (voir due_end_at dans
       // app/models.py, remis à None côté serveur si due_at est absent).
@@ -6530,7 +6560,7 @@ async function creerNotaskEclair() {
       content: await encryptField(''),
       is_checklist: false,
       items: [],
-      color: 'default',
+      color: couleurParDefautDepuisLabels([]),
       due_at: maintenant,
       due_end_at: null,
       all_day: false,
@@ -10798,9 +10828,14 @@ async function updateTaskBadges() {
   state.tasksRappels = tasks;
 
   const limiteUnMois = Date.now() + 31 * 24 * 60 * 60 * 1000;
+  // Même exclusion que la colonne d'échéances/"Notasks prévues" (voir
+  // idsNotesLibellesMasques()) : sans elle, le badge comptait aussi les
+  // échéances de catégories masquées.
+  const masqueesBadge = await idsNotesLibellesMasques();
   const counts = { late: 0, today: 0, imminent: 0, upcoming: 0 };
   for (const t of tasks) {
     if (!(t.bucket in counts)) continue;
+    if (masqueesBadge && masqueesBadge.has(t.note_id)) continue;
     if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) continue;
     counts[t.bucket] += 1;
   }
@@ -10830,6 +10865,25 @@ async function updateTaskBadges() {
    la liste des notasks pour CES libellés — juste leurs id, pas de
    déchiffrement nécessaire — et on ne garde que les tâches dont la notask
    parente y figure. */
+/* Notes portant au moins un libellé MASQUÉ (œil barré) — à exclure de
+   toute vue qui n'est pas déjà filtrée dessus explicitement (voir
+   libellesMasques dans renderNotes(), seul endroit qui le faisait jusqu'ici).
+   null si aucun libellé masqué : évite une requête pour rien dans le cas
+   courant où personne n'en a masqué. */
+async function idsNotesLibellesMasques() {
+  const hiddenIds = state.labels.filter((l) => l.hidden).map((l) => l.id);
+  if (!hiddenIds.length) return null;
+  const params = new URLSearchParams({ archived: state.showArchived });
+  for (const id of hiddenIds) params.append('label', id);
+  let notes;
+  try {
+    notes = await api('/notes?' + params);
+  } catch {
+    notes = [];
+  }
+  return new Set(notes.map((n) => n.id));
+}
+
 async function loadAgenda() {
   let tasks;
   try {
@@ -10850,6 +10904,8 @@ async function loadAgenda() {
     if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
     return true;
   });
+  const masqueesAgenda = await idsNotesLibellesMasques();
+  if (masqueesAgenda) items = items.filter((t) => !masqueesAgenda.has(t.note_id));
   if (state.labelFilters.size) {
     const params = new URLSearchParams({ archived: state.showArchived });
     if (!sansCategorieActif()) {
@@ -10917,6 +10973,8 @@ async function loadTasks() {
     if (t.bucket === 'upcoming' && t.due_at && new Date(t.due_at).getTime() > limiteUnMois) return false;
     return true;
   });
+  const masqueesTasks = await idsNotesLibellesMasques();
+  if (masqueesTasks) filtered = filtered.filter((t) => !masqueesTasks.has(t.note_id));
   if (state.labelFilters.size) {
     const params = new URLSearchParams({ archived: state.showArchived });
     if (!sansCategorieActif()) {

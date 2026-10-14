@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9108">
+<link rel="stylesheet" href="/static/style.css?v=2.9110">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -165,6 +165,16 @@
              par la note voisine la plus haute — d'où le grand vide entre les
              deux. -->
         <div class="composer-stack">
+        <!-- "Notask Éclair" placé AU-DESSUS du composeur standard (sur
+             demande explicite) : crée directement une notask, datée à
+             l'instant présent, sans ouvrir ce composeur (voir
+             creerNotaskEclair() dans app.js) — remplace l'ancien filtre
+             "Trier les notasks". Bleu cuillère. -->
+        <div class="toolbar search-toolbar">
+          <input type="text" id="eclair-input" placeholder="Notask Éclair : titre…" maxlength="2000">
+          <button type="button" class="eclair-submit" id="eclair-submit"
+                  title="Créer maintenant" aria-label="Créer une notask maintenant"></button>
+        </div>
         <div class="note-composer">
           <div class="nc-card">
             <div class="composer-head">
@@ -271,18 +281,9 @@
           </div>
         </div>
 
-        <!-- Deux barres distinctes, volontairement :
-             - "Notask Éclair" (bleu cuillère) crée directement une notask
-               datée à l'instant présent (voir creerNotaskEclair() dans
-               app.js) — remplace l'ancien filtre "Trier les notasks" ;
-             - "Rechercher" (jaune cuillère) affiche des cartes deux fois
-               plus larges, centrées sur l'occurrence trouvée avec son
-               contexte — voir renderSearchHits() dans app.js. -->
-        <div class="toolbar search-toolbar">
-          <input type="text" id="eclair-input" placeholder="Notask Éclair : titre…" maxlength="2000">
-          <button type="button" class="eclair-submit" id="eclair-submit"
-                  title="Créer maintenant" aria-label="Créer une notask maintenant"></button>
-        </div>
+        <!-- "Rechercher" (jaune cuillère) affiche des cartes deux fois
+             plus larges, centrées sur l'occurrence trouvée avec son
+             contexte — voir renderSearchHits() dans app.js. -->
         <div class="toolbar search-toolbar deep-search-toolbar">
           <input type="search" id="notes-deep-search" placeholder="Rechercher dans les notasks…">
           <button type="button" class="search-clear" id="notes-deep-search-clear" hidden
@@ -791,6 +792,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9110"></script>
+<script src="/static/app.js?v=0.9112"></script>
 </body>
 </html>

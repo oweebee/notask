@@ -1416,13 +1416,36 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   place-items: center;
   border: none;
   border-radius: 50%;
+  /* Coupe tout ce que le SVG grossi ci-dessous dépasse hors du rond : son
+     propre cercle (ICONS.check, voir app.js) ne remplit qu'environ 78 % de
+     son viewBox 24×24 — on l'agrandit donc au-delà de 28px pour que ce
+     cercle intérieur vienne épouser EXACTEMENT le bord du rond jaune, et ce
+     cadre circulaire grâce à overflow:hidden absorbe le débord du reste du
+     carré SVG (ICONS.check n'a rien d'autre à l'intérieur, rien d'utile
+     n'est donc coupé). */
+  overflow: hidden;
   background: var(--spoon-jaune);
   color: #1a1a1a;
   cursor: pointer;
   transition: background .15s;
 }
 .eclair-submit:hover { background: rgba(var(--spoon-jaune-rgb), .8); }
-.eclair-submit svg { width: 18px; height: 18px; display: block; }
+/* 35px, pas 28 : le cercle tracé dans ICONS.check (rayon 8.5 + moitié du
+   trait 1.6, dans un viewBox 24×24) ne couvre que ~78 % de son carré —
+   réglé pour qu'il atteigne juste le bord du rond jaune (28px) une fois
+   celui-ci coupé par overflow:hidden ci-dessus. Avant : 18px, un cercle
+   bien plus petit que le rond jaune, avec une bande vide tout autour. */
+.eclair-submit svg { width: 35px; height: 35px; display: block; }
+
+/* #eclair-input : bleu cuillère LITTÉRAL (--spoon-bleu), sur demande
+   explicite — pas la teinte approchée (rgba(29,84,143)) utilisée par
+   .search-toolbar ci-dessus pour les autres champs. --spoon-bleu est une
+   teinte claire : texte foncé pour le contraste, même convention que
+   .hit-extract mark.hit.current plus haut dans ce fichier (même variable,
+   texte #0d1b2a). Règle par id : l'emporte sur le fond de .search-toolbar
+   sans toucher aux autres champs qui la partagent (#notes-deep-search). */
+#eclair-input { background: var(--spoon-bleu); color: #0d1b2a; }
+#eclair-input::placeholder { color: rgba(13, 27, 42, .65); }
 
 /* ---- Résultats de la recherche en profondeur (voir renderSearchHits) ----
    Cartes deux fois plus larges que dans la mosaïque : il ne s'agit plus
