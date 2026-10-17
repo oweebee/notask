@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9120';
+const APP_VERSION = '0.9121';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -7359,13 +7359,36 @@ function placerCurseurSiSimpleClic(e, cible) {
    le rétablissement à appeler lui-même en sortie. */
 function selectionDansZone(el) {
   const retablirDefilement = memoriserDefilements(el);
-  el.focus();
+  /* Sélection relevée AVANT focus() et remise ensuite : sur mobile (PWA),
+     toucher un bouton de la barre ou une pastille de couleur peut faire
+     sortir la sélection de la zone, et focus() la replace alors au début —
+     la couleur s'appliquait à un marqueur vide au lieu du texte choisi. On
+     retombe sur la dernière sélection connue DANS la zone (voir l'écouteur
+     selectionchange juste en dessous). */
   const sel = window.getSelection();
+  let avant = sel.rangeCount ? sel.getRangeAt(0) : null;
+  if (!avant || !el.contains(avant.commonAncestorContainer)) avant = el._derniereSelection || null;
+  avant = avant && el.contains(avant.commonAncestorContainer) ? avant.cloneRange() : null;
+  el.focus();
+  if (avant) { sel.removeAllRanges(); sel.addRange(avant); }
   if (!sel.rangeCount) { retablirDefilement(); return null; }
   const range = sel.getRangeAt(0);
   if (!el.contains(range.commonAncestorContainer)) { retablirDefilement(); return null; }
   return { sel, range, text: range.toString(), retablirDefilement };
 }
+
+/* Dernière sélection connue dans chaque zone éditable (voir
+   selectionDansZone) : mise à jour à chaque mouvement de sélection, y compris
+   un simple curseur, pour ne jamais ressusciter une ancienne sélection. */
+document.addEventListener('selectionchange', () => {
+  const s = window.getSelection();
+  if (!s || !s.rangeCount) return;
+  const r = s.getRangeAt(0);
+  const n = r.commonAncestorContainer;
+  const base = n.nodeType === 1 ? n : n.parentElement;
+  const zone = base && base.closest('[contenteditable="true"]');
+  if (zone) zone._derniereSelection = r.cloneRange();
+});
 
 /* Forme sous laquelle une ligne à cocher part au serveur. Le texte est
    chiffré ; `calendar_title` est la SEULE exception, et uniquement quand la
@@ -7598,6 +7621,141 @@ function retirerEnveloppe(range, enveloppe) {
   return nu;
 }
 
+/* ---- Gras / italique / souligné / couleur : moteur par nœud de texte ----
+   L'ancienne méthode (texte de la sélection réinséré dans UNE enveloppe
+   neuve, via range.toString()) aplatissait tout ce qui était déjà présent
+   dans la sélection. Constaté au banc d'essai (Playwright, vraies
+   fonctions) : texte en gras resélectionné puis coloré -> gras PERDU et
+   `****` parasites à l'enregistrement ; retirer le gras retirait aussi la
+   couleur ; une sélection sur plusieurs lignes fusionnait les lignes ou
+   laissait des `**`/`__` visibles (ces marqueurs ne traversent pas un saut
+   de ligne, voir renderFormatted).
+   Ici, chaque nœud de texte de la sélection est traité un par un : on lui
+   retire l'effet visé (en scindant proprement les enveloppes autour de
+   lui, les AUTRES effets restent), puis on l'enveloppe à nouveau si besoin.
+   Une enveloppe ne contient donc jamais de <br>, et deux effets différents
+   se cumulent toujours. */
+const STYLES_EN_LIGNE = new Set(['bold', 'italic', 'underline', 'color']);
+
+// Scinde chaque élément entre `noeud` et `ancetre` (inclus) pour que la
+// branche ne porte plus que `noeud` : les frères avant/après partent dans
+// des copies de ces mêmes éléments, donc gardent leur mise en forme.
+function isolerBranche(noeud, ancetre) {
+  let enfant = noeud;
+  let parent = noeud.parentNode;
+  while (parent) {
+    if (enfant.previousSibling) {
+      const avant = parent.cloneNode(false);
+      while (parent.firstChild !== enfant) avant.appendChild(parent.firstChild);
+      parent.parentNode.insertBefore(avant, parent);
+    }
+    if (enfant.nextSibling) {
+      const apres = parent.cloneNode(false);
+      while (enfant.nextSibling) apres.appendChild(enfant.nextSibling);
+      parent.parentNode.insertBefore(apres, parent.nextSibling);
+    }
+    if (parent === ancetre) break;
+    enfant = parent;
+    parent = parent.parentNode;
+  }
+}
+
+function enveloppeDuTexte(el, t, kind) {
+  const env = t.parentElement && t.parentElement.closest(FMT_ENVELOPPES[kind]);
+  return env && env !== el && el.contains(env) ? env : null;
+}
+
+function retirerStyleDuTexte(el, t, kind) {
+  let env;
+  while ((env = enveloppeDuTexte(el, t, kind))) {
+    isolerBranche(t, env);
+    env.replaceWith(...env.childNodes);
+  }
+}
+
+// Recolle deux enveloppes identiques devenues voisines (sinon
+// `**a****b**`, que renderFormatted lit mal).
+function fusionnerEnveloppesVoisines(el) {
+  const liste = Array.from(el.querySelectorAll('strong, b, em, i, u, span[style*="color"]')).reverse();
+  for (const e of liste) {
+    if (!e.isConnected || e.className) continue;
+    const suiv = e.nextSibling;
+    if (suiv && suiv.nodeType === 1 && suiv.tagName === e.tagName && !suiv.className
+        && (suiv.getAttribute('style') || '') === (e.getAttribute('style') || '')) {
+      while (suiv.firstChild) e.appendChild(suiv.firstChild);
+      suiv.remove();
+    }
+  }
+}
+
+function appliquerStyleEnLigne(el, kind, couleur, ctx) {
+  const { sel, range, retablirDefilement } = ctx;
+  // Découpe aux bornes : la plage (vivante) suit les splitText.
+  if (range.endContainer.nodeType === 3 && range.endOffset > 0 && range.endOffset < range.endContainer.length) {
+    range.endContainer.splitText(range.endOffset);
+  }
+  if (range.startContainer.nodeType === 3 && range.startOffset > 0 && range.startOffset < range.startContainer.length) {
+    const suite = range.startContainer.splitText(range.startOffset);
+    range.setStart(suite, 0);
+  }
+  const textes = [];
+  const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let t;
+  while ((t = tw.nextNode())) {
+    if (!t.data) continue;
+    // Jamais dans du code (texte brut par nature), ni dans un bloc non
+    // éditable (icône d'archive, ligne à cocher, pastille de copie).
+    if (t.parentElement.closest('code, pre, [contenteditable="false"], .code-copy-btn')) continue;
+    if (range.comparePoint(t, 0) < 0 || range.comparePoint(t, t.length) > 0) continue;
+    textes.push(t);
+  }
+  if (!textes.length) { retablirDefilement(); return; }
+
+  // Les sauts de ligne peuvent être de VRAIS \n dans un nœud de texte
+  // (rendu en pre-wrap, pas toujours des <br>) : chacun devient son propre
+  // nœud, jamais enveloppé — `**`, `*` et `__` ne traversent pas une ligne
+  // (voir renderFormatted), ils restaient sinon visibles à la réouverture.
+  for (let i = 0; i < textes.length; i++) {
+    const x = textes[i];
+    const k = x.data.indexOf('\n');
+    if (k < 0 || x.data === '\n') continue;
+    const morceaux = [];
+    let courant = x;
+    if (k > 0) { courant = courant.splitText(k); morceaux.push(x); }
+    const reste = courant.length > 1 ? courant.splitText(1) : null;
+    morceaux.push(courant);
+    if (reste) morceaux.push(reste);
+    textes.splice(i, 1, ...morceaux);
+    i += morceaux.length - 2; // le reste (s'il existe) est réexaminé
+  }
+  const estSaut = (x) => /^\n+$/.test(x.data);
+  const visibles = textes.filter((x) => !estSaut(x));
+  if (!visibles.length) { retablirDefilement(); return; }
+
+  // Bascule : tout est déjà dans cet effet -> on le retire. La couleur,
+  // elle, recolore ; seule la couleur nulle ("défaut") la retire.
+  const retirer = kind === 'color' ? !couleur : visibles.every((x) => enveloppeDuTexte(el, x, kind));
+  for (const x of textes) {
+    retirerStyleDuTexte(el, x, kind);
+    if (retirer || estSaut(x)) continue;
+    const w = document.createElement(kind === 'color' ? 'span' : FMT_TAGS[kind]);
+    if (kind === 'color') w.style.color = couleur;
+    x.replaceWith(w);
+    w.appendChild(x);
+  }
+  fusionnerEnveloppesVoisines(el);
+
+  // Même sélection reposée qu'avant, pour enchaîner un autre effet.
+  const r = document.createRange();
+  r.setStart(textes[0], 0);
+  const der = textes[textes.length - 1];
+  r.setEnd(der, der.length);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  assurerLigneApresBloc(el);
+  retablirDefilement();
+}
+
 /* `couleur` sert aussi d'ADRESSE pour kind === 'url' (le paramètre est la
    valeur libre de l'effet), et `texteImpose` de libellé de repli quand rien
    n'est sélectionné — l'adresse s'affiche alors telle quelle. */
@@ -7605,6 +7763,13 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
   const ctx = selectionDansZone(el);
   if (!ctx) return;
   const { sel, range, text, retablirDefilement } = ctx;
+
+  // Sélection non vide + effet "en ligne" : nouveau moteur (voir
+  // appliquerStyleEnLigne) qui cumule les effets au lieu d'aplatir.
+  if (!range.collapsed && STYLES_EN_LIGNE.has(kind)) {
+    appliquerStyleEnLigne(el, kind, couleur, ctx);
+    return;
+  }
 
   /* Bouton bascule : si la sélection est déjà habillée par cet effet, on
      le RETIRE au lieu de l'empiler. Cas particulier de la couleur : tant
@@ -8131,9 +8296,11 @@ function richToText(root) {
     const inner = () => Array.from(node.childNodes).map(walk).join('');
     switch (tag) {
       case 'br': return '\n';
-      case 'strong': case 'b': return '**' + inner() + '**';
-      case 'em': case 'i': return '*' + inner() + '*';
-      case 'u': return '__' + inner() + '__';
+      // Enveloppe vide (reliquat d'un marqueur jamais rempli) : rien, sinon
+      // `****` ou `____` visibles à la réouverture (constaté).
+      case 'strong': case 'b': { const t = inner(); return t ? '**' + t + '**' : ''; }
+      case 'em': case 'i': { const t = inner(); return t ? '*' + t + '*' : ''; }
+      case 'u': { const t = inner(); return t ? '__' + t + '__' : ''; }
       // texteCodeSansBouton : la pastille de copie est inject\u00e9e DANS la
       // zone de code, elle ne doit jamais se retrouver dans le texte
       // enregistr\u00e9 (voir ajouterBoutonsCopieCode).
@@ -8170,7 +8337,8 @@ function richToText(root) {
         // dépliages, sans que rien du texte n'ait changé.
         if (node.classList.contains('note-archive-zone')) return `[arch]${inner()}[/arch]`;
         const hex = cssColorToHex(node.style.color);
-        return hex ? `[c:${hex}]${inner()}[/c]` : inner();
+        const t = inner();
+        return hex && t ? `[c:${hex}]${t}[/c]` : t;
       }
       // Lien : l'adresse repart dans le marqueur, donc chiffrée avec le
       // reste (voir NOTE_URL_MARK). inner() ignore au passage la pastille
