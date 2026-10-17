@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9121';
+const APP_VERSION = '0.9123';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -3614,7 +3614,7 @@ function noteMatchesSearch(n, q) {
     n.title || '',
     n.description || '',
     n.content || '',
-    (n.items || []).map((it) => it.text || '').join(' '),
+    (n.items || []).map((it) => texteLigneBrut(it.text || '')).join(' '),
     libelles,
     dates,
   ].join(' ').toLowerCase());
@@ -3746,7 +3746,7 @@ async function loadArchivedItems() {
     // Adapté à la forme attendue par creerLigneAgenda (qui parle de tâches) :
     // une ligne archivée peut ne plus avoir d'échéance du tout.
     creerLigne: (it) => creerLigneAgenda({
-      kind: 'item', id: it.id, note_id: it.note_id, text: it.text,
+      kind: 'item', id: it.id, note_id: it.note_id, text: texteLigneBrut(it.text),
       due_at: it.due_at, due_end_at: it.due_end_at, all_day: it.all_day, done: it.checked,
       color: it.color, icon: it.icon,
     }, () => loadNotes(), true, 'unarchive'),
@@ -3892,7 +3892,7 @@ function creerLigneCorbeille(it, rafraichir) {
     row.style.background = hexToRgba(LABEL_COLOR_HEX[it.color], ATTENUATION_PASTILLE);
   }
   const icon = ICON_CHOICES[it.icon] || ICON_CHOICES.spoonblue;
-  const label = it.text || 'Ligne sans texte';
+  const label = texteLigneBrut(it.text) || 'Ligne sans texte';
   row.innerHTML = `
     <span class="agenda-item-icon">${icon}</span>
     <span class="agenda-item-body">
@@ -4575,12 +4575,12 @@ function noteLines(n) {
       const it = items.find((i) => String(i.id) === id);
       if (!it) return '';
       vues.add(it.id);
-      return '\n' + (it.text || '');
+      return '\n' + texteLigneBrut(it.text || '');
     }).split('\n'));
   }
   // Lignes qu'aucun marqueur ne cite : notask créée avant la disparition des
   // modes, dont le contenu est vide et les lignes seulement dans n.items.
-  for (const it of items) if (!vues.has(it.id)) lignes.push(it.text || '');
+  for (const it of items) if (!vues.has(it.id)) lignes.push(texteLigneBrut(it.text || ''));
   return lignes;
 }
 
@@ -5052,7 +5052,7 @@ function renderNotes() {
           ? `<em class="item-due-tag">${formatDueRange(it.due_at, it.due_end_at, it.all_day)}</em>` : '';
         inner += `<li class="${it.checked ? 'done' : ''}" data-item="${it.id}">
           <input type="checkbox" ${it.checked ? 'checked' : ''}>
-          <span>${escapeHtml(it.text)}${due}</span></li>`;
+          <span>${htmlLigne(it.text)}${due}</span></li>`;
       }
       inner += '</ul>';
     } else if (n.content) {
@@ -7195,7 +7195,7 @@ function poserLignesDansTexte(items, zone) {
     // échéance et son événement Google Calendar — rien de la logique
     // d'échéance ne change dans cette conversion.
     if (i.id != null) bloc.dataset.ligne = String(i.id);
-    bloc.querySelector('.note-ligne-txt').textContent = i.text;
+    remplirTexteLigne(bloc.querySelector('.note-ligne-txt'), i.text);
     bloc.querySelector('.note-ligne-case').checked = !!i.checked;
     bloc.classList.toggle('done', !!i.checked);
     majEcheanceLigne(bloc, i.due_at || null, i.due_end_at || null, !!i.all_day, i.recur || null);
@@ -7406,7 +7406,7 @@ async function serialiserLigne(l, { avecId = false } = {}) {
     due_end_at: l.due_end_at,
     all_day: l.all_day,
     recur: l.recur,
-    calendar_title: l.due_at ? l.text : null,
+    calendar_title: l.due_at ? texteLigneBrut(l.text) : null,
     text: await encryptField(l.text),
   };
 }
@@ -7705,7 +7705,12 @@ function appliquerStyleEnLigne(el, kind, couleur, ctx) {
     if (!t.data) continue;
     // Jamais dans du code (texte brut par nature), ni dans un bloc non
     // éditable (icône d'archive, ligne à cocher, pastille de copie).
-    if (t.parentElement.closest('code, pre, [contenteditable="false"], .code-copy-btn')) continue;
+    if (t.parentElement.closest('code, pre, .code-copy-btn')) continue;
+    // Exclu seulement si la zone éditable LA PLUS PROCHE est figée : le
+    // texte d'une ligne à cocher (span contenteditable="true" dans un bloc
+    // "false") doit pouvoir être mis en forme lui aussi.
+    const ce = t.parentElement.closest('[contenteditable]');
+    if (ce && ce.getAttribute('contenteditable') === 'false') continue;
     if (range.comparePoint(t, 0) < 0 || range.comparePoint(t, t.length) > 0) continue;
     textes.push(t);
   }
@@ -7756,6 +7761,50 @@ function appliquerStyleEnLigne(el, kind, couleur, ctx) {
   retablirDefilement();
 }
 
+/* Lien et zone d'archive : comme le gras ou la couleur, ils ne doivent PAS
+   aplatir ce qu'ils englobent (constaté au banc d'essai : poser un lien sur
+   un mot en gras/couleur le faisait repasser en texte nu ; retirer le lien
+   faisait aussi perdre l'italique AUTOUR). Version de retirerEnveloppe()
+   qui garde la mise en forme : les trois morceaux (avant / sélection /
+   après) sont clonés tels quels au lieu d'être réduits à leur texte. */
+function retirerEnveloppeRiche(range, enveloppe) {
+  const avant = document.createRange();
+  avant.selectNodeContents(enveloppe);
+  avant.setEnd(range.startContainer, range.startOffset);
+  const apres = document.createRange();
+  apres.selectNodeContents(enveloppe);
+  apres.setStart(range.endContainer, range.endOffset);
+  const morceaux = [avant.cloneContents(), range.cloneContents(), apres.cloneContents()];
+  // cloneContents() ne reprend que ce qui est SOUS l'ancêtre commun de la
+  // sélection : un italique entre la sélection et l'enveloppe était perdu.
+  let anc = range.commonAncestorContainer;
+  if (anc.nodeType !== 1) anc = anc.parentNode;
+  while (anc && anc !== enveloppe) {
+    const c = anc.cloneNode(false);
+    c.appendChild(morceaux[1]);
+    const f = document.createDocumentFragment();
+    f.appendChild(c);
+    morceaux[1] = f;
+    anc = anc.parentNode;
+  }
+  const estArchive = enveloppe.classList.contains('note-archive-zone');
+  for (const f of morceaux) f.querySelectorAll('.archive-icon-mark').forEach((x) => x.remove());
+  const aDuTexte = (f) => (f.textContent || '').replace(/\u200b/g, '') !== '';
+  const habiller = (f) => {
+    const c = enveloppe.cloneNode(false);
+    c.appendChild(f);
+    if (estArchive) c.insertAdjacentHTML('beforeend', ARCHIVE_ICON_HTML);
+    return c;
+  };
+  const resultat = document.createDocumentFragment();
+  if (aDuTexte(morceaux[0])) resultat.appendChild(habiller(morceaux[0]));
+  const milieu = Array.from(morceaux[1].childNodes);
+  resultat.appendChild(morceaux[1]);
+  if (aDuTexte(morceaux[2])) resultat.appendChild(habiller(morceaux[2]));
+  enveloppe.parentNode.replaceChild(resultat, enveloppe);
+  return milieu;
+}
+
 /* `couleur` sert aussi d'ADRESSE pour kind === 'url' (le paramètre est la
    valeur libre de l'effet), et `texteImpose` de libellé de repli quand rien
    n'est sélectionné — l'adresse s'affiche alors telle quelle. */
@@ -7778,6 +7827,19 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
   const bascule = kind !== 'color' || !couleur;
   if (text && bascule) {
     const enveloppe = trouverEnveloppe(el, range, kind);
+    if (enveloppe && (kind === 'url' || kind === 'archive')) {
+      const milieu = retirerEnveloppeRiche(range, enveloppe);
+      const r = document.createRange();
+      if (milieu.length) {
+        r.setStartBefore(milieu[0]);
+        r.setEndAfter(milieu[milieu.length - 1]);
+      }
+      sel.removeAllRanges();
+      sel.addRange(r);
+      fusionnerEnveloppesVoisines(el);
+      retablirDefilement();
+      return;
+    }
     if (enveloppe) {
       const nu = retirerEnveloppe(range, enveloppe);
       const r = document.createRange();
@@ -7789,16 +7851,43 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
     }
   }
 
+  /* Texte AVEC ses sauts de ligne : range.toString() ignore les <br>, d'où
+     des lignes recollées dans un code et une zone d'archive prise pour une
+     zone en ligne alors qu'elle couvrait plusieurs lignes. */
+  let texteSauts = texteDeRange(range);
+
+  // Lien / archive : on garde la mise en forme englobée.
+  let contenuRiche = null;
+  if ((kind === 'url' || kind === 'archive') && !range.collapsed) {
+    // Un code ne se coupe jamais : c'est du texte brut, un lien ou une
+    // archive posés DEDANS seraient perdus à l'enregistrement. La sélection
+    // est élargie au code entier de part et d'autre.
+    const codeDe = (n) => {
+      const c = (n.nodeType === 1 ? n : n.parentElement).closest('pre, code');
+      return c && el.contains(c) ? (c.closest('pre') || c) : null;
+    };
+    const ca = codeDe(range.startContainer);
+    const cb = codeDe(range.endContainer);
+    if (ca) range.setStartBefore(ca);
+    if (cb) range.setEndAfter(cb);
+    texteSauts = texteDeRange(range);
+    contenuRiche = range.extractContents();
+    if (kind === 'archive') contenuRiche.querySelectorAll('.archive-icon-mark').forEach((x) => x.remove());
+    contenuRiche.querySelectorAll(kind === 'url' ? 'a.note-url' : '.note-archive-zone')
+      .forEach((x) => x.replaceWith(...x.childNodes));
+  }
+
   let wrapper;
   if (kind === 'archive') {
     // Bloc si la s\u00e9lection contient un saut de ligne, sinon simple chip en
     // ligne \u2014 m\u00eame distinction que le code (voir plus bas), pour un cadre
     // qui ait du sens : un passage de plusieurs lignes m\u00e9rite un vrai
     // rectangle, un mot ou une phrase reste dans le fil du texte.
-    const bloc = text.includes('\n');
+    const bloc = texteSauts.includes('\n');
     wrapper = document.createElement(bloc ? 'div' : 'span');
     wrapper.className = 'note-archive-zone' + (bloc ? ' note-archive-block' : ' note-archive-inline');
-    wrapper.textContent = text || '\u200b';
+    if (contenuRiche && texteSauts) wrapper.appendChild(contenuRiche);
+    else wrapper.textContent = text || '\u200b';
     wrapper.insertAdjacentHTML('beforeend', ARCHIVE_ICON_HTML);
   } else if (kind === 'color') {
     wrapper = document.createElement('span');
@@ -7812,16 +7901,17 @@ function wrapSelectionRich(el, kind, couleur, texteImpose) {
     wrapper.setAttribute('href', couleur);
     wrapper.setAttribute('target', '_blank');
     wrapper.setAttribute('rel', 'noopener noreferrer');
-    wrapper.textContent = text || texteImpose || couleur;
+    if (contenuRiche && texteSauts) wrapper.appendChild(contenuRiche);
+    else wrapper.textContent = text || texteImpose || couleur;
   } else if (kind === 'code') {
     // Bloc de code si la sélection contient un saut de ligne, sinon code en
     // ligne — même distinction que renderFormatted() (``` contre `) pour
     // rester cohérent avec le rendu final sur la carte.
-    if (text.includes('\n')) {
+    if (texteSauts.includes('\n')) {
       wrapper = document.createElement('pre');
       wrapper.className = 'note-code-block';
       const code = document.createElement('code');
-      code.textContent = text || '\u200b';
+      code.textContent = texteSauts || '\u200b';
       wrapper.appendChild(code);
     } else {
       wrapper = document.createElement('code');
@@ -8289,7 +8379,10 @@ function richToText(root) {
       return node.textContent
         .replace(/\u200b/g, '')
         .replace(/\\/g, '\\\\')
-        .replace(/([*_`])/g, '\\$1');
+        // `[` aussi : sans ça, `[ligne:7]`, `![att:3]`, `[c:ff0000]…[/c]`,
+        // `[url:…]`, `[arch]` TAPÉS comme texte devenaient une case, une
+        // image, une couleur… au rechargement (constaté au banc d'essai).
+        .replace(/([*_`[])/g, '\\$1');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName.toLowerCase();
@@ -8298,15 +8391,27 @@ function richToText(root) {
       case 'br': return '\n';
       // Enveloppe vide (reliquat d'un marqueur jamais rempli) : rien, sinon
       // `****` ou `____` visibles à la réouverture (constaté).
-      case 'strong': case 'b': { const t = inner(); return t ? '**' + t + '**' : ''; }
-      case 'em': case 'i': { const t = inner(); return t ? '*' + t + '*' : ''; }
-      case 'u': { const t = inner(); return t ? '__' + t + '__' : ''; }
+      // Délimiteurs entourés de la sentinelle SEP_DELIM : deux délimiteurs
+      // COLLÉS (`***`, `**__`, `*a***b**`...) sont séparés par un U+200B à
+      // la fin (voir plus bas) — sinon renderFormatted ne savait plus lequel
+      // ouvre et lequel ferme (constaté au banc d'essai : gras/italique qui
+      // se décalent, texte non stable d'un enregistrement à l'autre).
+      case 'strong': case 'b': { const t = inner(); return t ? D('**') + t + D('**') : ''; }
+      case 'em': case 'i': { const t = inner(); return t ? D('*') + t + D('*') : ''; }
+      case 'u': { const t = inner(); return t ? D('__') + t + D('__') : ''; }
       // texteCodeSansBouton : la pastille de copie est inject\u00e9e DANS la
       // zone de code, elle ne doit jamais se retrouver dans le texte
       // enregistr\u00e9 (voir ajouterBoutonsCopieCode).
-      case 'pre': return '```' + texteCodeSansBouton(node) + '```';
+      // D() : un code collé à un autre code (```…``````…```) serait relu
+      // comme un seul — voir SEP_DELIM.
+      case 'pre': { const c = texteCodeSansBouton(node); return c ? D(codeBloc(c)) : ''; }
       case 'code': {
-        const codeTexte = texteCodeSansBouton(node);
+        // Codes en ligne COLLÉS : `a``b` serait relu comme un seul code
+        // contenant des backticks. On les écrit d'un seul tenant.
+        const estCodeEnLigne = (x) => x && x.nodeType === Node.ELEMENT_NODE && x.tagName === 'CODE';
+        if (estCodeEnLigne(node.previousSibling)) return '';
+        let codeTexte = texteCodeSansBouton(node);
+        for (let x = node.nextSibling; estCodeEnLigne(x); x = x.nextSibling) codeTexte += texteCodeSansBouton(x);
         /* Promotion en BLOC dès qu'il y a un saut de ligne, même si le nœud
            est un <code> en ligne : taper Entrée dans un code en ligne le
            laisse inline dans le DOM, et `…` ne sait pas porter un saut de
@@ -8316,9 +8421,14 @@ function richToText(root) {
            deux règles de rendu ne pouvant plus le reconnaître.
            Même distinction que celle déjà appliquée à la POSE de l'effet
            (voir appliquerFormat, kind === 'code'). */
-        return codeTexte.includes('\n')
-          ? '```' + codeTexte + '```'
-          : '`' + codeTexte + '`';
+        if (!codeTexte.replace(/\u200b/g, '')) return '';
+        if (codeTexte.includes('\n')) return D(codeBloc(codeTexte));
+        // Un backtick DANS le code en ligne fermait le marqueur trop tôt
+        // (code perdu, backticks visibles) : forme à LONGUEUR annoncée,
+        // ``N:contenu`` (N = longueur échappée HTML, voir renderFormatted).
+        return D(codeTexte.includes('`')
+          ? '``' + escapeHtml(codeTexte).length + ':' + codeTexte + '``'
+          : '`' + codeTexte + '`');
       }
       // Image insérée dans le texte (dessin/tableau) : on ne garde qu'un
       // marqueur avec l'id de la pièce jointe, jamais les octets ni une
@@ -8395,6 +8505,15 @@ function richToText(root) {
      doit tomber. Mais seulement s'il vient d'un tel bloc — l'ancien
      `.replace(/^\n/, '')` global retirait aussi un vrai saut de ligne de
      tête tapé par l'utilisateur (texte ou <br> de contenu). */
+  const SEP_DELIM = '\uE100';
+  // Bloc de code : ```…``` ; s'il contient lui-même ```, forme à longueur
+  // annoncée ````N:…````. Code finissant par un backtick : U+200B avant le
+  // délimiteur fermant (retiré à la lecture).
+  function codeBloc(c) {
+    if (c.includes('```')) return '````' + escapeHtml(c).length + ':' + c + '````';
+    return '```' + c + (c.endsWith('`') ? '\u200b' : '') + '```';
+  }
+  function D(d) { return SEP_DELIM + d + SEP_DELIM; }
   const enfants = Array.from(root.childNodes);
   const morceaux = enfants.map((n) => (ignores.has(n) ? '' : walk(n)));
   const premier = morceaux.findIndex((m) => m !== '');
@@ -8402,7 +8521,7 @@ function richToText(root) {
       && /^(DIV|P)$/.test(enfants[premier].tagName)) {
     morceaux[premier] = morceaux[premier].replace(/^\n/, '');
   }
-  return morceaux.join('');
+  return morceaux.join('').replace(/\uE100\uE100/g, '\u200b').replace(/\uE100/g, '');
 }
 
 /* Rendu markdown minimal (gras/italique/souligné/code) pour l'affichage des
@@ -8414,7 +8533,7 @@ function richToText(root) {
    avec lui) ; l'image n'est déchiffrée et affichée qu'au rendu, par
    hydrateInlineImages(). Ce détour évite de mettre une URL temporaire ou
    des octets dans le contenu — seul l'identifiant voyage. */
-const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
+const NOTE_IMG_MARK = /(?<!(?<!\\)(?:\\\\)*\\)!\[att:(\w+)\]/g;
 
 /* Note vocale insérée dans le corps d'une notask : `[audio:12]`. Même
    principe exact que NOTE_IMG_MARK — seul l'identifiant de la pièce jointe
@@ -8431,7 +8550,7 @@ const NOTE_IMG_MARK = /!\[att:(\w+)\]/g;
    indéfiniment. Constaté au banc d'essai des notasks mixtes, sur un test de
    stabilité du contenu — le défaut est antérieur, il n'avait simplement
    jamais été mesuré. Même traitement que NOTE_LINE_MARK juste en dessous. */
-const NOTE_AUDIO_MARK = /\n?\[audio:(\w+)\]\n?/g;
+const NOTE_AUDIO_MARK = /\n?(?<!(?<!\\)(?:\\\\)*\\)\[audio:(\w+)\]\n?/g;
 
 /* Squelette d'un lecteur de note vocale. contenteditable="false" : sans
    lui, le bloc serait éditable caractère par caractère dans la zone riche
@@ -8471,7 +8590,7 @@ function audioBlockHtml(attId) {
    sa propre rupture. Sans avaler ce saut, chaque ligne à cocher s'afficherait
    précédée d'une ligne vide (les zones de saisie sont en white-space:
    pre-wrap, un \n y est visible). */
-const NOTE_LINE_MARK = /\n?\[ligne:(\w+)\]/g;
+const NOTE_LINE_MARK = /\n?(?<!(?<!\\)(?:\\\\)*\\)\[ligne:(\w+)\]/g;
 
 /* Squelette d'une ligne à cocher insérée dans le texte.
 
@@ -8505,11 +8624,45 @@ function ligneBlockHtml(ligneId, editable) {
     + `</div>`;
 }
 
+/* Texte d'une ligne à cocher MIS EN FORME (gras/italique/souligné/couleur) :
+   même syntaxe que le corps d'une notask, préfixée par U+2060 (invisible)
+   pour la distinguer d'un texte brut. Une ligne SANS mise en forme reste du
+   texte brut, exactement comme avant : anciennes lignes, widget Android et
+   titre Google Agenda (calendar_title) inchangés. Partout où la ligne est
+   affichée en simple texte (agenda, recherche, corbeille...), passer par
+   texteLigneBrut(). Fonctions autonomes : recopiées par .toString() dans la
+   copie locale (voir construireVisionneuseHTML). */
+function texteLigneEstRiche(t) {
+  return typeof t === 'string' && t.charCodeAt(0) === 0x2060;
+}
+function texteLigneBrut(t) {
+  if (!texteLigneEstRiche(t)) return t || '';
+  const d = document.createElement('div');
+  d.innerHTML = renderFormatted(t.slice(1));
+  return d.textContent;
+}
+function htmlLigne(t) {
+  return texteLigneEstRiche(t) ? renderFormatted(t.slice(1)) : escapeHtml(t || '');
+}
+function remplirTexteLigne(zone, t) {
+  if (texteLigneEstRiche(t)) zone.innerHTML = renderFormatted(t.slice(1));
+  else zone.textContent = t || '';
+}
+function texteDepuisZoneLigne(zone) {
+  if (!zone || !zone.textContent.trim()) return '';
+  if (!zone.querySelector('strong, b, em, i, u, span[style*="color"]')) return zone.textContent.trim();
+  return '\u2060' + richToText(zone).trim();
+}
+
+/* Tous les marqueurs ci-dessous refusent un `[` échappé (`\[`, précédé d'un
+   nombre IMPAIR de backslashes) : un marqueur tapé comme simple texte est
+   enregistré échappé par richToText et ne doit plus être lu comme marqueur,
+   ni ici ni par les autres lecteurs du contenu (recherche, lignes...). */
 /* Texte coloré dans le corps d'une notask : `[c:e53935]texte[/c]`. Même
    principe que le gras/italique — un marqueur dans le texte, donc chiffré
    avec lui et rendu à l'affichage. Hex sur 6 chiffres uniquement, pour ne
    pas laisser passer n'importe quelle valeur CSS dans un attribut style. */
-const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
+const NOTE_COLOR_MARK = /(?<!(?<!\\)(?:\\\\)*\\)\[c:([0-9a-fA-F]{6})\]([\s\S]*?)(?<!(?<!\\)(?:\\\\)*\\)\[\/c\]/g;
 
 /* Zone d'archive : `[arch]texte[/arch]`. Purement VISUEL — écriture
    manuscrite sur fond assombri, pour distinguer d'un coup d'œil un passage
@@ -8519,7 +8672,7 @@ const NOTE_COLOR_MARK = /\[c:([0-9a-fA-F]{6})\]([\s\S]*?)\[\/c\]/g;
    quel, seul son affichage se réduit à une ligne (voir .is-closed dans
    style.css). Le pli est donc une propriété persistante de la zone, au même
    titre que son texte — et non un état d'interface perdu au rechargement. */
-const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
+const NOTE_ARCHIVE_MARK = /(?<!(?<!\\)(?:\\\\)*\\)\[arch(-?)\]([\s\S]*?)(?<!(?<!\\)(?:\\\\)*\\)\[\/arch\]/g;
 
 /* Lien : `[url:https://exemple.fr]texte affiché[/url]`. L'adresse voyage
    DANS le marqueur, donc chiffrée avec le reste du contenu — le serveur ne
@@ -8527,7 +8680,7 @@ const NOTE_ARCHIVE_MARK = /\[arch(-?)\]([\s\S]*?)\[\/arch\]/g;
    `[^\]]+` sur l'adresse : tout sauf le crochet fermant, qui délimite le
    marqueur. Une URL ne peut de toute façon pas en contenir sans être
    encodée (%5D). */
-const NOTE_URL_MARK = /\[url:([^\]]+)\]([\s\S]*?)\[\/url\]/g;
+const NOTE_URL_MARK = /(?<!(?<!\\)(?:\\\\)*\\)\[url:([^\]]+)\]([\s\S]*?)(?<!(?<!\\)(?:\\\\)*\\)\[\/url\]/g;
 
 /* Adresse jugée sûre pour un href, sinon null. Seuls http(s) et mailto sont
    acceptés : `javascript:` (ou `data:`) exécuterait du code au simple clic
@@ -8920,7 +9073,7 @@ function hydrateLignesACocher(root, note, { editable = false, onCheck = null } =
     }
 
     bloc.dataset.pret = '1';
-    bloc.querySelector('.note-ligne-txt').textContent = item.text || '';
+    remplirTexteLigne(bloc.querySelector('.note-ligne-txt'), item.text || '');
     const case_ = bloc.querySelector('.note-ligne-case');
     case_.checked = !!item.checked;
     bloc.classList.toggle('done', !!item.checked);
@@ -9382,7 +9535,7 @@ function lignesDepuisZone(root) {
       // Un id provisoire n'existe pas en base : envoyer `undefined` fait
       // créer la ligne (voir _replace_items côté serveur).
       id: bloc.dataset.ligne.startsWith('tmp') ? undefined : Number(bloc.dataset.ligne),
-      text: bloc.querySelector('.note-ligne-txt').textContent.trim(),
+      text: texteDepuisZoneLigne(bloc.querySelector('.note-ligne-txt')),
       checked: bloc.querySelector('.note-ligne-case').checked,
       due_at: bloc.dataset.due || null,
       due_end_at: (bloc.dataset.due && bloc.dataset.dueEnd) || null,
@@ -9626,9 +9779,74 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   // Code d'abord : son contenu est du texte BRUT (richToText ne l'échappe
   // pas, voir texteCodeSansBouton) — aucun autre marqueur ne doit y être
   // reconnu, pas même [c:…]/[url:…]/[ligne:…] écrits littéralement.
-  html = html.replace(/```([\s\S]+?)```/g, (m, code) => reserver(`<pre class="note-code-block"><code>${code}</code></pre>`));
-  // Garde (?<!\\) : voir plus bas, à l'emplacement d'origine de cette regex.
-  html = html.replace(/(?<!\\)`([^`\n]+?)(?<!\\)`/g, (m, code) => reserver(`<code class="note-code-inline">${code}</code>`));
+  /* Lecture en UNE passe, de gauche à droite : échappements (`\*`, `\_`,
+     `` \` ``, `\[`, `\\`) et code. Les échappements deviennent des jetons
+     de réserve : plus aucune regex de mise en forme ne peut les relire.
+     Avant (regex successives), constaté au banc d'essai : un astérisque
+     échappé collé à la fin d'un gras (`**a\***`) cassait le gras ; un `\\`
+     juste avant un code le faisait disparaître ; un backtick dans du code
+     en ligne le coupait. Le contenu du code reste du texte BRUT. */
+  {
+    let res = '';
+    let i = 0;
+    const n = html.length;
+    while (i < n) {
+      const c = html[i];
+      if (c === '\\' && i + 1 < n && '\\*_`['.includes(html[i + 1])) {
+        res += reserver(html[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (c === '`') {
+        let r = 0;
+        while (html[i + r] === '`') r++;
+        // Forme à longueur annoncée (``N:…`` en ligne, ````N:…```` bloc) :
+        // contenu pris tel quel sur N caractères, backticks compris.
+        if (r === 2 || r === 4) {
+          const m = /^(\d{1,7}):/.exec(html.slice(i + r, i + r + 9));
+          if (m) {
+            const debut = i + r + m[0].length;
+            const nb = Number(m[1]);
+            const contenu = html.slice(debut, debut + nb);
+            if (contenu.length === nb && html.startsWith('`'.repeat(r), debut + nb)) {
+              res += reserver(r === 4
+                ? `<pre class="note-code-block"><code>${contenu}</code></pre>`
+                : `<code class="note-code-inline">${contenu}</code>`);
+              i = debut + nb + r;
+              continue;
+            }
+          }
+        }
+        if (r >= 3) {
+          // Premier ``` venu : un code en ligne collé juste après (ancien
+          // contenu) reste un code à part. Un bloc dont le code FINIT par un
+          // backtick est écrit `…\u200b```` par richToText, retiré ici.
+          const fin = html.indexOf('```', i + 3);
+          if (fin > i + 3) {
+            const bloc = html.slice(i + 3, fin).replace(/\u200b$/, '');
+            res += reserver(`<pre class="note-code-block"><code>${bloc}</code></pre>`);
+            i = fin + 3;
+            continue;
+          }
+        } else {
+          const delim = '`'.repeat(r);
+          let fin = html.indexOf(delim, i + r);
+          const contenu = fin > -1 ? html.slice(i + r, fin) : '';
+          if (fin > i + r && !contenu.includes('\n')) {
+            res += reserver(`<code class="note-code-inline">${contenu}</code>`);
+            i = fin + r;
+            continue;
+          }
+        }
+        res += '`'.repeat(r);  // backticks orphelins : texte tel quel
+        i += r;
+        continue;
+      }
+      res += c;
+      i++;
+    }
+    html = res;
+  }
   html = html.replace(NOTE_IMG_MARK, (m, id) => reserver(`<img class="note-inline-img" data-att="${id}" alt="">`));
   html = html.replace(NOTE_AUDIO_MARK, (m, id) => reserver(audioBlockHtml(id)));
   // Avant les marqueurs de mise en forme : le bloc produit ici ne contient
@@ -9698,11 +9916,10 @@ function renderFormatted(text, archivesDepliees = false, lignesEditables = false
   html = html.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/__([^\n]+?)__/g, '<u>$1</u>');
   html = html.replace(/(?<!\\)\*([^\n*]+?)(?<!\\)\*/g, '<em>$1</em>');
-  // Déséchappement, à la toute fin — une fois que plus aucune regex de mise
-  // en forme ne va relire le texte. Ordre inverse de l'échappement : les
-  // délimiteurs d'abord (\* → *), le doublement du backslash ensuite
-  // (\\ → \), sinon un backslash tapé littéralement ressortirait mal.
-  html = html.replace(/\\([*_`])/g, '$1').replace(/\\\\/g, '\\');
+  // Déséchappement : fait par le lecteur en tête de fonction (jetons de
+  // réserve). Séparateurs U+200B posés par richToText entre deux
+  // délimiteurs collés : ils ont joué leur rôle, on les retire.
+  html = html.replace(/\u200b/g, '');
   return restituer(html);
 }
 
@@ -10962,14 +11179,14 @@ async function openHistoryDetail(versionId) {
     let rang = 0;
     const texte = v.content.replace(NOTE_LINE_MARK, () => {
       const it = (v.items || [])[rang++];
-      return it ? `\n${it.checked ? '☑' : '☐'} ${it.text || ''}` : '';
+      return it ? `\n${it.checked ? '☑' : '☐'} ${texteLigneBrut(it.text || '')}` : '';
     });
     html += `<div class="history-detail-body">${escapeHtml(texte)}</div>`;
   } else if (v.items && v.items.length) {
     // Version d'une notask d'avant la disparition des modes : ses lignes ne
     // sont citées nulle part dans le contenu, on les liste telles quelles.
     html += '<ul class="history-detail-items">' + v.items.map((it) =>
-      `<li class="${it.checked ? 'done' : ''}">${escapeHtml(it.text || '')}</li>`
+      `<li class="${it.checked ? 'done' : ''}">${htmlLigne(it.text || '')}</li>`
     ).join('') + '</ul>';
   }
   if (v.due_at) html += `<div class="history-detail-due">${ICONS.clock}${formatDue(v.due_at)}</div>`;
@@ -11145,7 +11362,7 @@ async function loadAgenda() {
     return; // session expirée par ex. — api() gère déjà la redirection
   }
   await Promise.all(tasks.map(async (t) => {
-    t.text = await decryptField(t.text);
+    t.text = texteLigneBrut(await decryptField(t.text));
     t.note_title = await decryptField(t.note_title);
   }));
   // "À venir" limité à 1 mois glissant : seules les tâches dont l'échéance
@@ -11216,7 +11433,7 @@ async function loadTasks() {
     return;
   }
   await Promise.all(tasks.map(async (t) => {
-    t.text = await decryptField(t.text);
+    t.text = texteLigneBrut(await decryptField(t.text));
     t.note_title = await decryptField(t.note_title);
   }));
   // "done" inclus ici, contrairement à la colonne d'échéances : cette vue a
@@ -11683,7 +11900,7 @@ async function collecterExport(progres) {
         all_day: !!it.all_day,
         recur: it.recur || null,
         archived: !!it.archived,
-        calendar_title: it.due_at ? it.text : null,
+        calendar_title: it.due_at ? texteLigneBrut(it.text) : null,
       })),
       attachments: pieces,
     });
@@ -11881,6 +12098,7 @@ async function construireVisionneuseHTML(fichierChiffre) {
   const srcVoisineDuBloc = voisineDuBloc.toString();
   const srcPeindreTousLesBlocs = peindreTousLesBlocs.toString();
   const srcMajEcheanceLigne = majEcheanceLigne.toString();
+  const srcTexteLigne = [texteLigneEstRiche, texteLigneBrut, htmlLigne, remplirTexteLigne].map((f) => f.toString()).join('\n');
   const srcHydrateLignesACocher = hydrateLignesACocher.toString();
   const srcPoserMosaique = poserMosaique.toString();
 
@@ -12044,6 +12262,7 @@ ${srcBrancherLecteurAudio}
 ${srcVoisineDuBloc}
 ${srcPeindreTousLesBlocs}
 ${srcMajEcheanceLigne}
+${srcTexteLigne}
 ${srcHydrateLignesACocher}
 
 /* ---- Mosaïque : le VRAI moteur de poserMosaique()/layoutMosaic() de
@@ -12174,7 +12393,7 @@ function noteMatchesSearchHorsLigne(n, q, labels) {
     n.title || '',
     n.description || '',
     n.content || '',
-    (n.items || []).map((it) => it.text || '').join(' '),
+    (n.items || []).map((it) => texteLigneBrut(it.text || '')).join(' '),
     libelles,
     dates,
   ].join(' ').toLowerCase());
@@ -12198,7 +12417,7 @@ function construireContenuCarte(n) {
       const due = it.due_at ? '<em class="item-due-tag">' + formatDueRange(it.due_at, it.due_end_at, it.all_day) + '</em>' : '';
       inner += '<li class="' + (it.checked ? 'done' : '') + '">'
         + '<input type="checkbox" disabled ' + (it.checked ? 'checked' : '') + '>'
-        + '<span>' + escapeHtml(it.text) + due + '</span></li>';
+        + '<span>' + htmlLigne(it.text) + due + '</span></li>';
     }
     inner += '</ul>';
   } else if (n.content) {
@@ -12855,7 +13074,7 @@ $('#import-file').addEventListener('change', async () => {
             due_end_at: it.due_at ? (it.due_end_at || null) : null,
             all_day: it.due_at ? !!it.all_day : false,
             recur: it.due_at ? (it.recur || null) : null,
-            calendar_title: it.due_at ? (it.text || '') : null,
+            calendar_title: it.due_at ? texteLigneBrut(it.text || '') : null,
           }))),
         };
         const cree = await api('/notes', { method: 'POST', body });
