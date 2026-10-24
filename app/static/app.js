@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9129';
+const APP_VERSION = '0.9132';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -11431,9 +11431,10 @@ async function loadAgenda() {
     );
   } catch { /* réseau : on garde l'état connu, pas d'alerte inventée */ }
 
-  // RDV Google des agendas cochés « échéances » (voir agendaGoogle) — pas
-  // quand un filtre de libellés est actif : un RDV Google n'a pas de libellé.
-  const gItems = state.labelFilters.size ? [] : await agendaGoogle();
+  // RDV Google / externes des agendas cochés « Échéances » (voir
+  // agendaGoogle) — affichés quel que soit le filtre de libellés (demande
+  // explicite : un RDV n'a pas de libellé, il ne doit pas disparaître).
+  const gItems = await agendaGoogle();
   renderAgenda(items, gItems);
 }
 
@@ -12575,6 +12576,9 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
     }
   }
   $('#ge-titre-dlg').textContent = g ? (lecture ? 'RDV (lecture seule)' : 'Modifier le RDV') : 'Nouveau RDV Google';
+  const notesLecture = g?.event_type === 'birthday'
+    ? 'Anniversaire issu de Google Contacts : modifiable ou supprimable seulement depuis Google Contacts.'
+    : '';
   $('#ge-summary').value = g ? g.summary : '';
   $('#ge-allday').checked = allDay;
   $('#ge-d1').value = d1; $('#ge-d2').value = d2;
@@ -12589,7 +12593,7 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
   const lien = $('#ge-link');
   lien.hidden = !g?.html_link;
   if (g?.html_link) lien.href = g.html_link;
-  msg($('#ge-msg'), '');
+  msg($('#ge-msg'), notesLecture, 'ok');
   if (!ecrivables.length && !g) return;
   dlg.showModal();
   if (!g) $('#ge-summary').focus();

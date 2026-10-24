@@ -161,7 +161,11 @@ def _normaliser(ev: Dict[str, Any], cal: Dict[str, Any], couleurs: Dict[str, str
         "all_day": all_day,
         "start": start,
         "end": end,
-        "editable": cal["writable"] and not ev.get("locked", False),
+        # Anniversaires (eventType "birthday", issus de Google Contacts) :
+        # Google refuse modification ET suppression via l'API (constaté :
+        # 400 « Attempt made to modify 'birthday' event… ») → lecture seule.
+        "editable": cal["writable"] and not ev.get("locked", False) and ev.get("eventType") != "birthday",
+        "event_type": ev.get("eventType") or "default",
         "recurring_event_id": ev.get("recurringEventId"),
         "html_link": ev.get("htmlLink"),
     }
