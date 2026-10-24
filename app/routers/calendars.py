@@ -147,3 +147,88 @@ def synchroniser(user: User = Depends(get_current_user), session: Session = Depe
             erreurs.append(f"{r.name} : {err}")
     gcal.pull_changes(user, session)
     return {"externes": len(rows), "errors": erreurs}
+
+
+# ---- Échéances issues des agendas (pour l'app Android : widget + rappels) ----
+
+def _cle_entiere(calendar_id: str, event_id: str) -> int:
+    """Identifiant entier STABLE (l'app Android indexe ses tâches et ses
+    alarmes par entier) : CRC32 de la clé texte, borné à 999 999 pour tenir
+    dans la plage de requestCode réservée aux RDV (3 000 000 + n)."""
+    import zlib
+    return zlib.crc32(f"{calendar_id}\x00{event_id}".encode()) % 999_999 + 1
+
+
+@router.get("/echeances")
+def echeances_agendas(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """RDV des agendas cochés « Échéances », au format proche de TaskOut
+    (kind="gcal", texte EN CLAIR, `plain`: true). Même règles que la colonne
+    d'échéances du web (agendaGoogle dans app.js) : 60 j passés → 31 j à venir,
+    validés exclus, passés = « late » seulement s'ils finissent après la date
+    d'activation de leur agenda. Jours calculés dans le fuseau déclaré."""
+    from datetime import date as _date, datetime as _dt, timezone as _tz
+    from zoneinfo import ZoneInfo
+    from app.routers.google import overlay_evenements
+    from app.routers.settings import fuseau_utilisateur
+
+    maintenant = utcnow()
+    if maintenant.tzinfo is None:
+        maintenant = maintenant.replace(tzinfo=_tz.utc)
+    r = overlay_evenements(
+        start=(maintenant - timedelta(days=60)).isoformat(),
+        end=(maintenant + timedelta(days=31)).isoformat(),
+        pour="agenda", user=user, session=session,
+    )
+    if not r.get("enabled"):
+        return []
+    try:
+        fz = ZoneInfo(fuseau_utilisateur(user.id, session) or "UTC")
+    except Exception:
+        fz = _tz.utc
+    auj = maintenant.astimezone(fz).date()
+    limite = auj + timedelta(days=7)
+    depuis = {}
+    for c in r.get("calendars", []):
+        if c.get("agenda_since"):
+            try:
+                d = _dt.fromisoformat(c["agenda_since"].replace("Z", "+00:00"))
+                depuis[c["id"]] = d if d.tzinfo else d.replace(tzinfo=_tz.utc)
+            except ValueError:
+                pass
+    out = []
+    for g in r.get("events", []):
+        if g.get("done"):
+            continue
+        if g["all_day"]:
+            j1 = _date.fromisoformat(g["start"])
+            j2 = _date.fromisoformat(g["end"])
+            debut = _dt(j1.year, j1.month, j1.day, tzinfo=_tz.utc)          # convention serveur : minuit UTC
+            fin_excl = _dt(j2.year, j2.month, j2.day, tzinfo=fz) + timedelta(days=1)
+            due_at, due_end = debut, (_dt(j2.year, j2.month, j2.day, tzinfo=_tz.utc) if j2 != j1 else None)
+            jour = j1
+        else:
+            debut = _dt.fromisoformat(g["start"].replace("Z", "+00:00"))
+            fin_excl = _dt.fromisoformat(g["end"].replace("Z", "+00:00"))
+            due_at, due_end = debut, fin_excl
+            jour = debut.astimezone(fz).date()
+        if fin_excl <= maintenant:
+            d = depuis.get(g["calendar_id"])
+            if d is None or fin_excl <= d:
+                continue
+            bucket = "late"
+        elif jour <= auj:
+            bucket = "today"
+        elif jour <= limite:
+            bucket = "imminent"
+        else:
+            bucket = "upcoming"
+        out.append({
+            "kind": "gcal", "id": _cle_entiere(g["calendar_id"], g["id"]), "note_id": 0,
+            "text": g["summary"] or "(Sans titre)", "plain": True,
+            "due_at": due_at.astimezone(_tz.utc).isoformat().replace("+00:00", "Z"),
+            "due_end_at": due_end.astimezone(_tz.utc).isoformat().replace("+00:00", "Z") if due_end else None,
+            "all_day": g["all_day"], "done": False, "color": g["color"], "bucket": bucket,
+            "calendar_id": g["calendar_id"], "calendar_summary": g.get("calendar_summary", ""),
+            "event_id": g["id"], "start": g["start"],
+        })
+    return out

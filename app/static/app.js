@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9135';
+const APP_VERSION = '0.9138';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -3495,6 +3495,36 @@ async function verifierRappels() {
       // worker (Android notamment) : on note et on continue, sans casser la
       // boucle pour les tâches suivantes.
       log.warn('rappel', `notification refusée : ${err.message}`);
+    }
+  }
+
+  /* RDV des agendas cochés « Échéances » (Google / externes) : mêmes règles
+     de rappel que les notasks (instant du RDV ; journée entière = veille au
+     soir). Liste relue au plus toutes les 10 min (agendaGoogle a son propre
+     cache de 2 min, mais chaque relecture interroge Google). */
+  if (!state.gAgenda || Date.now() - state.gAgenda.ts > 10 * 60 * 1000) {
+    try { await agendaGoogle(); } catch { /* réseau : on garde l'état connu */ }
+  }
+  for (const { g } of (state.gAgenda?.items || [])) {
+    const pseudo = { due_at: g.all_day ? g.start + 'T00:00:00Z' : g.start, all_day: g.all_day };
+    const instant = instantRappel(pseudo);
+    if (instant === null || instant > maintenant || maintenant - instant > RAPPEL_FENETRE_MS) continue;
+    const cle = `gcal:${g.calendar_id}:${g.id}@${g.start}`;
+    if (emis[cle]) continue;
+    try {
+      const quand = g.all_day
+        ? formatDueRange(g.start + 'T00:00:00Z', g.end !== g.start ? g.end + 'T00:00:00Z' : null, true)
+        : formatDueRange(g.start, g.end, false);
+      const notif = new Notification(g.summary || '(Sans titre)', {
+        body: `${quand} · ${g.calendar_summary}`,
+        icon: '/static/icon-192.png',
+        badge: '/static/icon-192.png',
+        tag: cle,
+      });
+      notif.onclick = () => { window.focus(); calOuvrirRdv(g); notif.close(); };
+      memoriserRappel(cle, maintenant);
+    } catch (err) {
+      log.warn('rappel', `notification RDV refusée : ${err.message}`);
     }
   }
 }
@@ -12438,9 +12468,13 @@ function calRendreGrilleHoraire(box, p, index) {
     tete.appendChild(h);
 
     const liste = index[k] || [];
+    // Fond de la rangée « journée » (cible de dépôt / double-clic). Les
+    // entrées journée sont posées APRÈS la boucle, en barres continues sur
+    // toute leur période (voir plus bas).
     const cAll = document.createElement('div');
     cAll.className = 'cal-tg-allday-cell';
-    for (const e of liste) if (e.allDay) cAll.appendChild(calPuce(e, false));
+    cAll.style.gridColumn = String(i + 2);
+    cAll.style.gridRow = '1 / -1';
     calCibleDepot(cAll, k, null);
     cAll.addEventListener('dblclick', () => { if (calPeutCreerRdv()) calOuvrirRdv(null, k, null, true); });
     journee.appendChild(cAll);
@@ -12501,6 +12535,39 @@ function calRendreGrilleHoraire(box, p, index) {
     }
     grille.appendChild(col);
   }
+  // Barres « journée » : UNE barre par entrée, étalée sur sa période (titre
+  // affiché une seule fois), rangées en voies sans chevauchement.
+  const vues = new Set();
+  const barres = [];
+  for (let i = 0; i < p.nb; i++) {
+    for (const e of index[calCle(calPlus(p.debut, i))] || []) {
+      if (!e.allDay || vues.has(e.uid)) continue;
+      vues.add(e.uid);
+      const a = Math.max(0, calJoursEntre(calCle(p.debut), e.k1));
+      const b = Math.min(p.nb - 1, calJoursEntre(calCle(p.debut), e.k2));
+      barres.push({ e, a, b, coupeAvant: e.k1 < calCle(p.debut), coupeApres: calJoursEntre(calCle(p.debut), e.k2) > p.nb - 1 });
+    }
+  }
+  barres.sort((x, y) => (x.a - y.a) || ((y.b - y.a) - (x.b - x.a)));
+  const voies = [];
+  for (const br of barres) {
+    let v = voies.findIndex((fin) => fin < br.a);
+    if (v === -1) { v = voies.length; voies.push(-1); }
+    voies[v] = br.b;
+    const el = calPuce(br.e, false);
+    el.classList.add('cal-span');
+    // Fond OPAQUE (même teinte) : sur une barre à cheval sur plusieurs
+    // colonnes, un fond translucide laisserait voir les séparateurs de jours.
+    if (br.e.hex) el.style.background = `color-mix(in srgb, ${br.e.hex} ${Math.round(ATTENUATION_PASTILLE * 100)}%, var(--md-surface-1))`;
+    if (br.coupeAvant) el.classList.add('coupe-avant');
+    if (br.coupeApres) el.classList.add('coupe-apres');
+    el.style.gridColumn = `${br.a + 2} / ${br.b + 3}`;
+    el.style.gridRow = String(v + 1);
+    journee.appendChild(el);
+  }
+  journee.style.gridTemplateRows = `repeat(${Math.max(1, voies.length)}, 24px)`;
+  journee.firstElementChild.style.gridRow = '1 / -1';
+
   corps.appendChild(grille);
   tg.append(tete, journee, corps);
   box.appendChild(tg);
@@ -12619,7 +12686,7 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
   for (const id of ['#ge-summary', '#ge-allday', '#ge-d1', '#ge-d2', '#ge-h1', '#ge-h2', '#ge-loc', '#ge-desc']) $(id).disabled = !!lecture;
   calMajHeuresRdv();
   $('#ge-delete').hidden = !g || lecture;
-  $('#ge-delete-serie').hidden = !g || lecture || !g.recurring_event_id;
+  $('#ge-choix').hidden = true;
   $('#ge-save').hidden = !!lecture;
   const lien = $('#ge-link');
   lien.hidden = !g?.html_link;
@@ -12683,7 +12750,7 @@ async function calSupprimerRdv(serie) {
   const g = calRdvCourant;
   if (!g) return;
   const id = serie ? g.recurring_event_id : g.id;
-  if (!confirm(serie ? 'Supprimer TOUTE la série de ce RDV dans Google ?' : 'Supprimer ce RDV dans Google ?')) return;
+  $('#ge-choix').hidden = true;
   try {
     await api(`/google/overlay/events/${encodeURIComponent(id)}?calendar_id=${encodeURIComponent(g.calendar_id)}`, { method: 'DELETE' });
   } catch (err) {
@@ -12720,8 +12787,14 @@ if ($('#view-calendar')) {
   $('#ge-d1').addEventListener('change', () => { if ($('#ge-d2').value < $('#ge-d1').value) $('#ge-d2').value = $('#ge-d1').value; });
   $('#ge-cancel').addEventListener('click', () => $('#dlg-gevent').close());
   $('#ge-save').addEventListener('click', calEnregistrerRdv);
-  $('#ge-delete').addEventListener('click', () => calSupprimerRdv(false));
-  $('#ge-delete-serie').addEventListener('click', () => calSupprimerRdv(true));
+  // RDV récurrent : choix « cette occurrence / toutes » ; sinon confirmation simple.
+  $('#ge-delete').addEventListener('click', () => {
+    if (calRdvCourant?.recurring_event_id) { $('#ge-choix').hidden = false; return; }
+    if (confirm('Supprimer ce RDV dans Google ?')) calSupprimerRdv(false);
+  });
+  $('#ge-del-un').addEventListener('click', () => calSupprimerRdv(false));
+  $('#ge-del-tous').addEventListener('click', () => calSupprimerRdv(true));
+  $('#ge-del-annuler').addEventListener('click', () => { $('#ge-choix').hidden = true; });
   document.addEventListener('keydown', (e) => {
     if (state.view !== 'calendar' || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.target.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;

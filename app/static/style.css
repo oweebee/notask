@@ -4922,7 +4922,11 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   max-height: 30%; overflow-y: auto; scrollbar-gutter: stable;
 }
 .cal-tg-allday-label { font-size: .6875rem; color: var(--md-on-surface-variant); text-align: right; padding: .25rem .5rem 0 0; }
-.cal-tg-allday-cell { display: flex; flex-direction: column; gap: 2px; min-height: 26px; padding: 2px; border-left: 1px solid var(--md-outline-variant); min-width: 0; }
+.cal-tg-allday-cell { min-height: 26px; border-left: 1px solid var(--md-outline-variant); min-width: 0; }
+.cal-tg-allday { row-gap: 2px; padding-top: 2px; }
+.cal-tg-allday .cal-span { margin: 0 3px; min-height: 22px; z-index: 1; align-self: center; }
+.cal-span.coupe-avant { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.cal-span.coupe-apres { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .cal-tg-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .cal-tg-grid { position: relative; height: calc(24 * var(--cal-heure)); }
 .cal-tg-hours { position: relative; }
@@ -5071,6 +5075,9 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .ge-row input[hidden] { display: none; }
 .ge-actions { flex-wrap: wrap; }
 .ge-spacer { flex: 1; }
+.ge-choix { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .75rem; margin-bottom: .75rem; border-radius: var(--shape-sm); background: var(--md-error-container); }
+.ge-choix[hidden] { display: none; }
+.ge-choix p { margin: 0 .25rem 0 0; flex-basis: 100%; color: var(--md-on-surface); }
 .ge-actions [hidden] { display: none; }
 
 /* ---- Options > Google ---- */
