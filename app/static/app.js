@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9123';
+const APP_VERSION = '0.9124';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2753,6 +2753,8 @@ function enterApp() {
   // été retirées du menu, la vue les regroupe déjà avec des en-têtes de
   // couleur. Le compteur reste celui du total.
   $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">notasks prévues</span><span class="nav-count" id="count-tasks" hidden></span>';
+  const navCal = $('#nav-calendar');
+  if (navCal) navCal.innerHTML = ICONS.calendar + '<span class="label">calendritasks</span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">archives</span>';
   $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">corbeille</span>';
@@ -2979,6 +2981,8 @@ function switchView(view) {
   $('#view-notes').hidden = !isNotes;
   const vTasks = $('#view-tasks');
   if (vTasks) vTasks.hidden = view !== 'tasks';
+  const vCal = $('#view-calendar');
+  if (vCal) vCal.hidden = view !== 'calendar';
   $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
@@ -3012,6 +3016,7 @@ function switchView(view) {
     loadNotes();
   }
   if (view === 'tasks') loadTasks();
+  if (view === 'calendar') loadCalendar();
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
 }
@@ -11679,6 +11684,251 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
     }
   });
   return btn;
+}
+
+/* ------------------------------ Calendritasks -----------------------------
+   Vue calendrier (mois / semaine) des notasks datées — mêmes données que
+   « Notasks prévues » (/api/tasks), mêmes exclusions (libellés masqués,
+   filtre de libellés). Une tâche couvrant une période (due_end_at) apparaît
+   sur chacun de ses jours. Clic sur une puce = ouvre la notask ; clic sur un
+   jour = liste du jour sous la grille (lignes creerLigneAgenda, cochables) ;
+   glisser-déposer une puce (souris) sur un autre jour = décale l'échéance
+   d'autant de jours, heure et durée conservées. Récurrence : seule
+   l'occurrence en cours existe en base, c'est la seule affichée. */
+const CAL_JOURS = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+const cal = { mode: 'mois', ref: new Date(), jour: null, taches: [] };
+try {
+  const m = localStorage.getItem('notask.cal.mode');
+  if (m === 'mois' || m === 'semaine') cal.mode = m;
+} catch { /* stockage refusé : mode par défaut */ }
+
+const calCle = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const calDepuisCle = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+// Jour (clé locale) d'une borne d'échéance : date UTC pour une journée
+// entière (stockée à minuit UTC, cf. isoToUtcDateStr), date locale sinon.
+const calCleIso = (iso, allDay) => (allDay ? isoToUtcDateStr(iso) : calCle(new Date(iso)));
+const calLundi = (d) => { const r = new Date(d.getFullYear(), d.getMonth(), d.getDate()); r.setDate(r.getDate() - ((r.getDay() + 6) % 7)); return r; };
+
+async function loadCalendar() {
+  let tasks;
+  try {
+    tasks = await api('/tasks?recent_done_days=365');
+  } catch {
+    return;
+  }
+  await Promise.all(tasks.map(async (t) => {
+    t.text = texteLigneBrut(await decryptField(t.text));
+    t.note_title = await decryptField(t.note_title);
+  }));
+  const masquees = await idsNotesLibellesMasques();
+  if (masquees) tasks = tasks.filter((t) => !masquees.has(t.note_id));
+  if (state.labelFilters.size) {
+    const params = new URLSearchParams({ archived: state.showArchived });
+    if (!sansCategorieActif()) {
+      for (const id of labelFiltersReels()) params.append('label', id);
+    }
+    let notesDuLibelle;
+    try {
+      notesDuLibelle = await api('/notes?' + params);
+    } catch {
+      notesDuLibelle = [];
+    }
+    if (sansCategorieActif()) notesDuLibelle = notesDuLibelle.filter(noteCorrespondFiltreLabel);
+    const ids = new Set(notesDuLibelle.map((n) => n.id));
+    tasks = tasks.filter((t) => ids.has(t.note_id));
+  }
+  cal.taches = tasks;
+  renderCalendar();
+}
+
+// Index jour -> tâches, période (due_end_at) dépliée jour par jour (max 366).
+function calIndexer(taches) {
+  const index = {};
+  for (const t of taches) {
+    const k1 = calCleIso(t.due_at, t.all_day);
+    if (!k1) continue;
+    let k2 = t.due_end_at ? calCleIso(t.due_end_at, t.all_day) : k1;
+    if (!k2 || k2 < k1) k2 = k1;
+    const d = calDepuisCle(k1);
+    for (let i = 0; i < 366; i++) {
+      const k = calCle(d);
+      if (k > k2) break;
+      (index[k] ||= []).push(t);
+      d.setDate(d.getDate() + 1);
+    }
+  }
+  for (const k in index) {
+    index[k].sort((a, b) => (a.done - b.done) || (b.all_day - a.all_day) || (new Date(a.due_at) - new Date(b.due_at)));
+  }
+  return index;
+}
+
+function calPuce(t) {
+  const p = document.createElement('div');
+  p.className = 'cal-chip c-' + t.color + (t.done ? ' done' : '') + (t.bucket === 'late' ? ' late' : '');
+  if (LABEL_COLOR_HEX[t.color]) p.style.background = hexToRgba(LABEL_COLOR_HEX[t.color], ATTENUATION_PASTILLE);
+  const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
+  const heure = t.all_day ? '' : new Date(t.due_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  p.innerHTML = (heure ? `<span class="cal-chip-time">${heure}</span>` : '')
+    + `<span class="cal-chip-text">${escapeHtml(label)}</span>`;
+  p.title = `${label} — ${formatDueRange(t.due_at, t.due_end_at, t.all_day)}`;
+  p.tabIndex = 0;
+  p.setAttribute('role', 'button');
+  if (!t.done) {
+    p.draggable = true;
+    p.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', `${t.kind}:${t.id}`);
+      e.dataTransfer.effectAllowed = 'move';
+      p.classList.add('dragging');
+    });
+    p.addEventListener('dragend', () => p.classList.remove('dragging'));
+  }
+  const ouvrir = (e) => { e.stopPropagation(); ouvrirNoteParId(t.note_id); };
+  p.addEventListener('click', ouvrir);
+  p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(e); } });
+  return p;
+}
+
+// Décale l'échéance (et sa fin) de la différence de jours entre l'ancien
+// jour de début et le jour de dépôt. Heure locale conservée (setDate gère
+// le changement d'heure), journée entière recalée à minuit UTC.
+async function calDeplacer(t, cleCible) {
+  const k1 = calCleIso(t.due_at, t.all_day);
+  const delta = Math.round((calDepuisCle(cleCible) - calDepuisCle(k1)) / 86400000);
+  if (!delta) return;
+  const decaler = (iso) => {
+    if (!iso) return null;
+    if (t.all_day) {
+      const [y, m, d] = isoToUtcDateStr(iso).split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + delta)).toISOString();
+    }
+    const d = new Date(iso);
+    d.setDate(d.getDate() + delta);
+    return d.toISOString();
+  };
+  const body = { due_at: decaler(t.due_at) };
+  if (t.due_end_at) body.due_end_at = decaler(t.due_end_at);
+  try {
+    await api(t.kind === 'item' ? `/notes/${t.note_id}/items/${t.id}` : '/notes/' + t.note_id,
+      { method: 'PATCH', body });
+  } catch (err) {
+    alert(err.message);
+  }
+  cal.jour = cleCible;
+  await loadCalendar();
+  updateTaskBadges();
+}
+
+function renderCalendar() {
+  const box = $('#cal-grid');
+  if (!box) return;
+  const index = calIndexer(cal.taches);
+  const aujourdhui = calCle(new Date());
+  const ref = cal.ref;
+  let debut, nbJours;
+  if (cal.mode === 'semaine') {
+    debut = calLundi(ref);
+    nbJours = 7;
+    const fin = new Date(debut); fin.setDate(fin.getDate() + 6);
+    const o = { day: 'numeric', month: 'short' };
+    $('#cal-title').textContent = `${debut.toLocaleDateString('fr-FR', o)} – ${fin.toLocaleDateString('fr-FR', { ...o, year: 'numeric' })}`;
+  } else {
+    const premier = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    debut = calLundi(premier);
+    const dernier = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    nbJours = Math.ceil((((premier.getDay() + 6) % 7) + dernier.getDate()) / 7) * 7;
+    $('#cal-title').textContent = premier.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  }
+  $$('#cal-modes button').forEach((b) => b.classList.toggle('active', b.dataset.mode === cal.mode));
+  box.className = 'cal-grid ' + cal.mode;
+  box.innerHTML = CAL_JOURS.map((j) => `<div class="cal-dow">${j}</div>`).join('');
+
+  const max = cal.mode === 'semaine' ? Infinity : (window.matchMedia('(max-width: 600px)').matches ? 2 : 3);
+  const d = new Date(debut);
+  for (let i = 0; i < nbJours; i++) {
+    const k = calCle(d);
+    const cell = document.createElement('div');
+    cell.className = 'cal-day'
+      + (cal.mode === 'mois' && d.getMonth() !== ref.getMonth() ? ' hors-mois' : '')
+      + (k === aujourdhui ? ' today' : '')
+      + (k === cal.jour ? ' selected' : '');
+    cell.dataset.jour = k;
+    cell.tabIndex = 0;
+    const liste = index[k] || [];
+    cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>`;
+    const chips = document.createElement('div');
+    chips.className = 'cal-chips';
+    liste.slice(0, max).forEach((t) => chips.appendChild(calPuce(t)));
+    if (liste.length > max) {
+      const plus = document.createElement('div');
+      plus.className = 'cal-more';
+      plus.textContent = `+${liste.length - max}`;
+      chips.appendChild(plus);
+    }
+    cell.appendChild(chips);
+    const choisir = () => { cal.jour = cal.jour === k ? null : k; renderCalendar(); };
+    cell.addEventListener('click', choisir);
+    cell.addEventListener('keydown', (e) => { if (e.target === cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); choisir(); } });
+    cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('drop'); });
+    cell.addEventListener('dragleave', () => cell.classList.remove('drop'));
+    cell.addEventListener('drop', (e) => {
+      e.preventDefault();
+      cell.classList.remove('drop');
+      const [kind, id] = (e.dataTransfer.getData('text/plain') || '').split(':');
+      const t = cal.taches.find((x) => x.kind === kind && String(x.id) === id);
+      if (t) calDeplacer(t, k);
+    });
+    box.appendChild(cell);
+    d.setDate(d.getDate() + 1);
+  }
+
+  const panneau = $('#cal-day-panel');
+  const contenu = $('#cal-day-list');
+  if (!cal.jour) { panneau.hidden = true; return; }
+  panneau.hidden = false;
+  $('#cal-day-title').textContent = calDepuisCle(cal.jour).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  contenu.innerHTML = '';
+  const duJour = index[cal.jour] || [];
+  $('#cal-day-empty').hidden = duJour.length > 0;
+  for (const t of duJour) contenu.appendChild(creerLigneAgenda(t, loadCalendar, true));
+}
+
+function calNaviguer(sens) {
+  const r = cal.ref;
+  cal.ref = cal.mode === 'semaine'
+    ? new Date(r.getFullYear(), r.getMonth(), r.getDate() + 7 * sens)
+    : new Date(r.getFullYear(), r.getMonth() + sens, 1);
+  renderCalendar();
+}
+
+// Garde : quick.html ne porte pas cette vue (code racine exécuté aussi sur /quick).
+if ($('#view-calendar')) {
+  $('#cal-prev').addEventListener('click', () => calNaviguer(-1));
+  $('#cal-next').addEventListener('click', () => calNaviguer(1));
+  $('#cal-today').addEventListener('click', () => { cal.ref = new Date(); cal.jour = calCle(new Date()); renderCalendar(); });
+  $$('#cal-modes button').forEach((b) => b.addEventListener('click', () => {
+    cal.mode = b.dataset.mode;
+    if (cal.jour) cal.ref = calDepuisCle(cal.jour);
+    try { localStorage.setItem('notask.cal.mode', cal.mode); } catch { /* sans conséquence */ }
+    renderCalendar();
+  }));
+  $('#cal-day-close').addEventListener('click', () => { cal.jour = null; renderCalendar(); });
+  // Flèches gauche/droite = période précédente/suivante, hors champ de saisie.
+  document.addEventListener('keydown', (e) => {
+    if (state.view !== 'calendar' || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.target.closest('input, textarea, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
+    if (e.key === 'ArrowLeft') calNaviguer(-1);
+    if (e.key === 'ArrowRight') calNaviguer(1);
+  });
+  // Balayage horizontal (mobile) : même navigation.
+  let x0 = null;
+  $('#cal-grid').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('#cal-grid').addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if (Math.abs(dx) > 60) calNaviguer(dx < 0 ? 1 : -1);
+  });
 }
 
 /* -------------------------------- Comptes -------------------------------- */

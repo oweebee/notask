@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9119">
+<link rel="stylesheet" href="/static/style.css?v=2.9124">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -128,6 +128,7 @@
              comportement générique data-view des autres boutons ci-dessus,
              d'où l'absence de l'attribut ici). -->
         <button class="drawer-item" id="nav-tasks">Notasks Prévues</button>
+        <button class="drawer-item" data-view="calendar" id="nav-calendar">Calendritasks</button>
         <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
         <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
         <button class="drawer-item" data-view="trash" id="nav-trash">Corbeille</button>
@@ -330,6 +331,31 @@
     <section id="view-tasks" hidden>
       <div class="tasks-columns" id="tasks-columns"></div>
       <div class="empty" id="tasks-empty" hidden>Aucune échéance à venir.</div>
+    </section>
+
+    <!-- ---- Calendritasks : calendrier mois/semaine (voir loadCalendar dans app.js) ---- -->
+    <section id="view-calendar" hidden>
+      <div class="cal-card">
+        <div class="cal-toolbar">
+          <button class="cal-icon-btn" id="cal-prev" type="button" aria-label="Période précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="cal-icon-btn" id="cal-next" type="button" aria-label="Période suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <h2 class="cal-title" id="cal-title"></h2>
+          <button class="cal-today-btn" id="cal-today" type="button">Aujourd'hui</button>
+          <div class="cal-segmented" id="cal-modes" role="group" aria-label="Affichage">
+            <button type="button" data-mode="mois">Mois</button>
+            <button type="button" data-mode="semaine">Semaine</button>
+          </div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+      <section class="cal-day-panel" id="cal-day-panel" hidden>
+        <div class="cal-day-head">
+          <h2 id="cal-day-title"></h2>
+          <button class="cal-icon-btn" id="cal-day-close" type="button" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="cal-day-list"></div>
+        <div class="empty" id="cal-day-empty" hidden>Aucune notask ce jour-là.</div>
+      </section>
     </section>
 
     <!-- ---- Comptes ---- -->
@@ -792,6 +818,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9123"></script>
+<script src="/static/app.js?v=0.9124"></script>
 </body>
 </html>
