@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9143';
+const APP_VERSION = '0.9148';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -11586,6 +11586,17 @@ async function agendaGoogle() {
   return items;
 }
 
+/* Icône de provenance d'un RDV : favicon OFFICIEL du service (Google Agenda,
+   Outlook, iCloud…) chargé depuis le service de favicons de Google — aucun
+   logo redessiné ici. Repli sur l'icône calendrier si l'image ne charge pas
+   (hors ligne). Le navigateur contacte donc google.com pour cette image. */
+function iconeSource(g) {
+  const hote = g?.source_host;
+  if (!hote) return ICONS.calendar;
+  const src = 'https://www.google.com/s2/favicons?sz=32&domain=' + encodeURIComponent(hote);
+  return `<img class="icone-source" src="${src}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createRange().createContextualFragment(ICONS.calendar))">`;
+}
+
 function creerLigneAgendaGoogle(g) {
   const btn = document.createElement('div');
   btn.tabIndex = 0;
@@ -11597,7 +11608,7 @@ function creerLigneAgendaGoogle(g) {
     : formatDueRange(g.start, g.end, false);
   const titre = g.summary || '(Sans titre)';
   btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Valider">
-    <span class="agenda-item-icon agenda-gcal-icon" style="color:${escapeHtml(g.color)}">${ICONS.calendar}</span>
+    <span class="agenda-item-icon agenda-gcal-icon" style="color:${escapeHtml(g.color)}">${iconeSource(g)}</span>
     <span class="agenda-item-body">
       <span class="agenda-item-text" title="${escapeHtml(titre)}">${escapeHtml(titre)}</span>
       <span class="agenda-item-due" title="${escapeHtml(due + ' · ' + g.calendar_summary)}">${escapeHtml(due)} · ${escapeHtml(g.calendar_summary)}</span>
@@ -12501,7 +12512,56 @@ function calRendreGrilleHoraire(box, p, index) {
       return Math.max(0, Math.min(1425, Math.round((y / CAL_HEURE_PX) * 60 / 15) * 15));
     };
     calCibleDepot(col, k, minutesDe);
-    col.addEventListener('dblclick', (ev) => { if (calPeutCreerRdv()) calOuvrirRdv(null, k, minutesDe(ev)); });
+    /* Sélection d'une plage à la souris, comme Google Agenda : appui sur un
+       creux de la colonne, glisser, relâcher → fiche « Nouveau RDV » sur la
+       plage (pas de 15 min). Simple clic = créneau d'1 h. Souris seulement :
+       au doigt, le geste reste le défilement de la grille. */
+    col.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType !== 'mouse' || ev.button !== 0 || ev.target.closest('.cal-ev') || !calPeutCreerRdv()) return;
+      ev.preventDefault();
+      const depart = minutesDe(ev);
+      const sel = document.createElement('div');
+      sel.className = 'cal-tg-sel';
+      col.appendChild(sel);
+      let a = depart, b = depart + 15;
+      const dessiner = () => {
+        sel.style.top = (a / 60) * CAL_HEURE_PX + 'px';
+        sel.style.height = Math.max(((b - a) / 60) * CAL_HEURE_PX - 2, 10) + 'px';
+        const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        sel.textContent = `${hm(a)} – ${hm(Math.min(b, 1440))}`;
+      };
+      dessiner();
+      let bouge = false;
+      const deplacer = (e) => {
+        const m = minutesDe(e);
+        if (m !== depart) bouge = true;
+        a = Math.min(depart, m);
+        b = Math.max(depart, m) + 15;
+        dessiner();
+      };
+      const relacher = () => {
+        col.removeEventListener('pointermove', deplacer);
+        col.removeEventListener('pointerup', relacher);
+        col.removeEventListener('pointercancel', annuler);
+        if (!bouge) b = a + 60;   // simple clic : 1 h, comme Google
+        dessiner();
+        sel.classList.add('relache');
+        calOuvrirRdv(null, k, a, false, Math.min(b, 1439));
+        // La sélection reste visible sous la fiche, puis disparaît.
+        $('#dlg-gevent').addEventListener('close', () => sel.remove(), { once: true });
+        if (!$('#dlg-gevent').open) sel.remove();
+      };
+      const annuler = () => {
+        col.removeEventListener('pointermove', deplacer);
+        col.removeEventListener('pointerup', relacher);
+        col.removeEventListener('pointercancel', annuler);
+        sel.remove();
+      };
+      col.setPointerCapture(ev.pointerId);
+      col.addEventListener('pointermove', deplacer);
+      col.addEventListener('pointerup', relacher);
+      col.addEventListener('pointercancel', annuler);
+    });
 
     // Segments du jour (un RDV sur plusieurs jours est coupé à minuit).
     const j0 = d.getTime(), j1 = calPlus(d, 1).getTime();
@@ -12675,7 +12735,7 @@ function calNaviguer(sens) {
 /* ---- Fiche d'un RDV Google (création / modification / suppression) ---- */
 let calRdvCourant = null;
 
-function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
+function calOuvrirRdv(g, cle = null, minutes = null, journee = false, minutesFin = null) {
   calRdvCourant = g;
   const dlg = $('#dlg-gevent');
   const sel = $('#ge-cal');
@@ -12703,7 +12763,9 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
     d1 = d2 = cle || calCle(cal.mode === 'mois' && cal.jour ? calDepuisCle(cal.jour) : cal.ref);
     if (minutes !== null) {
       const a = calDepuisCle(d1); a.setMinutes(minutes);
-      const b = new Date(a.getTime() + 3600000);
+      const b = minutesFin !== null && minutesFin > minutes
+        ? (() => { const x = calDepuisCle(d1); x.setMinutes(minutesFin); return x; })()
+        : new Date(a.getTime() + 3600000);
       h1 = hm(a); h2 = hm(b); d2 = calCle(b);
     }
   }

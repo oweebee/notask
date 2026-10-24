@@ -73,7 +73,17 @@ def telecharger(url: str, force: bool = False) -> bytes:
             try:
                 with client.stream("GET", courant) as resp:
                     if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
-                        courant = normaliser_url(urljoin(courant, resp.headers["location"]))
+                        loc = resp.headers["location"]
+                        # Outlook / Microsoft 365 : un lien de calendrier publié invalide
+                        # redirige vers sa page d'erreur (errorFE.aspx?httpCode=404) au
+                        # lieu de répondre 404 — message explicite plutôt qu'un « 500 ».
+                        if "errorfe.aspx" in loc.lower():
+                            code = loc.split("httpCode=")[-1][:3] if "httpCode=" in loc else "?"
+                            raise ExterneErreur(
+                                f"Outlook ne trouve pas ce calendrier (erreur {code}) : la publication a "
+                                "peut-être été arrêtée ou le lien régénéré. Republiez-le dans Outlook "
+                                "et recopiez le lien ICS.")
+                        courant = normaliser_url(urljoin(courant, loc))
                         continue
                     if resp.status_code >= 400:
                         raise ExterneErreur(f"Le serveur de l'agenda répond {resp.status_code}.")
@@ -162,6 +172,9 @@ def evenements(ext, debut: datetime, fin: datetime, fuseau: Optional[str]) -> Li
             "editable": False,
             "recurring_event_id": uid if uid in series else None,
             "rrule": regles.get(uid),
+            # Icône des agendas importés à la main : celle d'Outlook pour tous
+            # (demande explicite), quel que soit l'hébergeur réel du flux.
+            "source_host": "outlook.live.com",
             "html_link": None,
         })
     return out

@@ -194,6 +194,7 @@ def _normaliser(ev: Dict[str, Any], cal: Dict[str, Any], couleurs: Dict[str, str
         # 400 « Attempt made to modify 'birthday' event… ») → lecture seule.
         "editable": cal["writable"] and not ev.get("locked", False) and ev.get("eventType") != "birthday",
         "event_type": ev.get("eventType") or "default",
+        "source_host": "calendar.google.com",   # icône de provenance (favicon officiel)
         "recurring_event_id": ev.get("recurringEventId"),
         "html_link": ev.get("htmlLink"),
     }

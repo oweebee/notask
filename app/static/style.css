@@ -4967,6 +4967,21 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
     var(--md-outline-variant) 0, var(--md-outline-variant) 1px, transparent 1px, transparent var(--cal-heure));
 }
 .cal-tg-col.today { background-color: rgba(208, 188, 255, .04); }
+.cal-tg-col { cursor: cell; }
+.cal-tg-sel {
+  position: absolute; left: 2px; right: 2px; z-index: 3; pointer-events: none;
+  border-radius: var(--shape-xs); padding: 2px 6px;
+  background: rgba(208, 188, 255, .28); border: 1px solid var(--md-primary);
+  color: var(--md-on-surface); font-size: .75rem; font-weight: 600;
+  /* Suivi fluide de la souris : la plage glisse d'un pas de 15 min à
+     l'autre au lieu de sauter, et « respire » au relâchement. */
+  transition: top .09s cubic-bezier(.2, 0, 0, 1), height .09s cubic-bezier(.2, 0, 0, 1);
+  animation: cal-sel-in .18s cubic-bezier(.2, 0, 0, 1) both;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+.cal-tg-sel.relache { animation: cal-sel-relache .35s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes cal-sel-in { from { opacity: 0; transform: scaleY(.6); } to { opacity: 1; transform: none; } }
+@keyframes cal-sel-relache { 0% { transform: scale(1); } 40% { transform: scale(1.03, 1.06); } 100% { transform: scale(1); } }
 .cal-ev {
   position: absolute; overflow: hidden;
   border-radius: var(--shape-xs); padding: 2px 6px;
@@ -5095,6 +5110,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 /* ---- RDV Google dans la colonne d'échéances de l'accueil ---- */
 .agenda-gcal-dot { flex: none; width: 16.5px; height: 16.5px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); box-sizing: border-box; }
 .agenda-gcal-icon svg { width: 16px; height: 16px; }
+.icone-source { width: 16px; height: 16px; display: block; border-radius: 3px; }
 .trashed-rdv { border-radius: var(--shape-sm); background: var(--md-surface-2); cursor: default; }
 .trashed-rdv-actions { display: flex; gap: .375rem; margin-left: auto; flex: none; }
 .trashed-rdv-actions .btn { display: inline-flex; align-items: center; gap: .3rem; }
