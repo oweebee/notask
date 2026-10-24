@@ -20,6 +20,7 @@ HTTP avec Google) :
 """
 
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -32,9 +33,13 @@ from sqlmodel import Session, select
 from app import google_calendar as gcal
 from app import google_drive as gdrive
 from app import google_overlay as gov
+from app import external_calendars as extcal
+from app.routers.settings import fuseau_utilisateur
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
+    CalendarEventDone,
+    ExternalCalendar,
     GoogleAccount,
     GoogleAccountStatus,
     GoogleAppConfig,
@@ -54,6 +59,7 @@ from app.models import (
 from app.security import decode_access_token
 
 router = APIRouter(prefix="/api/google", tags=["google"])
+log = logging.getLogger("notask.google")
 
 # Durée de vie d'un état CSRF de connexion — largement suffisant pour un
 # aller-retour vers l'écran de consentement Google, court pour limiter la
@@ -510,8 +516,15 @@ def overlay_echeances(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    """Agendas dont les RDV à venir rejoignent la colonne d'échéances."""
+    """Agendas dont les RDV rejoignent la colonne d'échéances. Date de
+    première activation mémorisée par agenda (voir agenda_depuis)."""
     _maj_liste(user, session, payload.visible, "agenda_calendars")
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    anciens = gov.depuis(compte)
+    maintenant = utcnow().isoformat()
+    compte.agenda_depuis = json.dumps({i: anciens.get(i, maintenant) for i in (gov.pour_echeances(compte) or [])})
+    session.add(compte)
+    session.commit()
 
 
 @router.put("/overlay/available", status_code=status.HTTP_204_NO_CONTENT)
@@ -532,18 +545,66 @@ def overlay_evenements(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    """Toujours 200 quand l'affichage est désactivé ({"enabled": false}) :
-    Calendritasks interroge à chaque mois affiché, ce n'est pas une erreur."""
-    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
-    if compte is None or not compte.calendars_view_enabled:
-        return {"enabled": False, "calendars": [], "events": [], "errors": []}
+    """RDV Google (si l'affichage est activé) + agendas externes iCal.
+    Toujours 200 quand rien n'est actif ({"enabled": false}) : Calendritasks
+    interroge à chaque période affichée, ce n'est pas une erreur. Un agenda
+    en échec est signalé dans `errors` sans faire échouer les autres."""
     debut, fin = _parse_borne(start, "start"), _parse_borne(end, "end")
     if fin <= debut or fin - debut > timedelta(days=100):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Période invalide (100 jours max)")
-    try:
-        return gov.lister_evenements(compte, session, debut, fin, pour_agenda=pour == "agenda")
-    except gov.OverlayError as err:
-        raise _http(err)
+    resultat = {"enabled": False, "calendars": [], "events": [], "errors": []}
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is not None and compte.calendars_view_enabled:
+        try:
+            resultat = gov.lister_evenements(compte, session, debut, fin, pour_agenda=pour == "agenda")
+        except gov.OverlayError as err:
+            resultat = {"enabled": True, "calendars": [], "events": [], "errors": [f"Google : {err}"]}
+    # Agendas « Échéances » sans date d'activation (réglage antérieur) : datés
+    # de maintenant, une fois — aucun retard rétroactif.
+    if pour == "agenda":
+        if compte is not None and compte.calendars_view_enabled:
+            dates = gov.depuis(compte)
+            manquants = [c["id"] for c in resultat["calendars"] if c.get("in_agenda") and not dates.get(c["id"])]
+            if manquants:
+                maintenant = utcnow().isoformat()
+                for cid in manquants:
+                    dates[cid] = maintenant
+                for c in resultat["calendars"]:
+                    if c["id"] in manquants:
+                        c["agenda_since"] = maintenant
+                compte.agenda_depuis = json.dumps(dates)
+                session.add(compte)
+                session.commit()
+    externes = session.exec(select(ExternalCalendar).where(ExternalCalendar.user_id == user.id)).all()
+    for e in externes:
+        if e.in_agenda and e.in_agenda_since is None:
+            e.in_agenda_since = utcnow()
+            session.add(e)
+            session.commit()
+            session.refresh(e)
+    if externes:
+        resultat["enabled"] = True
+        fuseau = fuseau_utilisateur(user.id, session)
+        for e in externes:
+            resultat["calendars"].append(extcal.comme_agenda(e))
+            if not (e.in_agenda if pour == "agenda" else (e.available and e.visible)):
+                continue
+            try:
+                resultat["events"].extend(extcal.evenements(e, debut, fin, fuseau))
+            except extcal.ExterneErreur as err:
+                resultat["errors"].append(f"{e.name} : {err}")
+            except Exception:
+                log.exception("Agenda externe %s illisible", e.id)
+                resultat["errors"].append(f"{e.name} : illisible")
+    # RDV validés depuis notask (case cochée) : marqués, pas retirés — la
+    # vue calendrier les montre barrés, la colonne d'échéances les écarte.
+    valides = {(v.calendar_id, v.event_id): v.id for v in session.exec(
+        select(CalendarEventDone).where(CalendarEventDone.user_id == user.id)).all()}
+    for ev in resultat["events"]:
+        vid = valides.get((ev["calendar_id"], ev["id"]))
+        ev["done"] = vid is not None
+        ev["done_id"] = vid
+    return resultat
 
 
 @router.post("/overlay/events", status_code=status.HTTP_204_NO_CONTENT)

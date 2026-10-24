@@ -5032,11 +5032,29 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-opts-name em { color: var(--md-on-surface-variant); font-size: .8125rem; }
 .cal-opts-cell { display: flex; justify-content: center; padding: .5rem; cursor: pointer; }
+.cal-opts-sec { margin-bottom: 1.75rem; }
+.cal-opts-sec .aide b { color: var(--md-on-surface); font-weight: 500; }
+.cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 6rem 6rem 44px; }
+.cal-opts-table.ext > * { background: none !important; }
+.cal-opts-del svg { width: 18px; height: 18px; }
+.cal-opts-add { display: grid; grid-template-columns: 12rem minmax(0, 1fr) 44px auto; gap: .5rem; align-items: center; margin-top: .75rem; }
+.cal-opts-add input:not([type=color]) {
+  padding: .55rem .65rem; border-radius: 8px; border: 1px solid var(--md-outline-variant);
+  background: var(--md-surface); color: var(--md-on-surface); font: inherit; min-width: 0;
+}
+.cal-opts-add input[type=color] { width: 40px; height: 36px; padding: 0; border: none; background: none; cursor: pointer; }
+.cal-opts-msg { grid-column: 1 / -1; }
+.cal-opts-msg:empty { display: none; }
 .cal-opts-table > :nth-child(6n+4), .cal-opts-table > :nth-child(6n+5), .cal-opts-table > :nth-child(6n+6) { background: var(--md-surface-2); }
 
 /* ---- RDV Google dans la colonne d'échéances de l'accueil ---- */
 .agenda-gcal-dot { flex: none; width: 16.5px; height: 16.5px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); box-sizing: border-box; }
 .agenda-gcal-icon svg { width: 16px; height: 16px; }
+.trashed-rdv { border-radius: var(--shape-sm); background: var(--md-surface-2); cursor: default; }
+.trashed-rdv-actions { display: flex; gap: .375rem; margin-left: auto; flex: none; }
+.trashed-rdv-actions .btn { display: inline-flex; align-items: center; gap: .3rem; }
+.trashed-rdv-actions .btn svg { width: 16px; height: 16px; flex: none; }
+@media (max-width: 600px) { .trashed-rdv { flex-wrap: wrap; } .trashed-rdv-actions { width: 100%; justify-content: flex-end; } }
 
 /* ---- Fiche RDV Google ---- */
 .ge-row { display: grid; grid-template-columns: 4rem 1fr 9rem; gap: .5rem; align-items: center; margin-bottom: 1rem; }
@@ -5086,4 +5104,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   .cal-opts-btn span { display: none; }
   .cal-opts-btn { padding: 0 .6rem; order: -1; }
   .cal-opts-table { grid-template-columns: minmax(0, 1fr) 4.5rem 5rem; }
+  .cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 4.5rem 5rem 40px; }
+  .cal-opts-add { grid-template-columns: minmax(0, 1fr) 44px; }
+  .cal-opts-add input[name=url] { grid-column: 1 / -1; }
 }

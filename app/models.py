@@ -325,6 +325,11 @@ class GoogleAccount(SQLModel, table=True):
     # Agendas dont les RDV à venir rejoignent la colonne d'échéances (JSON ;
     # None = mêmes agendas que visible_calendars).
     agenda_calendars: Optional[str] = Field(default=None, max_length=20000)
+    # {id d'agenda: ISO} — date à laquelle chaque agenda a été coché
+    # « Échéances » : seuls ses RDV passés APRÈS cette date (et non validés)
+    # remontent « en retard », sans quoi cocher un agenda ancien inonderait
+    # la colonne de retards.
+    agenda_depuis: Optional[str] = Field(default=None, max_length=40000)
     # Agendas proposés dans Calendritasks (bouton Options ; JSON ; None = tous).
     # Seuls ceux-là apparaissent dans la barre d'agendas, où visible_calendars
     # les affiche ou les masque.
@@ -390,6 +395,63 @@ class GoogleOverlayEventIn(SQLModel):
 # serveur, en HTTPS). Ligne à usage unique, supprimée dès consommée par
 # callback() ou si expirée (nettoyage paresseux, comme _purge_expired_trash
 # dans routers/notes.py — même philosophie : pas de tâche planifiée).
+class ExternalCalendar(SQLModel, table=True):
+    """Agenda externe en lecture seule (abonnement iCal/ICS : adresse secrète
+    Google, calendrier publié Outlook, iCloud public…) affiché dans
+    Calendritasks — voir app/external_calendars.py. L'URL est stockée EN
+    CLAIR : c'est le serveur qui la télécharge (un navigateur ne le peut pas,
+    CORS). Les événements eux-mêmes ne sont jamais stockés."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    name: str = Field(max_length=200)
+    url: str = Field(max_length=2000)
+    color: str = Field(default="#7986cb", max_length=7)
+    available: bool = True   # proposé dans la barre d'agendas
+    visible: bool = True     # affiché (bascule de la barre d'agendas)
+    in_agenda: bool = False  # RDV à venir dans la colonne d'échéances
+    in_agenda_since: Optional[datetime] = None  # cf. GoogleAccount.agenda_depuis
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class CalendarEventDone(SQLModel, table=True):
+    """RDV Google / agenda externe « validé » depuis notask (case cochée) :
+    rien n'est modifié à la source, le RDV quitte seulement les échéances de
+    notask et passe dans sa corbeille (30 jours affichés). Le titre est
+    CHIFFRÉ côté client (même DEK que les notes) : seul affichage de la
+    corbeille. La ligne est gardée 120 jours (au-delà de la fenêtre de
+    lecture des retards) pour que le RDV ne réapparaisse pas en retard une
+    fois sorti de la corbeille."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    calendar_id: str = Field(max_length=300)
+    event_id: str = Field(max_length=1100)
+    start: str = Field(max_length=40)
+    title_enc: str = Field(default="", max_length=6000)
+    done_at: datetime = Field(default_factory=utcnow)
+    hidden_from_trash: bool = False
+
+
+class CalendarEventDoneIn(SQLModel):
+    calendar_id: str = Field(min_length=1, max_length=300)
+    event_id: str = Field(min_length=1, max_length=1100)
+    start: str = Field(min_length=1, max_length=40)
+    title_enc: str = Field(default="", max_length=6000)
+
+
+class ExternalCalendarIn(SQLModel):
+    name: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=8, max_length=2000)
+    color: str = Field(default="#7986cb", regex=r"^#[0-9a-fA-F]{6}$")
+
+
+class ExternalCalendarUpdate(SQLModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    color: Optional[str] = Field(default=None, regex=r"^#[0-9a-fA-F]{6}$")
+    available: Optional[bool] = None
+    visible: Optional[bool] = None
+    in_agenda: Optional[bool] = None
+
+
 class GoogleOAuthState(SQLModel, table=True):
     state: str = Field(primary_key=True, max_length=64)
     user_id: int = Field(foreign_key="user.id", index=True)

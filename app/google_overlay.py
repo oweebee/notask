@@ -67,6 +67,14 @@ def disponibles(account: GoogleAccount) -> Optional[List[str]]:
     return _liste_json(account.available_calendars)
 
 
+def depuis(account: GoogleAccount) -> Dict[str, str]:
+    try:
+        val = json.loads(account.agenda_depuis or "{}")
+    except ValueError:
+        return {}
+    return val if isinstance(val, dict) else {}
+
+
 def pour_echeances(account: GoogleAccount) -> Optional[List[str]]:
     """None = jamais réglé (on prend alors les agendas affichés)."""
     return _liste_json(account.agenda_calendars)
@@ -108,6 +116,7 @@ def lister_agendas(account: GoogleAccount, session: Session) -> List[Dict[str, A
         })
         out[-1]["in_agenda"] = (cid in echeances) if echeances is not None else out[-1]["visible"]
         out[-1]["available"] = (cid in dispo) if dispo is not None else True
+        out[-1]["agenda_since"] = depuis(account).get(cid)
     out.sort(key=lambda c: (not c["primary"], c["summary"].lower()))
     return out
 
@@ -251,7 +260,13 @@ def _envoyer(account: GoogleAccount, session: Session, methode: str, url: str, b
         raise OverlayError("RDV introuvable côté Google.", 404)
     if resp.status_code >= 400:
         log.error("Google %s %s → %s %s", methode, url, resp.status_code, resp.text[:300])
-        raise OverlayError("Google a refusé la demande.", 502)
+        # Message de Google renvoyé tel quel : seul moyen de savoir POURQUOI
+        # sans aller lire les journaux du serveur.
+        try:
+            detail = resp.json().get("error", {}).get("message") or ""
+        except ValueError:
+            detail = ""
+        raise OverlayError(f"Google a refusé la demande ({resp.status_code}){' : ' + detail if detail else '.'}", 502)
     return resp.json() if resp.content else None
 
 

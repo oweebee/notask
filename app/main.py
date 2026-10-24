@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app import events as bus
 from app.db import init_db
 from app.routers import (
-    attachments, auth, events, google, labels, note_versions, notes, settings, tasks, users,
+    attachments, auth, calendars, events, google, labels, note_versions, notes, settings, tasks, users,
 )
 from app.security import decode_access_token
 from app.mcp_server import create_mcp_app
@@ -167,6 +167,7 @@ app.include_router(labels.router)
 app.include_router(attachments.router)
 app.include_router(note_versions.router)
 app.include_router(google.router)
+app.include_router(calendars.router)
 
 
 @app.get("/health", tags=["system"])

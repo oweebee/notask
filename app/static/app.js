@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9127';
+const APP_VERSION = '0.9129';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -3785,6 +3785,41 @@ async function loadTrash() {
   state.trashNotes = notes;
   renderTrash();
   loadTrashedItems();
+  loadTrashedRdv();
+}
+
+/* RDV validés (Google / externes) : section à part de la corbeille. */
+async function loadTrashedRdv() {
+  const bloc = $('#trashed-rdv');
+  if (!bloc) return;
+  let rows;
+  try { rows = await api('/calendars/done'); } catch { rows = []; }
+  const liste = $('#trashed-rdv-list');
+  liste.innerHTML = '';
+  bloc.hidden = !rows.length;
+  if (rows.length) $('#trash-empty').hidden = true;
+  for (const r of rows) {
+    const titre = (await decryptField(r.title_enc)) || '(Sans titre)';
+    const jour = /^\d{4}-\d{2}-\d{2}$/.test(r.start);
+    const quand = formatDueRange(jour ? r.start + 'T00:00:00Z' : r.start, null, jour);
+    const el = document.createElement('div');
+    el.className = 'agenda-item trashed-rdv';
+    el.innerHTML = `<span class="agenda-item-icon agenda-gcal-icon">${ICONS.calendar}</span>
+      <span class="agenda-item-body">
+        <span class="agenda-item-text">${escapeHtml(titre)}</span>
+        <span class="agenda-item-due">${escapeHtml(quand)} · ${daysLeftInTrash(r.done_at)} j avant suppression</span>
+      </span>
+      <span class="trashed-rdv-actions">
+        <button type="button" class="btn ghost sm" data-act="restore">${ICONS.undo} Restaurer</button>
+        <button type="button" class="btn danger sm" data-act="purge">${ICONS.trash} Supprimer définitivement</button>
+      </span>`;
+    el.querySelector('[data-act=restore]').onclick = () => annulerValidationRdv(r.id);
+    el.querySelector('[data-act=purge]').onclick = async () => {
+      try { await api(`/calendars/done/${r.id}/hide`, { method: 'POST' }); } catch (err) { alert(err.message); return; }
+      loadTrashedRdv();
+    };
+    liste.appendChild(el);
+  }
 }
 
 function daysLeftInTrash(trashedAt) {
@@ -11489,20 +11524,30 @@ async function agendaGoogle() {
   const now = new Date();
   let r;
   try {
-    const q = new URLSearchParams({ start: now.toISOString(), end: new Date(now.getTime() + 31 * 86400000).toISOString(), pour: 'agenda' });
+    // 60 jours en arrière : RDV passés non validés = « en retard » (seulement
+    // ceux postérieurs à l'activation « Échéances » de leur agenda).
+    const q = new URLSearchParams({ start: new Date(now.getTime() - 60 * 86400000).toISOString(), end: new Date(now.getTime() + 31 * 86400000).toISOString(), pour: 'agenda' });
     r = await api('/google/overlay/events?' + q);
   } catch {
     return c ? c.items : [];
   }
   const auj = calCle(now);
   const limite = calCle(calPlus(now, 7));
-  const items = (r.enabled ? r.events : []).map((g) => {
+  const depuis = new Map((r.calendars || []).map((c) => [c.id, c.agenda_since ? new Date(c.agenda_since) : null]));
+  const items = [];
+  for (const g of (r.enabled ? r.events : [])) {
+    if (g.done) continue;
     const debut = g.all_day ? calDepuisCle(g.start) : new Date(g.start);
     const fin = g.all_day ? calPlus(calDepuisCle(g.end), 1) : new Date(g.end);
     const k = calCle(debut);
-    const bucket = (k <= auj && fin > now) || k === auj ? 'today' : (k <= limite ? 'imminent' : 'upcoming');
-    return { g, bucket, quand: debut };
-  });
+    let bucket;
+    if (fin <= now) {
+      const d = depuis.get(g.calendar_id);
+      if (!d || fin <= d) continue;   // terminé avant l'activation : pas un retard
+      bucket = 'late';
+    } else bucket = (k <= auj && fin > now) || k === auj ? 'today' : (k <= limite ? 'imminent' : 'upcoming');
+    items.push({ g, bucket, quand: debut });
+  }
   state.gAgenda = { ts: Date.now(), items };
   return items;
 }
@@ -11517,16 +11562,41 @@ function creerLigneAgendaGoogle(g) {
     ? formatDueRange(g.start + 'T00:00:00Z', g.end !== g.start ? g.end + 'T00:00:00Z' : null, true)
     : formatDueRange(g.start, g.end, false);
   const titre = g.summary || '(Sans titre)';
-  btn.innerHTML = `<span class="agenda-gcal-dot" style="background:${escapeHtml(g.color)}"></span>
-    <span class="agenda-item-icon agenda-gcal-icon">${ICONS.calendar}</span>
+  btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Valider">
+    <span class="agenda-item-icon agenda-gcal-icon" style="color:${escapeHtml(g.color)}">${ICONS.calendar}</span>
     <span class="agenda-item-body">
       <span class="agenda-item-text" title="${escapeHtml(titre)}">${escapeHtml(titre)}</span>
       <span class="agenda-item-due" title="${escapeHtml(due + ' · ' + g.calendar_summary)}">${escapeHtml(due)} · ${escapeHtml(g.calendar_summary)}</span>
     </span>`;
   const ouvrir = () => calOuvrirRdv(g);
-  btn.addEventListener('click', ouvrir);
-  btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); } });
+  const check = btn.querySelector('input');
+  check.addEventListener('click', (e) => e.stopPropagation());
+  check.addEventListener('change', () => { if (check.checked) validerRdv(g, btn); });
+  btn.addEventListener('click', (e) => { if (!e.target.closest('input')) ouvrir(); });
+  btn.addEventListener('keydown', (e) => {
+    if (e.target.closest('input')) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); }
+  });
   return btn;
+}
+
+/* Valider un RDV Google / externe : AUCUN effet à la source. Il quitte les
+   échéances de notask et va dans sa corbeille (30 j, restaurable). Titre
+   chiffré côté client pour l'affichage de la corbeille. */
+async function validerRdv(g, el) {
+  const vol = el ? aspirerNotask(el, cibleAspiration('corbeille')) : null;
+  try {
+    await Promise.all([vol, api('/calendars/done', { method: 'POST', body: {
+      calendar_id: g.calendar_id, event_id: g.id, start: g.start,
+      title_enc: await encryptField(g.summary || ''),
+    } })]);
+  } catch (err) { alert(err.message); }
+  calApresModifRdv();
+}
+
+async function annulerValidationRdv(doneId) {
+  try { await api('/calendars/done/' + doneId, { method: 'DELETE' }); } catch (err) { alert(err.message); }
+  calApresModifRdv();
 }
 
 function renderAgenda(items, gItems = []) {
@@ -11874,7 +11944,7 @@ function calEntrees() {
       ajouter({
         src: 'g', obj: g, allDay: g.all_day, k1, k2, debut, fin,
         titre: g.summary || '(Sans titre)', hex: g.color, classe: '',
-        done: false, late: false, editable: g.editable, sous: g.calendar_summary,
+        done: !!g.done, late: false, editable: g.editable && !g.done, sous: g.calendar_summary,
       });
     }
   }
@@ -12012,7 +12082,7 @@ function calLigne(e, cle) {
     const d2 = e.k2 === cle || memeJour ? calHeure(e.fin) : '…';
     heure = e.src === 't' && !e.obj.due_end_at ? calHeure(e.debut) : `${d1} – ${d2}`;
   }
-  li.innerHTML = `${e.src === 't' ? `<input type="checkbox" class="cal-row-check" aria-label="Terminer"${e.done ? ' checked' : ''}>` : '<span class="cal-row-check-vide"></span>'}
+  li.innerHTML = `<input type="checkbox" class="cal-row-check" aria-label="${e.src === 't' ? 'Terminer' : 'Valider'}"${e.done ? ' checked' : ''}>
     <span class="cal-row-time">${escapeHtml(heure)}</span>
     <span class="cal-row-body"><span class="cal-row-title">${escapeHtml(e.titre)}</span>
     <span class="cal-row-sub">${escapeHtml(e.sous)}${e.src === 'g' && e.obj.location ? ' · ' + escapeHtml(e.obj.location) : ''}</span></span>`;
@@ -12022,6 +12092,11 @@ function calLigne(e, cle) {
   if (check) {
     check.addEventListener('click', (ev) => ev.stopPropagation());
     check.addEventListener('change', async () => {
+      if (e.src === 'g') {
+        if (check.checked) validerRdv(e.obj, null);
+        else if (e.obj.done_id) annulerValidationRdv(e.obj.done_id);
+        return;
+      }
       try {
         await api(`/tasks/${e.obj.kind}/${e.obj.id}`, { method: 'PATCH', body: { done: check.checked } });
       } catch (err) { alert(err.message); }
@@ -12100,74 +12175,146 @@ function calRendreLegende() {
 }
 
 async function calBasculerAgenda(id) {
-  const visibles = cal.g.calendars.filter((c) => (c.id === id ? !c.visible : c.visible)).map((c) => c.id);
+  const c0 = cal.g.calendars.find((c) => c.id === id);
   try {
-    await api('/google/overlay/visible', { method: 'PUT', body: { visible: visibles } });
+    if (c0?.external) {
+      await api('/calendars/external/' + c0.ext_id, { method: 'PATCH', body: { visible: !c0.visible } });
+    } else {
+      const visibles = cal.g.calendars.filter((c) => !c.external && (c.id === id ? !c.visible : c.visible)).map((c) => c.id);
+      await api('/google/overlay/visible', { method: 'PUT', body: { visible: visibles } });
+    }
   } catch (err) { alert(err.message); return; }
   cal.gPlage = null;
   renderCalendar();
 }
 
-/* Panneau Options de Calendritasks : interrupteur général des agendas
-   Google + par agenda « Afficher » (Calendritasks) et « Échéances » (colonne
-   de droite de l'accueil). Mêmes réglages que Options > Google. */
+/* Panneau Options de Calendritasks : agendas Google (interrupteur général
+   + par agenda « Afficher » = proposé dans la barre d'agendas, « Échéances »
+   = RDV dans la colonne de droite de l'accueil) et agendas externes iCal
+   (Outlook, adresse secrète Google, iCloud… — lecture seule). */
 async function calRendreOptions() {
   const box = $('#cal-opts');
   box.innerHTML = '<p class="aide">Chargement…</p>';
-  let st;
-  try { st = await api('/google/status'); } catch (err) { box.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`; return; }
-  box.innerHTML = '<h3 class="cal-opts-title">Agendas Google</h3>';
+  let st, externes;
+  try {
+    [st, externes] = await Promise.all([api('/google/status'), api('/calendars/external')]);
+  } catch (err) { box.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`; return; }
+  box.innerHTML = '';
+  const apresChangement = (agenda) => { calInvaliderGoogle(); if (agenda) loadAgenda(); };
+
+  // ---- Google ----
+  const secG = document.createElement('section');
+  secG.className = 'cal-opts-sec';
+  secG.innerHTML = '<h3 class="cal-opts-title">Agendas Google</h3>';
+  box.appendChild(secG);
+  let googleCals = [];
   if (!st.connected) {
-    box.insertAdjacentHTML('beforeend', '<p class="aide">Aucun compte Google relié : connectez-le dans Options › Google.</p>');
-    return;
-  }
-  const inter = document.createElement('label');
-  inter.className = 'cal-opts-switch';
-  inter.innerHTML = `<input type="checkbox"${st.calendars_view_enabled ? ' checked' : ''}><span>Afficher et gérer mes agendas Google</span>`;
-  inter.querySelector('input').addEventListener('change', async (e) => {
-    try {
-      await api('/google/features', { method: 'PUT', body: {
-        calendar_enabled: st.calendar_enabled !== false, drive_enabled: st.drive_enabled !== false,
-        calendars_view_enabled: e.target.checked,
-      } });
-    } catch (err) { alert(err.message); }
-    const caseOptions = $('#profil-google-overlay-on');
-    if (caseOptions) caseOptions.checked = e.target.checked;
-    calInvaliderGoogle();
-    calRendreOptions();
-    loadAgenda();
-  });
-  box.appendChild(inter);
-  if (!st.calendars_view_enabled) return;
-  let data;
-  try { data = await api('/google/overlay/calendars'); } catch (err) {
-    box.insertAdjacentHTML('beforeend', `<p class="aide">${escapeHtml(err.message)}</p>`);
-    return;
-  }
-  const table = document.createElement('div');
-  table.className = 'cal-opts-table';
-  table.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div>';
-  const envoyer = async (champ, route) => {
-    const ids = [...table.querySelectorAll(`input[data-champ="${champ}"]:checked`)].map((i) => i.value);
-    try { await api(route, { method: 'PUT', body: { visible: ids } }); } catch (err) { alert(err.message); }
-    calInvaliderGoogle();
-    if (champ === 'agenda') loadAgenda();
-  };
-  for (const c of data.calendars) {
-    const nom = document.createElement('div');
-    nom.className = 'cal-opts-name';
-    nom.innerHTML = `<span class="cal-legend-dot" style="--gcal:${escapeHtml(c.color)};background:${escapeHtml(c.color)}"></span><span>${escapeHtml(c.summary)}${c.writable ? '' : ' <em>(lecture seule)</em>'}</span>`;
-    table.appendChild(nom);
-    for (const [champ, route, coche] of [['available', '/google/overlay/available', c.available !== false], ['agenda', '/google/overlay/agenda', c.in_agenda]]) {
-      const cell = document.createElement('label');
-      cell.className = 'cal-opts-cell';
-      cell.innerHTML = `<input type="checkbox" data-champ="${champ}" value="${escapeHtml(c.id)}"${coche ? ' checked' : ''} aria-label="${champ === 'available' ? 'Afficher' : 'Échéances'} ${escapeHtml(c.summary)}">`;
-      cell.querySelector('input').addEventListener('change', () => envoyer(champ, route));
-      table.appendChild(cell);
+    secG.insertAdjacentHTML('beforeend', '<p class="aide">Aucun compte Google relié : connectez-le dans Options › Google.</p>');
+  } else {
+    const inter = document.createElement('label');
+    inter.className = 'cal-opts-switch';
+    inter.innerHTML = `<input type="checkbox"${st.calendars_view_enabled ? ' checked' : ''}><span>Afficher et gérer mes agendas Google</span>`;
+    inter.querySelector('input').addEventListener('change', async (e) => {
+      try {
+        await api('/google/features', { method: 'PUT', body: {
+          calendar_enabled: st.calendar_enabled !== false, drive_enabled: st.drive_enabled !== false,
+          calendars_view_enabled: e.target.checked,
+        } });
+      } catch (err) { alert(err.message); }
+      const caseOptions = $('#profil-google-overlay-on');
+      if (caseOptions) caseOptions.checked = e.target.checked;
+      apresChangement(true);
+      calRendreOptions();
+    });
+    secG.appendChild(inter);
+    if (st.calendars_view_enabled) {
+      try { googleCals = (await api('/google/overlay/calendars')).calendars; } catch (err) {
+        secG.insertAdjacentHTML('beforeend', `<p class="aide">${escapeHtml(err.message)}</p>`);
+      }
     }
   }
-  box.appendChild(table);
-  if (!data.calendars.length) box.insertAdjacentHTML('beforeend', '<p class="aide">Aucun agenda trouvé.</p>');
+  const tableau = (lignes, avecSuppr) => {
+    const t = document.createElement('div');
+    t.className = 'cal-opts-table' + (avecSuppr ? ' ext' : '');
+    t.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div>' + (avecSuppr ? '<div class="cal-opts-head"></div>' : '');
+    for (const c of lignes) {
+      const nom = document.createElement('div');
+      nom.className = 'cal-opts-name';
+      const sous = c.external ? ` <em>${escapeHtml(c.url_host)}</em>` : (c.writable ? '' : ' <em>(lecture seule)</em>');
+      nom.innerHTML = `<span class="cal-legend-dot" style="--gcal:${escapeHtml(c.color)};background:${escapeHtml(c.color)}"></span><span>${escapeHtml(c.summary)}${sous}</span>`;
+      t.appendChild(nom);
+      for (const champ of ['available', 'in_agenda']) {
+        const cell = document.createElement('label');
+        cell.className = 'cal-opts-cell';
+        cell.innerHTML = `<input type="checkbox" data-champ="${champ}" value="${escapeHtml(c.id)}"${(champ === 'available' ? c.available !== false : c.in_agenda) ? ' checked' : ''} aria-label="${champ === 'available' ? 'Afficher' : 'Échéances'} ${escapeHtml(c.summary)}">`;
+        cell.querySelector('input').addEventListener('change', async (e) => {
+          try {
+            if (c.external) {
+              await api('/calendars/external/' + c.ext_id, { method: 'PATCH', body: { [champ]: e.target.checked } });
+            } else {
+              const ids = [...t.querySelectorAll(`input[data-champ="${champ}"]:checked`)].map((x) => x.value);
+              await api(champ === 'available' ? '/google/overlay/available' : '/google/overlay/agenda', { method: 'PUT', body: { visible: ids } });
+            }
+          } catch (err) { alert(err.message); }
+          apresChangement(champ === 'in_agenda');
+        });
+        t.appendChild(cell);
+      }
+      if (avecSuppr) {
+        const sup = document.createElement('button');
+        sup.type = 'button';
+        sup.className = 'cal-icon-btn cal-opts-del';
+        sup.title = 'Retirer cet agenda';
+        sup.setAttribute('aria-label', 'Retirer ' + c.summary);
+        sup.innerHTML = ICONS.trash;
+        sup.addEventListener('click', async () => {
+          if (!confirm(`Retirer l'agenda « ${c.summary} » de notask ? (rien n'est supprimé à la source)`)) return;
+          try { await api('/calendars/external/' + c.ext_id, { method: 'DELETE' }); } catch (err) { alert(err.message); return; }
+          apresChangement(true);
+          calRendreOptions();
+        });
+        t.appendChild(sup);
+      }
+    }
+    return t;
+  };
+  if (googleCals.length) secG.appendChild(tableau(googleCals, false));
+
+  // ---- Agendas externes (iCal / ICS) ----
+  const secE = document.createElement('section');
+  secE.className = 'cal-opts-sec';
+  secE.innerHTML = `<h3 class="cal-opts-title">Agendas externes (iCal / ICS)</h3>
+    <p class="aide">Lecture seule. Collez un lien .ics ou webcal:// :
+      <b>Google</b> (autre compte, agenda partagé) : Paramètres de l'agenda › Adresse secrète au format iCal ·
+      <b>Outlook / Microsoft 365</b> : Paramètres › Calendrier › Calendriers partagés › Publier un calendrier › lien ICS ·
+      <b>iCloud</b> : partage public de l'agenda. Le lien est conservé sur le serveur notask (non chiffré), qui télécharge l'agenda.</p>`;
+  if (externes.length) secE.appendChild(tableau(externes, true));
+  const form = document.createElement('form');
+  form.className = 'cal-opts-add';
+  form.innerHTML = `<input name="name" placeholder="Nom (ex. Outlook pro)" maxlength="200" required>
+    <input name="url" placeholder="https://… .ics ou webcal://…" maxlength="2000" required>
+    <input name="color" type="color" value="#7986cb" title="Couleur">
+    <button class="btn" type="submit">Ajouter</button>
+    <div class="cal-opts-msg"></div>`;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const bouton = form.querySelector('button');
+    bouton.disabled = true;
+    msg(form.querySelector('.cal-opts-msg'), 'Vérification du lien…', 'ok');
+    try {
+      await api('/calendars/external', { method: 'POST', body: {
+        name: form.name.value.trim(), url: form.url.value.trim(), color: form.color.value,
+      } });
+    } catch (err) {
+      msg(form.querySelector('.cal-opts-msg'), err.message);
+      bouton.disabled = false;
+      return;
+    }
+    apresChangement(false);
+    calRendreOptions();
+  });
+  secE.appendChild(form);
+  box.appendChild(secE);
 }
 
 function calRendreMois(box, p, index) {
@@ -12427,7 +12574,7 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
       h1 = hm(a); h2 = hm(b); d2 = calCle(b);
     }
   }
-  $('#ge-titre-dlg').textContent = g ? (lecture ? 'RDV Google (lecture seule)' : 'Modifier le RDV') : 'Nouveau RDV Google';
+  $('#ge-titre-dlg').textContent = g ? (lecture ? 'RDV (lecture seule)' : 'Modifier le RDV') : 'Nouveau RDV Google';
   $('#ge-summary').value = g ? g.summary : '';
   $('#ge-allday').checked = allDay;
   $('#ge-d1').value = d1; $('#ge-d2').value = d2;
@@ -12493,6 +12640,7 @@ function calApresModifRdv() {
   cal.gPlage = null;
   state.gAgenda = null;
   if (state.view === 'calendar') renderCalendar();
+  else if (state.view === 'trash') loadTrash();
   else loadAgenda();
 }
 
