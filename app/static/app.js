@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9148';
+const APP_VERSION = '0.9149';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -1321,7 +1321,9 @@ const ICON_CHOICES = {
    au jour UTC (isoToUtcDateStr) plutôt qu'au jour local — cf. dateOnlyToIso :
    une échéance journée complète est un jour calendaire pur, encodé en
    minuit UTC, jamais une conversion depuis un fuseau. */
-function formatDue(isoString, allDay = false) {
+/* avecJour : jour de la semaine abrégé devant la date (« lun. 26 oct. »),
+   colonne d'échéances seulement — demandé. */
+function formatDue(isoString, allDay = false, avecJour = false) {
   if (!isoString) return '';
   if (allDay) {
     const jourStr = isoToUtcDateStr(isoString);
@@ -1336,6 +1338,7 @@ function formatDue(isoString, allDay = false) {
     if (memeJour(jour, demain)) return 'demain';
     if (memeJour(jour, hier)) return 'hier';
     return jour.toLocaleDateString('fr-FR', {
+      weekday: avecJour ? 'short' : undefined,
       day: 'numeric',
       month: 'short',
       year: jour.getFullYear() === now.getFullYear() ? undefined : 'numeric',
@@ -1354,6 +1357,7 @@ function formatDue(isoString, allDay = false) {
   if (memeJour(d, hier)) return `hier ${heure}`;
 
   const jour = d.toLocaleDateString('fr-FR', {
+    weekday: avecJour ? 'short' : undefined,
     day: 'numeric',
     month: 'short',
     year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
@@ -1366,12 +1370,12 @@ function formatDue(isoString, allDay = false) {
    la date n'apporte rien et allonge inutilement les étiquettes de carte.
    En mode journée complète (`allDay`), jamais d'heure : une plage devient
    simplement « jour début → jour fin ». */
-function formatDueRange(isoStart, isoEnd, allDay = false) {
+function formatDueRange(isoStart, isoEnd, allDay = false, avecJour = false) {
   if (!isoStart) return '';
-  const debut = formatDue(isoStart, allDay);
+  const debut = formatDue(isoStart, allDay, avecJour);
   if (!isoEnd) return debut;
   if (allDay) {
-    const finStr = formatDue(isoEnd, true);
+    const finStr = formatDue(isoEnd, true, avecJour);
     return finStr && finStr !== debut ? `${debut} → ${finStr}` : debut;
   }
   const d1 = new Date(isoStart);
@@ -1380,7 +1384,7 @@ function formatDueRange(isoStart, isoEnd, allDay = false) {
   if (d1.toDateString() === d2.toDateString()) {
     return `${debut} → ${d2.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   }
-  return `${debut} → ${formatDue(isoEnd)}`;
+  return `${debut} → ${formatDue(isoEnd, false, avecJour)}`;
 }
 
 /* Une échéance est-elle en retard ? Même règle que _bucket() côté serveur
@@ -11604,8 +11608,8 @@ function creerLigneAgendaGoogle(g) {
   btn.className = 'agenda-item agenda-gcal';
   btn.style.background = hexToRgba(g.color, ATTENUATION_PASTILLE);
   const due = g.all_day
-    ? formatDueRange(g.start + 'T00:00:00Z', g.end !== g.start ? g.end + 'T00:00:00Z' : null, true)
-    : formatDueRange(g.start, g.end, false);
+    ? formatDueRange(g.start + 'T00:00:00Z', g.end !== g.start ? g.end + 'T00:00:00Z' : null, true, true)
+    : formatDueRange(g.start, g.end, false, true);
   const titre = g.summary || '(Sans titre)';
   btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Valider">
     <span class="agenda-item-icon agenda-gcal-icon" style="color:${escapeHtml(g.color)}">${iconeSource(g)}</span>
@@ -11747,7 +11751,7 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
      plutôt que de passer à la ligne) ; et celle du SURVOL, complète, avec la
      récurrence en toutes lettres et la date entière même si elle a été
      coupée à l'écran. */
-  const dateTexte = formatDueRange(t.due_at, t.due_end_at, t.all_day);
+  const dateTexte = formatDueRange(t.due_at, t.due_end_at, t.all_day, true);
   const dueAffiche = dateTexte + (t.recur ? ` · ↻ ${RECUR_COURTS[t.recur] || t.recur}` : '');
   const dueComplet = dateTexte + (t.recur ? ` · répétée ${RECUR_LABELS[t.recur] || t.recur}` : '');
   btn.innerHTML = `<input type="checkbox" class="agenda-item-check" aria-label="Terminer"${t.done ? ' checked' : ''}>
