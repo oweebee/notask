@@ -123,6 +123,8 @@ def evenements(ext, debut: datetime, fin: datetime, fuseau: Optional[str]) -> Li
     # Séries : UID des VEVENT sources portant une règle de répétition (les
     # instances dépliées portent toutes un RECURRENCE-ID, même uniques).
     series = {str(c.get("UID", "")) for c in cal.walk("VEVENT") if c.get("RRULE") is not None or c.get("RDATE") is not None}
+    regles = {str(c.get("UID", "")): "RRULE:" + c.get("RRULE").to_ical().decode()
+              for c in cal.walk("VEVENT") if c.get("RRULE") is not None}
     out: List[Dict[str, Any]] = []
     for ev in recurring_ical_events.of(cal).between(debut, fin):
         if len(out) >= MAX_EVENEMENTS:
@@ -159,6 +161,7 @@ def evenements(ext, debut: datetime, fin: datetime, fuseau: Optional[str]) -> Li
             "end": end,
             "editable": False,
             "recurring_event_id": uid if uid in series else None,
+            "rrule": regles.get(uid),
             "html_link": None,
         })
     return out

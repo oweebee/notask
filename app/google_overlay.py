@@ -367,3 +367,62 @@ def evenements_d_un_agenda(account: GoogleAccount, session: Session, cal_id: str
         if n:
             out.append(n)
     return out
+
+
+_JOURS = {"MO": "lundi", "TU": "mardi", "WE": "mercredi", "TH": "jeudi", "FR": "vendredi", "SA": "samedi", "SU": "dimanche"}
+_MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+
+
+def decrire_rrule(rrule: Optional[str]) -> str:
+    """« RRULE:FREQ=WEEKLY;BYDAY=TU » → « chaque semaine (mardi), sans fin »."""
+    if not rrule:
+        return ""
+    corps = rrule.split(":", 1)[1] if rrule.upper().startswith("RRULE:") else rrule
+    p = dict(kv.split("=", 1) for kv in corps.split(";") if "=" in kv)
+    freq = p.get("FREQ", "").upper()
+    try:
+        n = int(p.get("INTERVAL", "1"))
+    except ValueError:
+        n = 1
+    unites = {"DAILY": ("jour", "jours"), "WEEKLY": ("semaine", "semaines"),
+              "MONTHLY": ("mois", "mois"), "YEARLY": ("année", "ans")}
+    if freq not in unites:
+        return "récurrent"
+    un, plusieurs = unites[freq]
+    txt = (f"chaque {un}" if freq != "YEARLY" else "chaque année") if n == 1 else f"tous les {n} {plusieurs}"
+    if freq == "WEEKLY" and n > 1:
+        txt = f"toutes les {n} semaines"
+    jours = [_JOURS.get(j[-2:].upper(), "") for j in p.get("BYDAY", "").split(",") if j]
+    jours = [j for j in jours if j]
+    if jours and freq in ("WEEKLY", "DAILY"):
+        txt += f" ({', '.join(jours)})"
+    if "UNTIL" in p:
+        u = p["UNTIL"][:8]
+        try:
+            txt += f", jusqu'au {int(u[6:8])} {_MOIS[int(u[4:6]) - 1]} {u[:4]}"
+        except (ValueError, IndexError):
+            txt += ", avec date de fin"
+    elif "COUNT" in p:
+        txt += f", {p['COUNT']} fois"
+    else:
+        txt += ", sans fin"
+    return txt
+
+
+def regles_series(account: GoogleAccount, session: Session, cal_id: str, ids: List[str]) -> Dict[str, str]:
+    """Règle de répétition de chaque série (événement maître), une requête
+    par série. Agenda virtuel → agenda principal réel."""
+    reel = cal_id[: -len(VIRTUEL_ANNIV)] if cal_id.endswith(VIRTUEL_ANNIV) else cal_id
+    token = _token(account, session)
+    out: Dict[str, str] = {}
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+        for sid in ids[:60]:
+            try:
+                resp = client.get(_url(reel, sid), headers={"Authorization": f"Bearer {token}"})
+                if resp.status_code < 400:
+                    regle = next((r for r in resp.json().get("recurrence", []) if r.upper().startswith("RRULE")), None)
+                    if regle:
+                        out[sid] = regle
+            except httpx.HTTPError:
+                continue
+    return out

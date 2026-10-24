@@ -568,9 +568,22 @@ def overlay_series(
         s = series.setdefault(sid, {"id": sid, "summary": ev["summary"] or "(Sans titre)", "count": 0,
                                     "next": None, "included": (calendar_id, sid) not in exclues})
         s["count"] += 1
+        if ev.get("rrule"):
+            s["rrule"] = ev["rrule"]
         fin_ev = ev["end"]
         if s["next"] is None and fin_ev >= maintenant.date().isoformat()[:10]:
             s["next"] = ev["start"]
+    # Règle de répétition (« chaque année, sans fin »…) : maître Google lu à
+    # part (les instances ne la portent pas) ; ICS : déjà dans la source.
+    if not calendar_id.startswith("ics:") and series:
+        try:
+            regles = gov.regles_series(compte, session, calendar_id, list(series))
+        except gov.OverlayError:
+            regles = {}
+        for sid, regle in regles.items():
+            series[sid]["rrule"] = regle
+    for s in series.values():
+        s["recurrence"] = gov.decrire_rrule(s.pop("rrule", None)) or "récurrent"
     return {"series": sorted(series.values(), key=lambda s: s["summary"].lower())}
 
 

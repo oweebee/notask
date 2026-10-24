@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9140';
+const APP_VERSION = '0.9143';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -12170,6 +12170,7 @@ function renderCalendar() {
     $('#cal-day-panel').hidden = true;
     $('#cal-legend').hidden = true;
     box.className = 'cal-body kanban';
+    calAppliquerGlissement(box);
     box.innerHTML = '<div id="view-tasks"><div class="tasks-columns" id="tasks-columns"></div><div class="empty" id="tasks-empty" hidden>Aucune échéance à venir.</div></div>';
     loadTasks();
     return;
@@ -12183,6 +12184,7 @@ function renderCalendar() {
   const index = calIndexer(calEntrees());
   box.innerHTML = '';
   box.className = 'cal-body ' + cal.mode;
+  calAppliquerGlissement(box);
   if (state.calOptsOuvert) return;
   if (cal.mode === 'mois') calRendreMois(box, p, index);
   else if (cal.mode === 'liste') calRendreListe(box, p, index);
@@ -12634,7 +12636,25 @@ function calRendrePanneau(index) {
   for (const e of duJour) contenu.appendChild(calLigne(e, cal.jour));
 }
 
+/* Glissement avec rebond à chaque changement de période / de vue.
+   L'animation est portée par #cal-body ; un nouveau rendu en cours de route
+   (RDV Google arrivés après coup) la reprend là où elle en était (délai
+   négatif) au lieu de la couper net. */
+const CAL_GLISSE_MS = 520;
+function calLancerGlissement(sens) {
+  state.calGlisse = { classe: 'cal-glisse-' + sens, debut: performance.now() };
+}
+function calAppliquerGlissement(box) {
+  const g = state.calGlisse;
+  if (!g) return;
+  const ecoule = performance.now() - g.debut;
+  if (ecoule >= CAL_GLISSE_MS) { state.calGlisse = null; return; }
+  box.style.animationDelay = `-${Math.round(ecoule)}ms`;
+  box.classList.add(g.classe);
+}
+
 function calAller(mode, date) {
+  if (mode !== cal.mode) calLancerGlissement('bas');
   cal.mode = mode;
   state.calOptsOuvert = false;
   if (date) cal.ref = new Date(date);
@@ -12648,6 +12668,7 @@ function calNaviguer(sens) {
   const r = cal.ref;
   if (cal.mode === 'mois') cal.ref = new Date(r.getFullYear(), r.getMonth() + sens, 1);
   else cal.ref = calPlus(r, sens * ({ semaine: 7, jour: 1, liste: 30 }[cal.mode]));
+  calLancerGlissement(sens > 0 ? 'droite' : 'gauche');
   renderCalendar();
 }
 
@@ -12707,6 +12728,7 @@ function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
   msg($('#ge-msg'), notesLecture, 'ok');
   if (!ecrivables.length && !g) return;
   dlg.showModal();
+  animerOuvertureDialogue(dlg);   // même ouverture « gélatine » qu'une notask
   if (!g) $('#ge-summary').focus();
 }
 
@@ -12747,7 +12769,7 @@ async function calEnregistrerRdv() {
   } finally {
     $('#ge-save').disabled = false;
   }
-  $('#dlg-gevent').close();
+  fermerAvecAnimation($('#dlg-gevent'));
   calApresModifRdv();
 }
 
@@ -12770,7 +12792,7 @@ async function calSupprimerRdv(serie) {
     msg($('#ge-msg'), err.message);
     return;
   }
-  $('#dlg-gevent').close();
+  fermerAvecAnimation($('#dlg-gevent'));
   calApresModifRdv();
 }
 
@@ -12780,8 +12802,10 @@ if ($('#view-calendar')) {
   $('#cal-next').addEventListener('click', () => calNaviguer(1));
   $('#cal-today').addEventListener('click', () => {
     state.calOptsOuvert = false;
+    const avant = cal.ref;
     cal.ref = new Date();
     if (cal.mode === 'mois') cal.jour = calCle(new Date());
+    calLancerGlissement(cal.ref < avant ? 'gauche' : (calCle(cal.ref) === calCle(avant) ? 'bas' : 'droite'));
     renderCalendar();
   });
   $$('#cal-modes button').forEach((b) => b.addEventListener('click', () => {
@@ -12790,7 +12814,13 @@ if ($('#view-calendar')) {
   $('#cal-add').addEventListener('click', () => calOuvrirRdv(null));
   $('#cal-opts-btn').addEventListener('click', () => {
     state.calOptsOuvert = !state.calOptsOuvert;
-    if (state.calOptsOuvert) calRendreOptions();
+    if (state.calOptsOuvert) {
+      calRendreOptions();
+      const panneau = $('#cal-opts');
+      panneau.classList.remove('cal-opts-entree');
+      void panneau.offsetWidth;   // relance l'animation à chaque ouverture
+      panneau.classList.add('cal-opts-entree');
+    }
     else cal.gPlage = null;   // réglages peut-être changés : relire Google
     renderCalendar();
   });
@@ -12798,7 +12828,12 @@ if ($('#view-calendar')) {
   $('#cal-day-close').addEventListener('click', () => { cal.jour = null; renderCalendar(); });
   $('#ge-allday').addEventListener('change', calMajHeuresRdv);
   $('#ge-d1').addEventListener('change', () => { if ($('#ge-d2').value < $('#ge-d1').value) $('#ge-d2').value = $('#ge-d1').value; });
-  $('#ge-cancel').addEventListener('click', () => $('#dlg-gevent').close());
+  $('#ge-cancel').addEventListener('click', () => fermerAvecAnimation($('#dlg-gevent')));
+  // Comme les autres boîtes : clic sur le fond et Échap = fermeture animée.
+  for (const id of ['#dlg-gevent', '#dlg-series']) {
+    $(id).addEventListener('click', (e) => { if (e.target === $(id)) fermerAvecAnimation($(id)); });
+    $(id).addEventListener('cancel', (e) => { e.preventDefault(); fermerAvecAnimation($(id)); });
+  }
   $('#ge-save').addEventListener('click', calEnregistrerRdv);
   // RDV récurrent : choix « cette occurrence / toutes » ; sinon confirmation simple.
   $('#ge-delete').addEventListener('click', () => {
@@ -12860,7 +12895,7 @@ async function calOuvrirSeries(c) {
     const prochain = s.next ? formatDue(jour ? s.next + 'T00:00:00Z' : s.next, jour) : '';
     l.innerHTML = `<input type="checkbox"${s.included ? ' checked' : ''}>
       <span class="series-txt"><span class="series-nom">${escapeHtml(s.summary)}</span>
-      <span class="series-sous">${s.count} occurrence${s.count > 1 ? 's' : ''}${prochain ? ' · prochaine : ' + escapeHtml(prochain) : ''}</span></span>`;
+      <span class="series-sous">${escapeHtml(s.recurrence)}${prochain ? ' · prochaine : ' + escapeHtml(prochain) : ''}</span></span>`;
     const cb = l.querySelector('input');
     cb.addEventListener('change', async () => {
       try {
