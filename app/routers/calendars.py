@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from app import external_calendars as ext
+from app import google_calendar as gcal
 from app.db import get_session
 from app.deps import get_current_user
 from datetime import timedelta
@@ -129,3 +130,20 @@ def effacer_de_la_corbeille(done_id: int, user: User = Depends(get_current_user)
     row.hidden_from_trash = True
     session.add(row)
     session.commit()
+
+
+@router.post("/refresh")
+def synchroniser(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """Synchronisation forcée de tous les agendas connectés : agendas externes
+    retéléchargés (cache vidé), tirage Google → notasks (dates modifiées dans
+    Google, cf. gcal.pull_changes). Les RDV Google affichés ne sont jamais en
+    cache serveur : le client les relit juste après."""
+    erreurs = []
+    rows = session.exec(select(ExternalCalendar).where(ExternalCalendar.user_id == user.id)).all()
+    for r in rows:
+        try:
+            ext.telecharger(r.url, force=True)
+        except ext.ExterneErreur as err:
+            erreurs.append(f"{r.name} : {err}")
+    gcal.pull_changes(user, session)
+    return {"externes": len(rows), "errors": erreurs}

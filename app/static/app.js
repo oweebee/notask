@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9133';
+const APP_VERSION = '0.9135';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2969,6 +2969,9 @@ function switchView(view) {
   // se replie jamais, la classe 'mobile-open' n'y est jamais posée).
   fermerMenuMobile();
   state.view = view;
+  // Panneau Options de Calendritasks refermé par toute navigation (menu de
+  // gauche compris, y compris re-clic sur Calendritasks).
+  state.calOptsOuvert = false;
   $$('.drawer-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
 
   const isNotes = view === 'notes' || view === 'archives' || view === 'favorites';
@@ -11814,7 +11817,7 @@ const cal = {
   mode: window.matchMedia('(max-width: 600px)').matches ? 'liste' : 'mois',
   ref: new Date(), jour: null, taches: [],
   g: { enabled: false, calendars: [], events: [], errors: [] },
-  gPlage: null, gEnCours: null, parUid: new Map(), optsOuvert: false,
+  gPlage: null, gEnCours: null, parUid: new Map(),
 };
 try {
   const m = localStorage.getItem('notask.cal.mode');
@@ -12122,11 +12125,12 @@ function renderCalendar() {
   $$('#cal-modes button').forEach((b) => b.classList.toggle('active', b.dataset.mode === cal.mode));
   $('#view-calendar').dataset.mode = cal.mode;
   // Panneau Options : prend la place de la vue tant qu'il est ouvert.
-  $('#cal-opts-btn').classList.toggle('active', cal.optsOuvert);
-  $('#cal-opts-btn').setAttribute('aria-expanded', String(cal.optsOuvert));
-  $('#cal-opts').hidden = !cal.optsOuvert;
-  box.hidden = cal.optsOuvert;
-  if (cal.optsOuvert) { $('#cal-day-panel').hidden = true; $('#cal-legend').hidden = true; }
+  state.calOptsOuvert = !!state.calOptsOuvert;
+  $('#cal-opts-btn').classList.toggle('active', state.calOptsOuvert);
+  $('#cal-opts-btn').setAttribute('aria-expanded', String(state.calOptsOuvert));
+  $('#cal-opts').hidden = !state.calOptsOuvert;
+  box.hidden = state.calOptsOuvert;
+  if (state.calOptsOuvert) { $('#cal-day-panel').hidden = true; $('#cal-legend').hidden = true; }
   /* Kanban = ancienne vue « Notasks prévues » en colonnes (loadTasks/
      renderTasks), sans période : navigation et RDV Google masqués. L'id
      view-tasks est gardé sur le conteneur pour les règles mode-gris. */
@@ -12149,7 +12153,7 @@ function renderCalendar() {
   const index = calIndexer(calEntrees());
   box.innerHTML = '';
   box.className = 'cal-body ' + cal.mode;
-  if (cal.optsOuvert) return;
+  if (state.calOptsOuvert) return;
   if (cal.mode === 'mois') calRendreMois(box, p, index);
   else if (cal.mode === 'liste') calRendreListe(box, p, index);
   else calRendreGrilleHoraire(box, p, index);
@@ -12162,7 +12166,7 @@ function calRendreLegende() {
   const leg = $('#cal-legend');
   const dispo = cal.g.enabled ? cal.g.calendars.filter((c) => c.available !== false) : [];
   leg.innerHTML = '';
-  leg.hidden = cal.optsOuvert || cal.mode === 'kanban' || !dispo.length;
+  leg.hidden = state.calOptsOuvert || cal.mode === 'kanban' || !dispo.length;
   for (const c of dispo) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -12206,6 +12210,27 @@ async function calRendreOptions() {
   } catch (err) { box.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`; return; }
   box.innerHTML = '';
   const apresChangement = (agenda) => { calInvaliderGoogle(); if (agenda) loadAgenda(); };
+
+  // ---- Synchronisation forcée (tous les agendas connectés) ----
+  const sync = document.createElement('div');
+  sync.className = 'cal-opts-sync';
+  sync.innerHTML = `<button class="btn" type="button">${ICONS.sync || ''}Synchroniser maintenant</button><span class="cal-opts-sync-msg"></span>`;
+  const bSync = sync.querySelector('button');
+  bSync.addEventListener('click', async () => {
+    const m = sync.querySelector('.cal-opts-sync-msg');
+    bSync.disabled = true;
+    m.textContent = 'Synchronisation…';
+    try {
+      const r = await api('/calendars/refresh', { method: 'POST' });
+      calInvaliderGoogle();
+      await loadNotes();   // dates des notasks éventuellement changées dans Google + colonne d'échéances
+      m.textContent = r.errors.length ? `Terminé, avec erreurs : ${r.errors.join(' · ')}` : `Synchronisé à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`;
+    } catch (err) {
+      m.textContent = err.message;
+    }
+    bSync.disabled = false;
+  });
+  box.appendChild(sync);
 
   // ---- Google ----
   const secG = document.createElement('section');
@@ -12531,13 +12556,14 @@ function calRendrePanneau(index) {
 
 function calAller(mode, date) {
   cal.mode = mode;
-  cal.optsOuvert = false;
+  state.calOptsOuvert = false;
   if (date) cal.ref = new Date(date);
   try { localStorage.setItem('notask.cal.mode', mode); } catch { /* sans conséquence */ }
   renderCalendar();
 }
 
 function calNaviguer(sens) {
+  state.calOptsOuvert = false;
   if (cal.mode === 'kanban') return;
   const r = cal.ref;
   if (cal.mode === 'mois') cal.ref = new Date(r.getFullYear(), r.getMonth() + sens, 1);
@@ -12673,6 +12699,7 @@ if ($('#view-calendar')) {
   $('#cal-prev').addEventListener('click', () => calNaviguer(-1));
   $('#cal-next').addEventListener('click', () => calNaviguer(1));
   $('#cal-today').addEventListener('click', () => {
+    state.calOptsOuvert = false;
     cal.ref = new Date();
     if (cal.mode === 'mois') cal.jour = calCle(new Date());
     renderCalendar();
@@ -12682,8 +12709,8 @@ if ($('#view-calendar')) {
   }));
   $('#cal-add').addEventListener('click', () => calOuvrirRdv(null));
   $('#cal-opts-btn').addEventListener('click', () => {
-    cal.optsOuvert = !cal.optsOuvert;
-    if (cal.optsOuvert) calRendreOptions();
+    state.calOptsOuvert = !state.calOptsOuvert;
+    if (state.calOptsOuvert) calRendreOptions();
     else cal.gPlage = null;   // réglages peut-être changés : relire Google
     renderCalendar();
   });

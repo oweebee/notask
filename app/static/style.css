@@ -5036,6 +5036,8 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-name em { color: var(--md-on-surface-variant); font-size: .8125rem; }
 .cal-opts-cell { display: flex; justify-content: center; padding: .5rem; cursor: pointer; }
 .cal-opts-sec { margin-bottom: 1.75rem; }
+.cal-opts-sync { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.cal-opts-sync-msg { font-size: .8125rem; color: var(--md-on-surface-variant); }
 .cal-opts-sec .aide b { color: var(--md-on-surface); font-weight: 500; }
 .cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 6rem 6rem 44px; }
 .cal-opts-table.ext > * { background: none !important; }
