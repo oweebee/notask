@@ -316,6 +316,12 @@ class GoogleAccount(SQLModel, table=True):
     # il doit continuer sans intervention.
     calendar_enabled: bool = True
     drive_enabled: bool = True
+    # Calendritasks : afficher/gérer les agendas Google (voir
+    # app/google_overlay.py). Faux par défaut : rien n'est lu chez Google sans
+    # que l'utilisateur l'ait activé. visible_calendars = liste JSON des id
+    # d'agendas affichés, None = ceux cochés côté Google.
+    calendars_view_enabled: bool = False
+    visible_calendars: Optional[str] = Field(default=None, max_length=20000)
     # Dossier Google Drive où déposer les sauvegardes, choisi par
     # l'utilisateur dans Outils. None => aucune destination configurée, les
     # boutons Drive restent alors inactifs. Le NOM est mémorisé à côté de
@@ -343,12 +349,31 @@ class GoogleAccountStatus(SQLModel):
     # une valeur plutôt qu'un champ absent à interpréter.
     calendar_enabled: bool = True
     drive_enabled: bool = True
+    calendars_view_enabled: bool = False
 
 
 class GoogleFeaturesIn(SQLModel):
     """Activation/désactivation des deux fonctions, depuis Profil."""
     calendar_enabled: bool
     drive_enabled: bool
+    # Absent = inchangé (client antérieur qui n'envoie que les deux autres).
+    calendars_view_enabled: Optional[bool] = None
+
+
+class GoogleOverlayVisibleIn(SQLModel):
+    """Agendas Google affichés dans Calendritasks."""
+    visible: List[str]
+
+
+class GoogleOverlayEventIn(SQLModel):
+    """RDV Google créé/modifié depuis Calendritasks. start/end : date
+    AAAA-MM-JJ (all_day, fin INCLUSIVE) ou datetime ISO avec fuseau."""
+    summary: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=8000)
+    location: Optional[str] = Field(default=None, max_length=1000)
+    all_day: Optional[bool] = None
+    start: Optional[str] = Field(default=None, max_length=40)
+    end: Optional[str] = Field(default=None, max_length=40)
 
 
 # État CSRF éphémère du flux OAuth (voir app/routers/google.py connect()/

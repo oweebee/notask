@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9124';
+const APP_VERSION = '0.9126';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2752,9 +2752,7 @@ function enterApp() {
   // anciennes entrées par échéance (En retard / Aujourd'hui / À venir) ont
   // été retirées du menu, la vue les regroupe déjà avec des en-têtes de
   // couleur. Le compteur reste celui du total.
-  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">notasks prévues</span><span class="nav-count" id="count-tasks" hidden></span>';
-  const navCal = $('#nav-calendar');
-  if (navCal) navCal.innerHTML = ICONS.calendar + '<span class="label">calendritasks</span>';
+  $('#nav-tasks').innerHTML = ICONS.spoonBlue + '<span class="label">calendritasks</span><span class="nav-count" id="count-tasks" hidden></span>';
   $('#nav-favorites').innerHTML = ICONS.pinFilled + '<span class="label">favoris</span>';
   $('#nav-archives').innerHTML = ICONS.archive + '<span class="label">archives</span>';
   $('#nav-trash').innerHTML = ICONS.trash + '<span class="label">corbeille</span>';
@@ -2979,10 +2977,9 @@ function switchView(view) {
   // ne reprend PAS tout le balisage de l'accueil — #view-tasks n'y existe
   // pas. Sans ça, switchView() lançait une TypeError dès enterApp().
   $('#view-notes').hidden = !isNotes;
-  const vTasks = $('#view-tasks');
-  if (vTasks) vTasks.hidden = view !== 'tasks';
   const vCal = $('#view-calendar');
   if (vCal) vCal.hidden = view !== 'calendar';
+  $('.shell').classList.toggle('cal-actif', view === 'calendar');
   $('#view-trash').hidden = view !== 'trash';
   $('#view-admin').hidden = view !== 'admin';
 
@@ -3015,7 +3012,6 @@ function switchView(view) {
     $('.note-composer').hidden = state.showArchived || state.showFavoritesOnly;
     loadNotes();
   }
-  if (view === 'tasks') loadTasks();
   if (view === 'calendar') loadCalendar();
   if (view === 'trash') loadTrash();
   if (view === 'admin') loadUsers();
@@ -3132,6 +3128,10 @@ async function refreshGoogleStatus() {
     $('#profil-google-fonctions').hidden = !st.connected;
     $('#profil-google-cal-on').checked = st.calendar_enabled !== false;
     $('#profil-google-drive-on').checked = st.drive_enabled !== false;
+    $('#profil-google-overlay-on').checked = !!st.calendars_view_enabled;
+    const overlayActif = st.connected && !!st.calendars_view_enabled;
+    $('#profil-google-overlay').hidden = !overlayActif;
+    if (overlayActif) chargerAgendasOverlay();
 
     /* Le choix de l'AGENDA DE DESTINATION ne s'affiche que si le compte est
        relié ET l'agenda activé : régler un agenda de destination pour une
@@ -3225,10 +3225,11 @@ $('#profil-google-cal-save').addEventListener('click', async () => {
 async function envoyerFonctionsGoogle() {
   const cal = $('#profil-google-cal-on').checked;
   const drive = $('#profil-google-drive-on').checked;
+  const vue = $('#profil-google-overlay-on').checked;
   try {
     await api('/google/features', {
       method: 'PUT',
-      body: { calendar_enabled: cal, drive_enabled: drive },
+      body: { calendar_enabled: cal, drive_enabled: drive, calendars_view_enabled: vue },
     });
   } catch (err) {
     msg($('#profil-google-msg'), err.message);
@@ -3239,11 +3240,15 @@ async function envoyerFonctionsGoogle() {
   // peut avoir à retirer son alerte de reconnexion (voir renderAgenda).
   $('#profil-google-cal').hidden = !cal;
   if (cal) chargerAgendasGoogle();
+  $('#profil-google-overlay').hidden = !vue;
+  if (vue) chargerAgendasOverlay();
+  calInvaliderGoogle();
   loadAgenda();
 }
 
 $('#profil-google-cal-on')?.addEventListener('change', envoyerFonctionsGoogle);
 $('#profil-google-drive-on')?.addEventListener('change', envoyerFonctionsGoogle);
+$('#profil-google-overlay-on')?.addEventListener('change', envoyerFonctionsGoogle);
 
 $('#profil-google-connect').addEventListener('click', () => {
   // Navigation complète (pas un fetch) : Google doit pouvoir rediriger le
@@ -3308,31 +3313,9 @@ $$('.drawer-item[data-view]').forEach((b) => b.addEventListener('click', () => {
   switchView(b.dataset.view);
 }));
 
-// "Notasks Prévues" : pas de [data-view] (voir index.html), donc ignoré par
-// la boucle générique ci-dessus — sans quoi il gagnerait aussi la classe
-// .active en même temps que "Notasks" (même vue 'notes' derrière les deux),
-// un double-surlignage trompeur. Sur demande explicite, plus de vue à part :
-// ce bouton ramène juste à la vue Notes puis fait défiler jusqu'à la
-// colonne d'échéances (à droite sur desktop, deuxième page du carrousel en
-// mobile — voir .shell.has-agenda dans style.css). scrollWidth ne dépasse
-// clientWidth qu'en mobile (le carrousel), donc ce scrollTo ne fait rien de
-// visible sur desktop : la colonne y est déjà affichée en permanence.
-$('#nav-tasks').addEventListener('click', () => {
-  if (state.labelFilters.size) {
-    clearLabelFilters();
-    renderLabelsDrawer();
-  }
-  // Deux comportements selon la largeur, à la demande : en mobile, pas la
-  // place pour trois colonnes, on renvoie donc vers la colonne d'échéances
-  // (deuxième volet du carrousel) ; sur desktop, on garde la vue à part en
-  // trois colonnes. Même seuil que le carrousel dans style.css.
-  if (window.matchMedia('(max-width: 860px)').matches) {
-    switchView('notes');
-    $('.shell').scrollTo({ left: $('.shell').scrollWidth, behavior: 'smooth' });
-  } else {
-    switchView('tasks');
-  }
-});
+// « Notasks prévues » mène désormais à Calendritasks (data-view="calendar",
+// voir index.html) : boucle générique ci-dessus, plus de gestionnaire dédié.
+
 
 /* Déclare le fuseau du navigateur au serveur, qui vit sinon entièrement en
    UTC. Sert UNIQUEMENT à reprogrammer une échéance récurrente à la même
@@ -11470,6 +11453,7 @@ async function loadTasks() {
 
 function renderTasks(items) {
   const box = $('#tasks-columns');
+  if (!box) return;   // vue Kanban quittée entre-temps
   box.innerHTML = '';
   $('#tasks-empty').hidden = items.length > 0;
 
@@ -11687,27 +11671,40 @@ function creerLigneAgenda(t, rafraichir, avecActions = false, modeArchive = 'arc
 }
 
 /* ------------------------------ Calendritasks -----------------------------
-   Vue calendrier (mois / semaine) des notasks datées — mêmes données que
-   « Notasks prévues » (/api/tasks), mêmes exclusions (libellés masqués,
-   filtre de libellés). Une tâche couvrant une période (due_end_at) apparaît
-   sur chacun de ses jours. Clic sur une puce = ouvre la notask ; clic sur un
-   jour = liste du jour sous la grille (lignes creerLigneAgenda, cochables) ;
-   glisser-déposer une puce (souris) sur un autre jour = décale l'échéance
-   d'autant de jours, heure et durée conservées. Récurrence : seule
-   l'occurrence en cours existe en base, c'est la seule affichée. */
+   Calendrier plein écran des notasks datées + (option) des RDV Google.
+   Quatre vues : Mois, Semaine, Jour (grille horaire), Liste (planning
+   façon Google Agenda mobile, jours à venir groupés). Mêmes données que
+   « Notasks prévues » (/api/tasks, mêmes exclusions : libellés masqués,
+   filtre de libellés). RDV Google : /api/google/overlay/* (voir
+   app/google_overlay.py) — transit seul, jamais stockés côté serveur ;
+   les événements créés par notask en sont exclus (déjà affichés ici).
+   Clic = ouvre la notask / la fiche du RDV ; glisser-déposer (souris) =
+   change le jour (et l'heure dans les grilles horaires) ; double-clic dans
+   une case ou la grille = nouveau RDV Google à cet endroit. Récurrence :
+   une notask récurrente n'a qu'une occurrence en base, seule affichée ; un
+   RDV Google récurrent est déplié par Google (singleEvents). */
 const CAL_JOURS = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
-const cal = { mode: 'mois', ref: new Date(), jour: null, taches: [] };
+const CAL_MODES = ['jour', 'semaine', 'mois', 'liste', 'kanban'];
+const CAL_HEURE_PX = 48;            // hauteur d'une heure dans les grilles horaires
+const CAL_LISTE_JOURS = 60;         // portée de la vue Liste
+const cal = {
+  mode: window.matchMedia('(max-width: 600px)').matches ? 'liste' : 'mois',
+  ref: new Date(), jour: null, taches: [],
+  g: { enabled: false, calendars: [], events: [], errors: [] },
+  gPlage: null, gEnCours: null, parUid: new Map(),
+};
 try {
   const m = localStorage.getItem('notask.cal.mode');
-  if (m === 'mois' || m === 'semaine') cal.mode = m;
+  if (CAL_MODES.includes(m)) cal.mode = m;
 } catch { /* stockage refusé : mode par défaut */ }
 
 const calCle = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calDepuisCle = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
-// Jour (clé locale) d'une borne d'échéance : date UTC pour une journée
-// entière (stockée à minuit UTC, cf. isoToUtcDateStr), date locale sinon.
 const calCleIso = (iso, allDay) => (allDay ? isoToUtcDateStr(iso) : calCle(new Date(iso)));
 const calLundi = (d) => { const r = new Date(d.getFullYear(), d.getMonth(), d.getDate()); r.setDate(r.getDate() - ((r.getDay() + 6) % 7)); return r; };
+const calPlus = (d, n) => { const r = new Date(d.getFullYear(), d.getMonth(), d.getDate()); r.setDate(r.getDate() + n); return r; };
+const calJoursEntre = (k1, k2) => Math.round((calDepuisCle(k2) - calDepuisCle(k1)) / 86400000);
+const calHeure = (d) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 async function loadCalendar() {
   let tasks;
@@ -11738,166 +11735,649 @@ async function loadCalendar() {
     tasks = tasks.filter((t) => ids.has(t.note_id));
   }
   cal.taches = tasks;
+  cal.gPlage = null;   // RDV Google relus aussi (ils ont pu changer)
   renderCalendar();
 }
 
-// Index jour -> tâches, période (due_end_at) dépliée jour par jour (max 366).
-function calIndexer(taches) {
-  const index = {};
-  for (const t of taches) {
+/* Période affichée : [debut, finExclusive) + titre. */
+function calPeriode() {
+  const r = cal.ref;
+  if (cal.mode === 'mois') {
+    const premier = new Date(r.getFullYear(), r.getMonth(), 1);
+    const dernier = new Date(r.getFullYear(), r.getMonth() + 1, 0);
+    const debut = calLundi(premier);
+    const nb = Math.ceil((((premier.getDay() + 6) % 7) + dernier.getDate()) / 7) * 7;
+    return { debut, fin: calPlus(debut, nb), nb, titre: premier.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) };
+  }
+  if (cal.mode === 'semaine') {
+    const debut = calLundi(r);
+    const dim = calPlus(debut, 6);
+    const o = { day: 'numeric', month: 'short' };
+    return { debut, fin: calPlus(debut, 7), nb: 7, titre: `${debut.toLocaleDateString('fr-FR', o)} – ${dim.toLocaleDateString('fr-FR', { ...o, year: 'numeric' })}` };
+  }
+  const debut = new Date(r.getFullYear(), r.getMonth(), r.getDate());
+  if (cal.mode === 'jour') {
+    return { debut, fin: calPlus(debut, 1), nb: 1, titre: debut.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) };
+  }
+  const fin = calPlus(debut, CAL_LISTE_JOURS);
+  return { debut, fin, nb: CAL_LISTE_JOURS, titre: `À partir du ${debut.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` };
+}
+
+async function calChargerGoogle(p) {
+  const cle = calCle(p.debut) + '/' + calCle(p.fin);
+  if (cal.gPlage === cle || cal.gEnCours === cle) return;
+  cal.gEnCours = cle;
+  const msgEl = $('#cal-gcal-msg');
+  try {
+    const q = new URLSearchParams({ start: p.debut.toISOString(), end: p.fin.toISOString() });
+    const r = await api('/google/overlay/events?' + q);
+    if (cal.gEnCours !== cle) return;   // période changée entre-temps
+    cal.g = r;
+    cal.gPlage = cle;
+    msgEl.textContent = r.errors?.length ? `Agendas Google illisibles : ${r.errors.join(', ')}` : '';
+  } catch (err) {
+    if (cal.gEnCours !== cle) return;
+    cal.g = { enabled: true, calendars: cal.g.calendars || [], events: [], errors: [] };
+    cal.gPlage = cle;
+    msgEl.textContent = 'Agendas Google : ' + err.message;
+  } finally {
+    if (cal.gEnCours === cle) cal.gEnCours = null;
+  }
+  renderCalendar();
+}
+
+/* Notasks et RDV Google ramenés à une forme commune. */
+function calEntrees() {
+  const out = [];
+  cal.parUid = new Map();
+  let uid = 0;
+  const ajouter = (e) => { e.uid = String(++uid); cal.parUid.set(e.uid, e); out.push(e); };
+  for (const t of cal.taches) {
     const k1 = calCleIso(t.due_at, t.all_day);
     if (!k1) continue;
     let k2 = t.due_end_at ? calCleIso(t.due_end_at, t.all_day) : k1;
     if (!k2 || k2 < k1) k2 = k1;
-    const d = calDepuisCle(k1);
+    const debut = new Date(t.due_at);
+    let fin = t.due_end_at ? new Date(t.due_end_at) : new Date(debut.getTime() + 30 * 60000);
+    if (!(fin > debut)) fin = new Date(debut.getTime() + 30 * 60000);
+    ajouter({
+      src: 't', obj: t, allDay: !!t.all_day, k1, k2, debut, fin,
+      titre: t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre'),
+      hex: LABEL_COLOR_HEX[t.color] || null, classe: 'c-' + t.color,
+      done: !!t.done, late: t.bucket === 'late', editable: !t.done,
+      sous: t.kind === 'item' && t.note_title ? t.note_title : 'notask',
+    });
+  }
+  if (cal.g.enabled) {
+    for (const g of cal.g.events) {
+      let k1, k2, debut, fin;
+      if (g.all_day) {
+        k1 = g.start; k2 = g.end;
+        debut = calDepuisCle(k1); fin = calPlus(calDepuisCle(k2), 1);
+      } else {
+        debut = new Date(g.start); fin = new Date(g.end);
+        if (!(fin > debut)) fin = new Date(debut.getTime() + 30 * 60000);
+        k1 = calCle(debut); k2 = calCle(new Date(fin.getTime() - 1));
+      }
+      ajouter({
+        src: 'g', obj: g, allDay: g.all_day, k1, k2, debut, fin,
+        titre: g.summary || '(Sans titre)', hex: g.color, classe: '',
+        done: false, late: false, editable: g.editable, sous: g.calendar_summary,
+      });
+    }
+  }
+  return out;
+}
+
+function calIndexer(entrees) {
+  const index = {};
+  for (const e of entrees) {
+    const d = calDepuisCle(e.k1);
     for (let i = 0; i < 366; i++) {
       const k = calCle(d);
-      if (k > k2) break;
-      (index[k] ||= []).push(t);
+      if (k > e.k2) break;
+      (index[k] ||= []).push(e);
       d.setDate(d.getDate() + 1);
     }
   }
-  for (const k in index) {
-    index[k].sort((a, b) => (a.done - b.done) || (b.all_day - a.all_day) || (new Date(a.due_at) - new Date(b.due_at)));
-  }
+  for (const k in index) index[k].sort((a, b) => (a.done - b.done) || (b.allDay - a.allDay) || (a.debut - b.debut));
   return index;
 }
 
-function calPuce(t) {
-  const p = document.createElement('div');
-  p.className = 'cal-chip c-' + t.color + (t.done ? ' done' : '') + (t.bucket === 'late' ? ' late' : '');
-  if (LABEL_COLOR_HEX[t.color]) p.style.background = hexToRgba(LABEL_COLOR_HEX[t.color], ATTENUATION_PASTILLE);
-  const label = t.text || (t.kind === 'item' ? 'Ligne sans texte' : 'Notask sans titre');
-  const heure = t.all_day ? '' : new Date(t.due_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  p.innerHTML = (heure ? `<span class="cal-chip-time">${heure}</span>` : '')
-    + `<span class="cal-chip-text">${escapeHtml(label)}</span>`;
-  p.title = `${label} — ${formatDueRange(t.due_at, t.due_end_at, t.all_day)}`;
-  p.tabIndex = 0;
-  p.setAttribute('role', 'button');
-  if (!t.done) {
-    p.draggable = true;
-    p.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', `${t.kind}:${t.id}`);
-      e.dataTransfer.effectAllowed = 'move';
-      p.classList.add('dragging');
-    });
-    p.addEventListener('dragend', () => p.classList.remove('dragging'));
+function calStyler(el, e) {
+  if (e.classe) el.classList.add(e.classe);
+  if (e.src === 'g') {
+    el.classList.add('gcal');
+    el.style.setProperty('--gcal', e.hex);
   }
-  const ouvrir = (e) => { e.stopPropagation(); ouvrirNoteParId(t.note_id); };
-  p.addEventListener('click', ouvrir);
-  p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(e); } });
+  if (e.hex) el.style.background = hexToRgba(e.hex, ATTENUATION_PASTILLE);
+  if (e.done) el.classList.add('done');
+  if (e.late) el.classList.add('late');
+}
+
+function calOuvrir(e) {
+  if (e.src === 't') ouvrirNoteParId(e.obj.note_id);
+  else calOuvrirRdv(e.obj);
+}
+
+function calRendreDeplacable(el, e) {
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
+  el.addEventListener('click', (ev) => { ev.stopPropagation(); calOuvrir(e); });
+  el.addEventListener('dblclick', (ev) => ev.stopPropagation());
+  el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); calOuvrir(e); } });
+  if (!e.editable) return;
+  el.draggable = true;
+  el.addEventListener('dragstart', (ev) => {
+    ev.dataTransfer.setData('text/plain', 'cal:' + e.uid);
+    ev.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+}
+
+function calPuce(e, avecHeure = true) {
+  const p = document.createElement('div');
+  p.className = 'cal-chip';
+  calStyler(p, e);
+  const h = avecHeure && !e.allDay ? `<span class="cal-chip-time">${calHeure(e.debut)}</span>` : '';
+  p.innerHTML = h + `<span class="cal-chip-text">${escapeHtml(e.titre)}</span>`;
+  p.title = `${e.titre} — ${e.sous}`;
+  calRendreDeplacable(p, e);
   return p;
 }
 
-// Décale l'échéance (et sa fin) de la différence de jours entre l'ancien
-// jour de début et le jour de dépôt. Heure locale conservée (setDate gère
-// le changement d'heure), journée entière recalée à minuit UTC.
-async function calDeplacer(t, cleCible) {
-  const k1 = calCleIso(t.due_at, t.all_day);
-  const delta = Math.round((calDepuisCle(cleCible) - calDepuisCle(k1)) / 86400000);
-  if (!delta) return;
-  const decaler = (iso) => {
-    if (!iso) return null;
-    if (t.all_day) {
-      const [y, m, d] = isoToUtcDateStr(iso).split('-').map(Number);
-      return new Date(Date.UTC(y, m - 1, d + delta)).toISOString();
-    }
-    const d = new Date(iso);
-    d.setDate(d.getDate() + delta);
-    return d.toISOString();
+/* Cible de dépôt : jour (+ minutes dans une grille horaire, sinon null). */
+function calCibleDepot(el, cle, minutesDepuis) {
+  el.addEventListener('dragover', (ev) => { ev.preventDefault(); el.classList.add('drop'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drop'));
+  el.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    el.classList.remove('drop');
+    const brut = ev.dataTransfer.getData('text/plain') || '';
+    if (!brut.startsWith('cal:')) return;
+    const e = cal.parUid.get(brut.slice(4));
+    if (e) calDeplacer(e, cle, minutesDepuis ? minutesDepuis(ev) : null);
+  });
+}
+
+async function calDeplacer(e, cle, minutes) {
+  const deltaJ = calJoursEntre(e.k1, cle);
+  let deltaMs = null;
+  if (minutes !== null && !e.allDay) {
+    const cible = calDepuisCle(cle);
+    cible.setMinutes(minutes);
+    deltaMs = cible - e.debut;
+    if (!deltaMs) return;
+  } else if (!deltaJ) return;
+  const decalerDate = (d) => {
+    if (deltaMs !== null) return new Date(d.getTime() + deltaMs);
+    const r = new Date(d); r.setDate(r.getDate() + deltaJ); return r;
   };
-  const body = { due_at: decaler(t.due_at) };
-  if (t.due_end_at) body.due_end_at = decaler(t.due_end_at);
+  const decalerCle = (k) => calCle(calPlus(calDepuisCle(k), deltaJ));
   try {
-    await api(t.kind === 'item' ? `/notes/${t.note_id}/items/${t.id}` : '/notes/' + t.note_id,
-      { method: 'PATCH', body });
+    if (e.src === 't') {
+      const t = e.obj;
+      const iso = (v) => {
+        if (!v) return null;
+        if (t.all_day) {
+          const [y, m, d] = isoToUtcDateStr(v).split('-').map(Number);
+          return new Date(Date.UTC(y, m - 1, d + deltaJ)).toISOString();
+        }
+        return decalerDate(new Date(v)).toISOString();
+      };
+      const body = { due_at: iso(t.due_at) };
+      if (t.due_end_at) body.due_end_at = iso(t.due_end_at);
+      await api(t.kind === 'item' ? `/notes/${t.note_id}/items/${t.id}` : '/notes/' + t.note_id, { method: 'PATCH', body });
+    } else {
+      const g = e.obj;
+      const body = g.all_day
+        ? { all_day: true, start: decalerCle(g.start), end: decalerCle(g.end) }
+        : { all_day: false, start: decalerDate(new Date(g.start)).toISOString(), end: decalerDate(new Date(g.end)).toISOString() };
+      await api(`/google/overlay/events/${encodeURIComponent(g.id)}?calendar_id=${encodeURIComponent(g.calendar_id)}`, { method: 'PATCH', body });
+    }
   } catch (err) {
     alert(err.message);
   }
-  cal.jour = cleCible;
+  if (cal.mode === 'mois') cal.jour = cle;
   await loadCalendar();
   updateTaskBadges();
 }
 
-function renderCalendar() {
-  const box = $('#cal-grid');
-  if (!box) return;
-  const index = calIndexer(cal.taches);
-  const aujourdhui = calCle(new Date());
-  const ref = cal.ref;
-  let debut, nbJours;
-  if (cal.mode === 'semaine') {
-    debut = calLundi(ref);
-    nbJours = 7;
-    const fin = new Date(debut); fin.setDate(fin.getDate() + 6);
-    const o = { day: 'numeric', month: 'short' };
-    $('#cal-title').textContent = `${debut.toLocaleDateString('fr-FR', o)} – ${fin.toLocaleDateString('fr-FR', { ...o, year: 'numeric' })}`;
-  } else {
-    const premier = new Date(ref.getFullYear(), ref.getMonth(), 1);
-    debut = calLundi(premier);
-    const dernier = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
-    nbJours = Math.ceil((((premier.getDay() + 6) % 7) + dernier.getDate()) / 7) * 7;
-    $('#cal-title').textContent = premier.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+/* Ligne de liste (panneau du jour + vue Liste) : case à cocher pour une
+   notask, horaire, titre, provenance. */
+function calLigne(e, cle) {
+  const li = document.createElement('div');
+  li.className = 'cal-row';
+  const barre = document.createElement('span');
+  barre.className = 'cal-row-bar';
+  barre.style.background = e.hex || 'var(--md-outline)';
+  let heure;
+  if (e.allDay) heure = 'Journée';
+  else {
+    const memeJour = e.k1 === e.k2;
+    const d1 = e.k1 === cle ? calHeure(e.debut) : '…';
+    const d2 = e.k2 === cle || memeJour ? calHeure(e.fin) : '…';
+    heure = e.src === 't' && !e.obj.due_end_at ? calHeure(e.debut) : `${d1} – ${d2}`;
   }
-  $$('#cal-modes button').forEach((b) => b.classList.toggle('active', b.dataset.mode === cal.mode));
-  box.className = 'cal-grid ' + cal.mode;
-  box.innerHTML = CAL_JOURS.map((j) => `<div class="cal-dow">${j}</div>`).join('');
+  li.innerHTML = `${e.src === 't' ? `<input type="checkbox" class="cal-row-check" aria-label="Terminer"${e.done ? ' checked' : ''}>` : '<span class="cal-row-check-vide"></span>'}
+    <span class="cal-row-time">${escapeHtml(heure)}</span>
+    <span class="cal-row-body"><span class="cal-row-title">${escapeHtml(e.titre)}</span>
+    <span class="cal-row-sub">${escapeHtml(e.sous)}${e.src === 'g' && e.obj.location ? ' · ' + escapeHtml(e.obj.location) : ''}</span></span>`;
+  li.prepend(barre);
+  if (e.done) li.classList.add('done');
+  const check = li.querySelector('input');
+  if (check) {
+    check.addEventListener('click', (ev) => ev.stopPropagation());
+    check.addEventListener('change', async () => {
+      try {
+        await api(`/tasks/${e.obj.kind}/${e.obj.id}`, { method: 'PATCH', body: { done: check.checked } });
+      } catch (err) { alert(err.message); }
+      await loadCalendar();
+      updateTaskBadges();
+    });
+  }
+  li.tabIndex = 0;
+  li.setAttribute('role', 'button');
+  li.addEventListener('click', () => calOuvrir(e));
+  li.addEventListener('keydown', (ev) => { if (ev.target === li && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); calOuvrir(e); } });
+  return li;
+}
 
-  const max = cal.mode === 'semaine' ? Infinity : (window.matchMedia('(max-width: 600px)').matches ? 2 : 3);
-  const d = new Date(debut);
-  for (let i = 0; i < nbJours; i++) {
+function calPeutCreerRdv() {
+  return cal.g.enabled && cal.g.calendars.some((c) => c.writable);
+}
+
+function renderCalendar() {
+  const box = $('#cal-body');
+  if (!box) return;
+  $$('#cal-modes button').forEach((b) => b.classList.toggle('active', b.dataset.mode === cal.mode));
+  $('#view-calendar').dataset.mode = cal.mode;
+  /* Kanban = ancienne vue « Notasks prévues » en colonnes (loadTasks/
+     renderTasks), sans période : navigation et RDV Google masqués. L'id
+     view-tasks est gardé sur le conteneur pour les règles mode-gris. */
+  if (cal.mode === 'kanban') {
+    $('#cal-title').textContent = 'Kanban';
+    $('#cal-add').hidden = true;
+    $('#cal-legend').hidden = true;
+    $('#cal-day-panel').hidden = true;
+    box.className = 'cal-body kanban';
+    box.innerHTML = '<div id="view-tasks"><div class="tasks-columns" id="tasks-columns"></div><div class="empty" id="tasks-empty" hidden>Aucune échéance à venir.</div></div>';
+    loadTasks();
+    return;
+  }
+  const p = calPeriode();
+  $('#cal-title').textContent = p.titre;
+  $('#cal-add').hidden = !calPeutCreerRdv();
+  calRendreLegende();
+  calChargerGoogle(p);
+
+  const index = calIndexer(calEntrees());
+  box.innerHTML = '';
+  box.className = 'cal-body ' + cal.mode;
+  if (cal.mode === 'mois') calRendreMois(box, p, index);
+  else if (cal.mode === 'liste') calRendreListe(box, p, index);
+  else calRendreGrilleHoraire(box, p, index);
+  calRendrePanneau(index);
+}
+
+function calRendreLegende() {
+  const leg = $('#cal-legend');
+  leg.innerHTML = '';
+  leg.hidden = !cal.g.enabled || !cal.g.calendars.length;
+  for (const c of cal.g.calendars) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cal-legend-chip' + (c.visible ? ' on' : '');
+    b.style.setProperty('--gcal', c.color);
+    b.innerHTML = `<span class="cal-legend-dot"></span>${escapeHtml(c.summary)}`;
+    b.title = c.visible ? 'Masquer cet agenda' : 'Afficher cet agenda';
+    b.addEventListener('click', () => calBasculerAgenda(c.id));
+    leg.appendChild(b);
+  }
+}
+
+async function calBasculerAgenda(id) {
+  const visibles = cal.g.calendars.filter((c) => (c.id === id ? !c.visible : c.visible)).map((c) => c.id);
+  try {
+    await api('/google/overlay/visible', { method: 'PUT', body: { visible: visibles } });
+  } catch (err) { alert(err.message); return; }
+  cal.gPlage = null;
+  renderCalendar();
+}
+
+function calRendreMois(box, p, index) {
+  const aujourdhui = calCle(new Date());
+  const grille = document.createElement('div');
+  grille.className = 'cal-grid';
+  grille.style.setProperty('--cal-semaines', p.nb / 7);
+  grille.innerHTML = CAL_JOURS.map((j) => `<div class="cal-dow">${j}</div>`).join('');
+  for (let i = 0; i < p.nb; i++) {
+    const d = calPlus(p.debut, i);
     const k = calCle(d);
     const cell = document.createElement('div');
     cell.className = 'cal-day'
-      + (cal.mode === 'mois' && d.getMonth() !== ref.getMonth() ? ' hors-mois' : '')
+      + (d.getMonth() !== cal.ref.getMonth() ? ' hors-mois' : '')
       + (k === aujourdhui ? ' today' : '')
       + (k === cal.jour ? ' selected' : '');
     cell.dataset.jour = k;
     cell.tabIndex = 0;
-    const liste = index[k] || [];
-    cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>`;
+    const num = document.createElement('button');
+    num.type = 'button';
+    num.className = 'cal-day-num';
+    num.textContent = d.getDate();
+    num.title = 'Vue Jour';
+    num.addEventListener('click', (ev) => { ev.stopPropagation(); calAller('jour', d); });
+    cell.appendChild(num);
     const chips = document.createElement('div');
     chips.className = 'cal-chips';
-    liste.slice(0, max).forEach((t) => chips.appendChild(calPuce(t)));
-    if (liste.length > max) {
-      const plus = document.createElement('div');
-      plus.className = 'cal-more';
-      plus.textContent = `+${liste.length - max}`;
-      chips.appendChild(plus);
-    }
+    (index[k] || []).forEach((e) => chips.appendChild(calPuce(e)));
     cell.appendChild(chips);
     const choisir = () => { cal.jour = cal.jour === k ? null : k; renderCalendar(); };
     cell.addEventListener('click', choisir);
-    cell.addEventListener('keydown', (e) => { if (e.target === cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); choisir(); } });
-    cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('drop'); });
-    cell.addEventListener('dragleave', () => cell.classList.remove('drop'));
-    cell.addEventListener('drop', (e) => {
-      e.preventDefault();
-      cell.classList.remove('drop');
-      const [kind, id] = (e.dataTransfer.getData('text/plain') || '').split(':');
-      const t = cal.taches.find((x) => x.kind === kind && String(x.id) === id);
-      if (t) calDeplacer(t, k);
-    });
-    box.appendChild(cell);
-    d.setDate(d.getDate() + 1);
+    cell.addEventListener('dblclick', () => { if (calPeutCreerRdv()) calOuvrirRdv(null, k, null); });
+    cell.addEventListener('keydown', (ev) => { if (ev.target === cell && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); choisir(); } });
+    calCibleDepot(cell, k, null);
+    grille.appendChild(cell);
   }
+  box.appendChild(grille);
+  requestAnimationFrame(calAjusterPuces);
+}
 
+/* Autant de puces que la hauteur réelle de la case en permet, reste en +N. */
+function calAjusterPuces() {
+  for (const zone of $$('#cal-body .cal-grid .cal-chips')) {
+    const puces = [...zone.querySelectorAll('.cal-chip')];
+    zone.querySelector('.cal-more')?.remove();
+    puces.forEach((x) => { x.hidden = false; });
+    if (zone.scrollHeight <= zone.clientHeight + 1) continue;
+    const plus = document.createElement('div');
+    plus.className = 'cal-more';
+    zone.appendChild(plus);
+    let visibles = puces.length;
+    do {
+      visibles -= 1;
+      puces[visibles].hidden = true;
+      plus.textContent = `+${puces.length - visibles}`;
+    } while (visibles > 0 && zone.scrollHeight > zone.clientHeight + 1);
+  }
+}
+
+/* Semaine / Jour : rangée « journée » en haut, puis grille de 24 h. */
+function calRendreGrilleHoraire(box, p, index) {
+  const aujourdhui = calCle(new Date());
+  const tg = document.createElement('div');
+  tg.className = 'cal-tg';
+  tg.style.setProperty('--cal-cols', p.nb);
+  tg.style.setProperty('--cal-heure', CAL_HEURE_PX + 'px');
+
+  const tete = document.createElement('div');
+  tete.className = 'cal-tg-head';
+  tete.innerHTML = '<div class="cal-tg-gutter"></div>';
+  const journee = document.createElement('div');
+  journee.className = 'cal-tg-allday';
+  journee.innerHTML = '<div class="cal-tg-gutter cal-tg-allday-label">journée</div>';
+  const corps = document.createElement('div');
+  corps.className = 'cal-tg-scroll';
+  const grille = document.createElement('div');
+  grille.className = 'cal-tg-grid';
+  let heures = '<div class="cal-tg-gutter cal-tg-hours">';
+  for (let h = 1; h < 24; h++) heures += `<span style="top:${h * CAL_HEURE_PX}px">${String(h).padStart(2, '0')}:00</span>`;
+  grille.innerHTML = heures + '</div>';
+
+  for (let i = 0; i < p.nb; i++) {
+    const d = calPlus(p.debut, i);
+    const k = calCle(d);
+    const h = document.createElement('button');
+    h.type = 'button';
+    h.className = 'cal-tg-dayhead' + (k === aujourdhui ? ' today' : '');
+    h.innerHTML = `<span class="cal-tg-dow">${CAL_JOURS[(d.getDay() + 6) % 7]}</span><span class="cal-tg-num">${d.getDate()}</span>`;
+    h.addEventListener('click', () => calAller('jour', d));
+    tete.appendChild(h);
+
+    const liste = index[k] || [];
+    const cAll = document.createElement('div');
+    cAll.className = 'cal-tg-allday-cell';
+    for (const e of liste) if (e.allDay) cAll.appendChild(calPuce(e, false));
+    calCibleDepot(cAll, k, null);
+    cAll.addEventListener('dblclick', () => { if (calPeutCreerRdv()) calOuvrirRdv(null, k, null, true); });
+    journee.appendChild(cAll);
+
+    const col = document.createElement('div');
+    col.className = 'cal-tg-col' + (k === aujourdhui ? ' today' : '');
+    const minutesDe = (ev) => {
+      const y = ev.clientY - col.getBoundingClientRect().top;
+      return Math.max(0, Math.min(1425, Math.round((y / CAL_HEURE_PX) * 60 / 15) * 15));
+    };
+    calCibleDepot(col, k, minutesDe);
+    col.addEventListener('dblclick', (ev) => { if (calPeutCreerRdv()) calOuvrirRdv(null, k, minutesDe(ev)); });
+
+    // Segments du jour (un RDV sur plusieurs jours est coupé à minuit).
+    const j0 = d.getTime(), j1 = calPlus(d, 1).getTime();
+    const segs = liste.filter((e) => !e.allDay).map((e) => ({
+      e, a: Math.max(e.debut.getTime(), j0), b: Math.min(Math.max(e.fin.getTime(), e.debut.getTime() + 15 * 60000), j1),
+    })).filter((s) => s.b > s.a).sort((x, y) => (x.a - y.a) || (y.b - x.b));
+    // Chevauchements : grappes, colonnes attribuées au premier libre.
+    let grappe = [], finGrappe = -1;
+    const placer = () => {
+      const colonnes = [];
+      for (const s of grappe) {
+        let c = colonnes.findIndex((fin) => fin <= s.a);
+        if (c === -1) { c = colonnes.length; colonnes.push(0); }
+        colonnes[c] = s.b; s.col = c;
+      }
+      for (const s of grappe) s.nCols = colonnes.length;
+    };
+    for (const s of segs) {
+      if (s.a >= finGrappe && grappe.length) { placer(); grappe = []; }
+      grappe.push(s); finGrappe = Math.max(finGrappe, s.b);
+    }
+    if (grappe.length) placer();
+    for (const s of segs) {
+      const bloc = document.createElement('div');
+      bloc.className = 'cal-ev';
+      calStyler(bloc, s.e);
+      const top = ((s.a - j0) / 3600000) * CAL_HEURE_PX;
+      const haut = Math.max(((s.b - s.a) / 3600000) * CAL_HEURE_PX - 2, 18);
+      bloc.style.top = top + 'px';
+      bloc.style.height = haut + 'px';
+      if (haut < 36) bloc.classList.add('court');   // titre et heure sur une ligne
+      bloc.style.left = `calc(${(s.col / s.nCols) * 100}% + 1px)`;
+      bloc.style.width = `calc(${100 / s.nCols}% - 3px)`;
+      const plage = s.e.src === 't' && !s.e.obj.due_end_at ? calHeure(s.e.debut) : `${calHeure(new Date(s.a))} – ${calHeure(new Date(s.b))}`;
+      bloc.innerHTML = `<span class="cal-ev-title">${escapeHtml(s.e.titre)}</span><span class="cal-ev-time">${plage}</span>`;
+      bloc.title = `${s.e.titre} — ${plage} — ${s.e.sous}`;
+      calRendreDeplacable(bloc, s.e);
+      col.appendChild(bloc);
+    }
+    if (k === aujourdhui) {
+      const now = new Date();
+      const ligne = document.createElement('div');
+      ligne.className = 'cal-tg-now';
+      ligne.style.top = ((now.getHours() * 60 + now.getMinutes()) / 60) * CAL_HEURE_PX + 'px';
+      col.appendChild(ligne);
+    }
+    grille.appendChild(col);
+  }
+  corps.appendChild(grille);
+  tg.append(tete, journee, corps);
+  box.appendChild(tg);
+  // Défilement initial : 7 h, ou l'heure courante si on regarde aujourd'hui.
+  const h0 = Math.max(0, Math.min(new Date().getHours() - 1, 7));
+  corps.scrollTop = h0 * CAL_HEURE_PX;
+}
+
+/* Liste : jours ayant au moins une entrée (+ aujourd'hui), à la Google Agenda mobile. */
+function calRendreListe(box, p, index) {
+  const aujourdhui = calCle(new Date());
+  const liste = document.createElement('div');
+  liste.className = 'cal-list';
+  let vide = true;
+  for (let i = 0; i < p.nb; i++) {
+    const d = calPlus(p.debut, i);
+    const k = calCle(d);
+    const items = index[k] || [];
+    if (!items.length && k !== aujourdhui) continue;
+    vide = false;
+    const groupe = document.createElement('section');
+    groupe.className = 'cal-list-day' + (k === aujourdhui ? ' today' : '');
+    const tete = document.createElement('button');
+    tete.type = 'button';
+    tete.className = 'cal-list-date';
+    tete.innerHTML = `<span class="cal-list-dow">${CAL_JOURS[(d.getDay() + 6) % 7]}</span><span class="cal-list-num">${d.getDate()}</span>`
+      + (d.getDate() === 1 || i === 0 ? `<span class="cal-list-month">${d.toLocaleDateString('fr-FR', { month: 'short' })}</span>` : '');
+    tete.addEventListener('click', () => calAller('jour', d));
+    const rangs = document.createElement('div');
+    rangs.className = 'cal-list-items';
+    if (!items.length) rangs.innerHTML = '<div class="cal-list-rien">Rien de prévu</div>';
+    for (const e of items) rangs.appendChild(calLigne(e, k));
+    calCibleDepot(groupe, k, null);
+    groupe.append(tete, rangs);
+    liste.appendChild(groupe);
+  }
+  if (vide) liste.innerHTML = '<div class="empty">Rien de prévu sur cette période.</div>';
+  box.appendChild(liste);
+}
+
+function calRendrePanneau(index) {
   const panneau = $('#cal-day-panel');
   const contenu = $('#cal-day-list');
-  if (!cal.jour) { panneau.hidden = true; return; }
-  panneau.hidden = false;
+  panneau.hidden = cal.mode !== 'mois' || !cal.jour;
+  if (panneau.hidden) return;
   $('#cal-day-title').textContent = calDepuisCle(cal.jour).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  $('#cal-day-add').hidden = !calPeutCreerRdv();
   contenu.innerHTML = '';
   const duJour = index[cal.jour] || [];
   $('#cal-day-empty').hidden = duJour.length > 0;
-  for (const t of duJour) contenu.appendChild(creerLigneAgenda(t, loadCalendar, true));
+  for (const e of duJour) contenu.appendChild(calLigne(e, cal.jour));
+}
+
+function calAller(mode, date) {
+  cal.mode = mode;
+  if (date) cal.ref = new Date(date);
+  try { localStorage.setItem('notask.cal.mode', mode); } catch { /* sans conséquence */ }
+  renderCalendar();
 }
 
 function calNaviguer(sens) {
+  if (cal.mode === 'kanban') return;
   const r = cal.ref;
-  cal.ref = cal.mode === 'semaine'
-    ? new Date(r.getFullYear(), r.getMonth(), r.getDate() + 7 * sens)
-    : new Date(r.getFullYear(), r.getMonth() + sens, 1);
+  if (cal.mode === 'mois') cal.ref = new Date(r.getFullYear(), r.getMonth() + sens, 1);
+  else cal.ref = calPlus(r, sens * ({ semaine: 7, jour: 1, liste: 30 }[cal.mode]));
+  renderCalendar();
+}
+
+/* ---- Fiche d'un RDV Google (création / modification / suppression) ---- */
+let calRdvCourant = null;
+
+function calOuvrirRdv(g, cle = null, minutes = null, journee = false) {
+  calRdvCourant = g;
+  const dlg = $('#dlg-gevent');
+  const sel = $('#ge-cal');
+  const ecrivables = cal.g.calendars.filter((c) => c.writable);
+  sel.innerHTML = '';
+  const sources = g ? cal.g.calendars.filter((c) => c.id === g.calendar_id) : ecrivables;
+  for (const c of (sources.length ? sources : [{ id: g?.calendar_id, summary: g?.calendar_summary || '?' }])) {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.summary;
+    sel.appendChild(o);
+  }
+  sel.disabled = !!g;   // changer d'agenda un RDV existant : depuis Google
+  const lecture = g && !g.editable;
+  const pad = (n) => String(n).padStart(2, '0');
+  const hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let d1, d2, h1 = '09:00', h2 = '10:00', allDay = journee;
+  if (g) {
+    allDay = g.all_day;
+    if (g.all_day) { d1 = g.start; d2 = g.end; }
+    else {
+      const a = new Date(g.start), b = new Date(g.end);
+      d1 = calCle(a); d2 = calCle(b); h1 = hm(a); h2 = hm(b);
+    }
+  } else {
+    d1 = d2 = cle || calCle(cal.mode === 'mois' && cal.jour ? calDepuisCle(cal.jour) : cal.ref);
+    if (minutes !== null) {
+      const a = calDepuisCle(d1); a.setMinutes(minutes);
+      const b = new Date(a.getTime() + 3600000);
+      h1 = hm(a); h2 = hm(b); d2 = calCle(b);
+    }
+  }
+  $('#ge-titre-dlg').textContent = g ? (lecture ? 'RDV Google (lecture seule)' : 'Modifier le RDV') : 'Nouveau RDV Google';
+  $('#ge-summary').value = g ? g.summary : '';
+  $('#ge-allday').checked = allDay;
+  $('#ge-d1').value = d1; $('#ge-d2').value = d2;
+  $('#ge-h1').value = h1; $('#ge-h2').value = h2;
+  $('#ge-loc').value = g ? g.location : '';
+  $('#ge-desc').value = g ? g.description : '';
+  for (const id of ['#ge-summary', '#ge-allday', '#ge-d1', '#ge-d2', '#ge-h1', '#ge-h2', '#ge-loc', '#ge-desc']) $(id).disabled = !!lecture;
+  calMajHeuresRdv();
+  $('#ge-delete').hidden = !g || lecture;
+  $('#ge-delete-serie').hidden = !g || lecture || !g.recurring_event_id;
+  $('#ge-save').hidden = !!lecture;
+  const lien = $('#ge-link');
+  lien.hidden = !g?.html_link;
+  if (g?.html_link) lien.href = g.html_link;
+  msg($('#ge-msg'), '');
+  if (!ecrivables.length && !g) return;
+  dlg.showModal();
+  if (!g) $('#ge-summary').focus();
+}
+
+function calMajHeuresRdv() {
+  const j = $('#ge-allday').checked;
+  $('#ge-h1').hidden = j; $('#ge-h2').hidden = j;
+}
+
+async function calEnregistrerRdv() {
+  const g = calRdvCourant;
+  const allDay = $('#ge-allday').checked;
+  const d1 = $('#ge-d1').value, d2 = $('#ge-d2').value || d1;
+  if (!d1) return msg($('#ge-msg'), 'Date de début obligatoire.');
+  const body = {
+    summary: $('#ge-summary').value.trim(),
+    location: $('#ge-loc').value.trim(),
+    description: $('#ge-desc').value,
+    all_day: allDay,
+  };
+  if (allDay) {
+    if (d2 < d1) return msg($('#ge-msg'), 'La fin précède le début.');
+    body.start = d1; body.end = d2;
+  } else {
+    const a = new Date(`${d1}T${$('#ge-h1').value || '00:00'}`);
+    const b = new Date(`${d2}T${$('#ge-h2').value || '00:00'}`);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return msg($('#ge-msg'), 'Heure invalide.');
+    if (b < a) return msg($('#ge-msg'), 'La fin précède le début.');
+    body.start = a.toISOString(); body.end = b.toISOString();
+  }
+  const calId = g ? g.calendar_id : $('#ge-cal').value;
+  $('#ge-save').disabled = true;
+  try {
+    if (g) await api(`/google/overlay/events/${encodeURIComponent(g.id)}?calendar_id=${encodeURIComponent(calId)}`, { method: 'PATCH', body });
+    else await api(`/google/overlay/events?calendar_id=${encodeURIComponent(calId)}`, { method: 'POST', body });
+  } catch (err) {
+    msg($('#ge-msg'), err.message);
+    return;
+  } finally {
+    $('#ge-save').disabled = false;
+  }
+  $('#dlg-gevent').close();
+  cal.gPlage = null;
+  renderCalendar();
+}
+
+async function calSupprimerRdv(serie) {
+  const g = calRdvCourant;
+  if (!g) return;
+  const id = serie ? g.recurring_event_id : g.id;
+  if (!confirm(serie ? 'Supprimer TOUTE la série de ce RDV dans Google ?' : 'Supprimer ce RDV dans Google ?')) return;
+  try {
+    await api(`/google/overlay/events/${encodeURIComponent(id)}?calendar_id=${encodeURIComponent(g.calendar_id)}`, { method: 'DELETE' });
+  } catch (err) {
+    msg($('#ge-msg'), err.message);
+    return;
+  }
+  $('#dlg-gevent').close();
+  cal.gPlage = null;
   renderCalendar();
 }
 
@@ -11905,30 +12385,77 @@ function calNaviguer(sens) {
 if ($('#view-calendar')) {
   $('#cal-prev').addEventListener('click', () => calNaviguer(-1));
   $('#cal-next').addEventListener('click', () => calNaviguer(1));
-  $('#cal-today').addEventListener('click', () => { cal.ref = new Date(); cal.jour = calCle(new Date()); renderCalendar(); });
-  $$('#cal-modes button').forEach((b) => b.addEventListener('click', () => {
-    cal.mode = b.dataset.mode;
-    if (cal.jour) cal.ref = calDepuisCle(cal.jour);
-    try { localStorage.setItem('notask.cal.mode', cal.mode); } catch { /* sans conséquence */ }
+  $('#cal-today').addEventListener('click', () => {
+    cal.ref = new Date();
+    if (cal.mode === 'mois') cal.jour = calCle(new Date());
     renderCalendar();
+  });
+  $$('#cal-modes button').forEach((b) => b.addEventListener('click', () => {
+    calAller(b.dataset.mode, cal.mode === 'mois' && cal.jour ? calDepuisCle(cal.jour) : null);
   }));
+  $('#cal-add').addEventListener('click', () => calOuvrirRdv(null));
+  $('#cal-day-add').addEventListener('click', () => calOuvrirRdv(null, cal.jour));
   $('#cal-day-close').addEventListener('click', () => { cal.jour = null; renderCalendar(); });
-  // Flèches gauche/droite = période précédente/suivante, hors champ de saisie.
+  $('#ge-allday').addEventListener('change', calMajHeuresRdv);
+  $('#ge-d1').addEventListener('change', () => { if ($('#ge-d2').value < $('#ge-d1').value) $('#ge-d2').value = $('#ge-d1').value; });
+  $('#ge-cancel').addEventListener('click', () => $('#dlg-gevent').close());
+  $('#ge-save').addEventListener('click', calEnregistrerRdv);
+  $('#ge-delete').addEventListener('click', () => calSupprimerRdv(false));
+  $('#ge-delete-serie').addEventListener('click', () => calSupprimerRdv(true));
   document.addEventListener('keydown', (e) => {
     if (state.view !== 'calendar' || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.target.closest('input, textarea, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
+    if (e.target.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
     if (e.key === 'ArrowLeft') calNaviguer(-1);
     if (e.key === 'ArrowRight') calNaviguer(1);
   });
-  // Balayage horizontal (mobile) : même navigation.
-  let x0 = null;
-  $('#cal-grid').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
-  $('#cal-grid').addEventListener('touchend', (e) => {
-    if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    x0 = null;
-    if (Math.abs(dx) > 60) calNaviguer(dx < 0 ? 1 : -1);
+  let attenteResize = null;
+  window.addEventListener('resize', () => {
+    if (state.view !== 'calendar' || cal.mode !== 'mois') return;
+    clearTimeout(attenteResize);
+    attenteResize = setTimeout(calAjusterPuces, 120);
   });
+  // Balayage horizontal (mobile) : période précédente / suivante.
+  let x0 = null, y0 = null;
+  $('#cal-body').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  $('#cal-body').addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) calNaviguer(dx < 0 ? 1 : -1);
+  });
+}
+
+/* ---- Options > Google : affichage des agendas dans Calendritasks ---- */
+function calInvaliderGoogle() { cal.gPlage = null; cal.g = { enabled: false, calendars: [], events: [], errors: [] }; }
+
+async function chargerAgendasOverlay() {
+  const box = $('#profil-google-overlay-list');
+  if (!box) return;
+  box.innerHTML = '<p class="aide">Chargement des agendas…</p>';
+  let data;
+  try {
+    data = await api('/google/overlay/calendars');
+  } catch (err) {
+    box.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  box.innerHTML = '';
+  for (const c of data.calendars) {
+    const l = document.createElement('label');
+    l.className = 'profil-google-case profil-overlay-cal';
+    l.innerHTML = `<input type="checkbox" value="${escapeHtml(c.id)}"${c.visible ? ' checked' : ''}>
+      <span class="profil-overlay-dot" style="background:${escapeHtml(c.color)}"></span>
+      <span>${escapeHtml(c.summary)}${c.writable ? '' : ' <em>(lecture seule)</em>'}</span>`;
+    l.querySelector('input').addEventListener('change', async () => {
+      const ids = [...box.querySelectorAll('input:checked')].map((i) => i.value);
+      try {
+        await api('/google/overlay/visible', { method: 'PUT', body: { visible: ids } });
+      } catch (err) { msg($('#profil-google-msg'), err.message); }
+      calInvaliderGoogle();
+    });
+    box.appendChild(l);
+  }
+  if (!data.calendars.length) box.innerHTML = '<p class="aide">Aucun agenda trouvé.</p>';
 }
 
 /* -------------------------------- Comptes -------------------------------- */

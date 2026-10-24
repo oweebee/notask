@@ -19,7 +19,8 @@ HTTP avec Google) :
    vers l'application.
 """
 
-from datetime import timedelta
+import json
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import (
@@ -30,6 +31,7 @@ from sqlmodel import Session, select
 
 from app import google_calendar as gcal
 from app import google_drive as gdrive
+from app import google_overlay as gov
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import (
@@ -38,6 +40,8 @@ from app.models import (
     GoogleAppConfig,
     GoogleCalendarIn,
     GoogleFeaturesIn,
+    GoogleOverlayEventIn,
+    GoogleOverlayVisibleIn,
     GoogleOAuthState,
     GoogleUserAppConfig,
     GoogleUserConfigIn,
@@ -90,6 +94,7 @@ def status_(
         needs_reauth=account.needs_reauth,
         calendar_enabled=account.calendar_enabled,
         drive_enabled=account.drive_enabled,
+        calendars_view_enabled=account.calendars_view_enabled,
     )
 
 
@@ -369,6 +374,8 @@ def maj_fonctions(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
     compte.calendar_enabled = payload.calendar_enabled
     compte.drive_enabled = payload.drive_enabled
+    if payload.calendars_view_enabled is not None:
+        compte.calendars_view_enabled = payload.calendars_view_enabled
     session.add(compte)
     session.commit()
 
@@ -427,3 +434,125 @@ def drive_supprimer(
         gdrive.supprimer(_compte_google(user, session), session, file_id)
     except gdrive.DriveIndisponible as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+
+
+# ================= Agendas Google dans Calendritasks =================
+# Voir app/google_overlay.py : lecture des agendas choisis et gestion de
+# leurs RDV. Rien n'est stocké hormis la liste des agendas affichés.
+
+def _compte_overlay(user: User, session: Session) -> GoogleAccount:
+    compte = session.exec(
+        select(GoogleAccount).where(GoogleAccount.user_id == user.id)
+    ).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    if not compte.calendars_view_enabled:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Affichage des agendas Google désactivé. Activez-le dans Options.",
+        )
+    return compte
+
+
+def _http(err: "gov.OverlayError") -> HTTPException:
+    return HTTPException(err.status_code, str(err))
+
+
+@router.get("/overlay/calendars")
+def overlay_agendas(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    try:
+        return {"calendars": gov.lister_agendas(compte, session)}
+    except gov.OverlayError as err:
+        raise _http(err)
+
+
+@router.put("/overlay/visible", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_visibles(
+    payload: GoogleOverlayVisibleIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    ids = [i for i in dict.fromkeys(payload.visible) if isinstance(i, str) and 0 < len(i) <= 300][:gov.MAX_CALENDRIERS]
+    compte.visible_calendars = json.dumps(ids)
+    session.add(compte)
+    session.commit()
+
+
+def _parse_borne(val: str, nom: str) -> datetime:
+    try:
+        dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{nom} invalide")
+    if dt.tzinfo is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{nom} sans fuseau")
+    return dt
+
+
+@router.get("/overlay/events")
+def overlay_evenements(
+    start: str = Query(..., max_length=40),
+    end: str = Query(..., max_length=40),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Toujours 200 quand l'affichage est désactivé ({"enabled": false}) :
+    Calendritasks interroge à chaque mois affiché, ce n'est pas une erreur."""
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is None or not compte.calendars_view_enabled:
+        return {"enabled": False, "calendars": [], "events": [], "errors": []}
+    debut, fin = _parse_borne(start, "start"), _parse_borne(end, "end")
+    if fin <= debut or fin - debut > timedelta(days=100):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Période invalide (100 jours max)")
+    try:
+        return gov.lister_evenements(compte, session, debut, fin)
+    except gov.OverlayError as err:
+        raise _http(err)
+
+
+@router.post("/overlay/events", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_creer(
+    payload: GoogleOverlayEventIn,
+    calendar_id: str = Query(..., min_length=1, max_length=300),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    compte = _compte_overlay(user, session)
+    try:
+        gov.creer(compte, session, calendar_id, payload.model_dump(exclude_unset=True))
+    except gov.OverlayError as err:
+        raise _http(err)
+
+
+@router.patch("/overlay/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_modifier(
+    event_id: str,
+    payload: GoogleOverlayEventIn,
+    calendar_id: str = Query(..., min_length=1, max_length=300),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    compte = _compte_overlay(user, session)
+    try:
+        gov.modifier(compte, session, calendar_id, event_id, payload.model_dump(exclude_unset=True))
+    except gov.OverlayError as err:
+        raise _http(err)
+
+
+@router.delete("/overlay/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_supprimer(
+    event_id: str,
+    calendar_id: str = Query(..., min_length=1, max_length=300),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    compte = _compte_overlay(user, session)
+    try:
+        gov.supprimer(compte, session, calendar_id, event_id)
+    except gov.OverlayError as err:
+        raise _http(err)

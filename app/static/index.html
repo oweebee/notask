@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9124">
+<link rel="stylesheet" href="/static/style.css?v=2.9126">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -127,8 +127,7 @@
              colonne (voir son gestionnaire dédié dans app.js, PAS le
              comportement générique data-view des autres boutons ci-dessus,
              d'où l'absence de l'attribut ici). -->
-        <button class="drawer-item" id="nav-tasks">Notasks Prévues</button>
-        <button class="drawer-item" data-view="calendar" id="nav-calendar">Calendritasks</button>
+        <button class="drawer-item" data-view="calendar" id="nav-tasks">Calendritasks</button>
         <button class="drawer-item" data-view="favorites" id="nav-favorites">Favoris</button>
         <button class="drawer-item" data-view="archives" id="nav-archives">Archives</button>
         <button class="drawer-item" data-view="trash" id="nav-trash">Corbeille</button>
@@ -323,38 +322,36 @@
       </section>
     </section>
 
-    <!-- ---- Notasks prévues (desktop uniquement) ----
-         Trois colonnes de regroupements. En mobile, ce bouton ne mène pas
-         ici mais fait défiler jusqu'à la colonne d'échéances de droite (la
-         largeur n'y permet pas trois colonnes) — voir le gestionnaire de
-         clic de #nav-tasks dans app.js. -->
-    <section id="view-tasks" hidden>
-      <div class="tasks-columns" id="tasks-columns"></div>
-      <div class="empty" id="tasks-empty" hidden>Aucune échéance à venir.</div>
-    </section>
-
-    <!-- ---- Calendritasks : calendrier mois/semaine (voir loadCalendar dans app.js) ---- -->
+    <!-- ---- Calendritasks (remplace « Notasks prévues ») : Jour / Semaine / Mois / Liste /
+         Kanban (ancienne vue en colonnes) — voir loadCalendar dans app.js ---- -->
     <section id="view-calendar" hidden>
       <div class="cal-card">
         <div class="cal-toolbar">
-          <button class="cal-icon-btn" id="cal-prev" type="button" aria-label="Période précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <button class="cal-icon-btn" id="cal-next" type="button" aria-label="Période suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="cal-icon-btn cal-nav" id="cal-prev" type="button" aria-label="Période précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="cal-icon-btn cal-nav" id="cal-next" type="button" aria-label="Période suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <h2 class="cal-title" id="cal-title"></h2>
-          <button class="cal-today-btn" id="cal-today" type="button">Aujourd'hui</button>
+          <button class="cal-today-btn cal-nav" id="cal-today" type="button">Aujourd'hui</button>
+          <button class="cal-add-btn" id="cal-add" type="button" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>RDV</span></button>
           <div class="cal-segmented" id="cal-modes" role="group" aria-label="Affichage">
-            <button type="button" data-mode="mois">Mois</button>
+            <button type="button" data-mode="jour">Jour</button>
             <button type="button" data-mode="semaine">Semaine</button>
+            <button type="button" data-mode="mois">Mois</button>
+            <button type="button" data-mode="liste">Liste</button>
+            <button type="button" data-mode="kanban">Kanban</button>
           </div>
         </div>
-        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend" id="cal-legend" hidden></div>
+        <div class="cal-gcal-msg" id="cal-gcal-msg"></div>
+        <div class="cal-body" id="cal-body"></div>
       </div>
       <section class="cal-day-panel" id="cal-day-panel" hidden>
         <div class="cal-day-head">
           <h2 id="cal-day-title"></h2>
+          <button class="cal-icon-btn" id="cal-day-add" type="button" aria-label="Nouveau RDV Google" title="Nouveau RDV Google" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
           <button class="cal-icon-btn" id="cal-day-close" type="button" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
         <div id="cal-day-list"></div>
-        <div class="empty" id="cal-day-empty" hidden>Aucune notask ce jour-là.</div>
+        <div class="empty" id="cal-day-empty" hidden>Rien de prévu ce jour-là.</div>
       </section>
     </section>
 
@@ -544,6 +541,27 @@
   </div>
 </dialog>
 
+<!-- RDV Google (Calendritasks) — voir calOuvrirRdv() dans app.js. -->
+<dialog id="dlg-gevent" class="gevent-dlg">
+  <h2 id="ge-titre-dlg">RDV Google</h2>
+  <div class="field"><label for="ge-summary">Titre</label><input id="ge-summary" maxlength="1000" autocomplete="off"></div>
+  <div class="field"><label for="ge-cal">Agenda</label><select id="ge-cal"></select></div>
+  <div class="field"><label><input type="checkbox" id="ge-allday"> Journée entière</label></div>
+  <div class="ge-row"><label for="ge-d1">Début</label><input id="ge-d1" type="date"><input id="ge-h1" type="time" step="300"></div>
+  <div class="ge-row"><label for="ge-d2">Fin</label><input id="ge-d2" type="date"><input id="ge-h2" type="time" step="300"></div>
+  <div class="field"><label for="ge-loc">Lieu</label><input id="ge-loc" maxlength="1000" autocomplete="off"></div>
+  <div class="field"><label for="ge-desc">Description</label><textarea id="ge-desc" rows="3" maxlength="8000"></textarea></div>
+  <div id="ge-msg"></div>
+  <div class="dialog-actions ge-actions">
+    <button class="btn danger" id="ge-delete" type="button">Supprimer</button>
+    <button class="btn ghost" id="ge-delete-serie" type="button">Supprimer la série</button>
+    <a class="btn ghost" id="ge-link" target="_blank" rel="noopener" hidden>Ouvrir dans Google</a>
+    <span class="ge-spacer"></span>
+    <button class="btn ghost" id="ge-cancel" type="button">Fermer</button>
+    <button class="btn" id="ge-save" type="button">Enregistrer</button>
+  </div>
+</dialog>
+
 <dialog id="dlg-user">
   <h2>Nouvel utilisateur</h2>
   <div class="field"><label for="du-name">Nom d'utilisateur</label><input id="du-name" autocomplete="off"></div>
@@ -641,6 +659,17 @@
         <input type="checkbox" id="profil-google-drive-on">
         <span>Drive — envoyer et relire les sauvegardes (voir Outils)</span>
       </label>
+      <label class="profil-google-case">
+        <input type="checkbox" id="profil-google-overlay-on">
+        <span>Agendas — afficher et gérer mes agendas Google dans Calendritasks</span>
+      </label>
+    </div>
+    <!-- Agendas Google affichés (voir chargerAgendasOverlay dans app.js et
+         app/google_overlay.py). RDV lus via le serveur, jamais stockés. -->
+    <div class="profil-google-overlay" id="profil-google-overlay" hidden>
+      <p class="profil-google-cal-label">Agendas affichés</p>
+      <p class="aide">Les RDV transitent en clair par le serveur notask (jamais stockés).</p>
+      <div id="profil-google-overlay-list"></div>
     </div>
 
     <!-- Agenda de destination. Masqué tant que le compte n'est pas connecté.
@@ -818,6 +847,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9124"></script>
+<script src="/static/app.js?v=0.9126"></script>
 </body>
 </html>
