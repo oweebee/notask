@@ -5040,6 +5040,14 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-name em { color: var(--md-on-surface-variant); font-size: .8125rem; }
 .cal-opts-cell { display: flex; justify-content: center; padding: .5rem; cursor: pointer; }
 .cal-opts-sec { margin-bottom: 1.75rem; }
+.cal-opts-series-btn { height: 30px; padding: 0 .75rem; }
+#series-liste { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; margin: .5rem 0 1rem; }
+.series-ligne { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; border-radius: var(--shape-sm); background: var(--md-surface-2); cursor: pointer; }
+.series-ligne:hover { background: var(--md-surface-4); }
+.series-ligne input { flex: none; width: 18px; height: 18px; accent-color: var(--md-primary); }
+.series-txt { display: flex; flex-direction: column; min-width: 0; }
+.series-nom { font-size: .9375rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.series-sous { font-size: .75rem; color: var(--md-on-surface-variant); }
 .cal-opts-sync { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
 .cal-opts-sync-msg { font-size: .8125rem; color: var(--md-on-surface-variant); }
 .cal-opts-sec .aide b { color: var(--md-on-surface); font-weight: 500; }

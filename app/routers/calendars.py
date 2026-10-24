@@ -29,11 +29,7 @@ def _a_moi(cal_id: int, user: User, session: Session) -> ExternalCalendar:
 @router.get("/external")
 def lister(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     rows = session.exec(select(ExternalCalendar).where(ExternalCalendar.user_id == user.id)).all()
-    from app.models import GoogleAccount
-    from app import google_overlay as gov
-    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
-    exclus = set(gov._liste_json(compte.recurrents_exclus) or []) if compte is not None else set()
-    return [dict(ext.comme_agenda(r), agenda_recurrents=f"ics:{r.id}" not in exclus) for r in rows]
+    return [ext.comme_agenda(r) for r in rows]
 
 
 @router.post("/external", status_code=status.HTTP_201_CREATED)

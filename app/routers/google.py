@@ -46,6 +46,7 @@ from app.models import (
     GoogleCalendarIn,
     GoogleFeaturesIn,
     GoogleOverlayEventIn,
+    GoogleOverlaySeriesIn,
     GoogleOverlayVisibleIn,
     GoogleOAuthState,
     GoogleUserAppConfig,
@@ -473,9 +474,6 @@ def overlay_agendas(user: User = Depends(get_current_user), session: Session = D
         cals = gov.lister_agendas(compte, session)
     except gov.OverlayError as err:
         raise _http(err)
-    exclus = set(gov._liste_json(compte.recurrents_exclus) or [])
-    for c in cals:
-        c["agenda_recurrents"] = c["id"] not in exclus
     return {"calendars": cals}
 
 
@@ -527,6 +525,71 @@ def overlay_echeances(
     anciens = gov.depuis(compte)
     maintenant = utcnow().isoformat()
     compte.agenda_depuis = json.dumps({i: anciens.get(i, maintenant) for i in (gov.pour_echeances(compte) or [])})
+    session.add(compte)
+    session.commit()
+
+
+@router.get("/overlay/series")
+def overlay_series(
+    calendar_id: str = Query(..., min_length=1, max_length=300),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Séries récurrentes d'UN agenda (Google, virtuel ou « ics:<id> »),
+    vues sur 30 j passés → 70 j à venir, avec leur inclusion en échéances.
+    Une série annuelle (anniversaire) hors de cette fenêtre n'apparaît pas."""
+    maintenant = utcnow()
+    debut, fin = maintenant - timedelta(days=30), maintenant + timedelta(days=70)
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if calendar_id.startswith("ics:"):
+        try:
+            row = session.get(ExternalCalendar, int(calendar_id[4:]))
+        except ValueError:
+            row = None
+        if row is None or row.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agenda introuvable")
+        try:
+            evs = extcal.evenements(row, debut, fin, fuseau_utilisateur(user.id, session))
+        except extcal.ExterneErreur as err:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(err))
+    else:
+        if compte is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+        try:
+            evs = gov.evenements_d_un_agenda(compte, session, calendar_id, debut, fin)
+        except gov.OverlayError as err:
+            raise _http(err)
+    exclues = gov.series_exclues(compte)
+    series = {}
+    for ev in evs:
+        sid = ev.get("recurring_event_id")
+        if not sid:
+            continue
+        s = series.setdefault(sid, {"id": sid, "summary": ev["summary"] or "(Sans titre)", "count": 0,
+                                    "next": None, "included": (calendar_id, sid) not in exclues})
+        s["count"] += 1
+        fin_ev = ev["end"]
+        if s["next"] is None and fin_ev >= maintenant.date().isoformat()[:10]:
+            s["next"] = ev["start"]
+    return {"series": sorted(series.values(), key=lambda s: s["summary"].lower())}
+
+
+@router.put("/overlay/series", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_series_maj(
+    payload: GoogleOverlaySeriesIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    exclues = gov.series_exclues(compte)
+    cle = (payload.calendar_id, payload.series_id)
+    if payload.included:
+        exclues.discard(cle)
+    else:
+        exclues.add(cle)
+    compte.series_exclues = json.dumps(sorted([list(c) for c in exclues]))
     session.add(compte)
     session.commit()
 
@@ -611,13 +674,13 @@ def overlay_evenements(
             except Exception:
                 log.exception("Agenda externe %s illisible", e.id)
                 resultat["errors"].append(f"{e.name} : illisible")
-    # Récurrents exclus des échéances, par agenda (bouton Options).
-    exclus = set(gov._liste_json(compte.recurrents_exclus) or []) if compte is not None else set()
-    for c in resultat["calendars"]:
-        c["agenda_recurrents"] = c["id"] not in exclus
-    if pour == "agenda" and exclus:
+    # Séries récurrentes exclues des échéances, une par une (bouton
+    # « Séries » du panneau Options, voir /overlay/series).
+    exclues = gov.series_exclues(compte)
+    if pour == "agenda" and exclues:
         resultat["events"] = [ev for ev in resultat["events"]
-                              if not (ev.get("recurring_event_id") and ev["calendar_id"] in exclus)]
+                              if not (ev.get("recurring_event_id")
+                                      and (ev["calendar_id"], ev["recurring_event_id"]) in exclues)]
     # RDV validés depuis notask (case cochée) : marqués, pas retirés — la
     # vue calendrier les montre barrés, la colonne d'échéances les écarte.
     valides = {(v.calendar_id, v.event_id): v.id for v in session.exec(

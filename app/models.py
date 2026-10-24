@@ -332,7 +332,10 @@ class GoogleAccount(SQLModel, table=True):
     agenda_depuis: Optional[str] = Field(default=None, max_length=40000)
     # Agendas (Google, virtuels, externes « ics:<id> ») dont les RDV
     # RÉCURRENTS ne comptent PAS en échéances (liste JSON ; None = aucun).
-    recurrents_exclus: Optional[str] = Field(default=None, max_length=20000)
+    recurrents_exclus: Optional[str] = Field(default=None, max_length=20000)  # obsolète (0.9139), ignoré
+    # Séries récurrentes EXCLUES des échéances, une par une : liste JSON de
+    # paires [calendar_id, recurring_event_id] (Google, virtuels, « ics:<id> »).
+    series_exclues: Optional[str] = Field(default=None, max_length=60000)
     # Agendas proposés dans Calendritasks (bouton Options ; JSON ; None = tous).
     # Seuls ceux-là apparaissent dans la barre d'agendas, où visible_calendars
     # les affiche ou les masque.
@@ -378,6 +381,13 @@ class GoogleFeaturesIn(SQLModel):
 class GoogleOverlayVisibleIn(SQLModel):
     """Agendas Google affichés dans Calendritasks."""
     visible: List[str]
+
+
+class GoogleOverlaySeriesIn(SQLModel):
+    """Inclure / exclure UNE série récurrente des échéances."""
+    calendar_id: str = Field(min_length=1, max_length=300)
+    series_id: str = Field(min_length=1, max_length=1100)
+    included: bool
 
 
 class GoogleOverlayEventIn(SQLModel):

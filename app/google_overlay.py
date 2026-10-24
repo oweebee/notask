@@ -320,3 +320,50 @@ def modifier(account: GoogleAccount, session: Session, calendar_id: str, event_i
 
 def supprimer(account: GoogleAccount, session: Session, calendar_id: str, event_id: str) -> None:
     _envoyer(account, session, "DELETE", _url(calendar_id, event_id))
+
+
+def series_exclues(account: Optional[GoogleAccount]) -> set:
+    if account is None or not account.series_exclues:
+        return set()
+    try:
+        val = json.loads(account.series_exclues)
+    except ValueError:
+        return set()
+    return {(str(a), str(b)) for a, b in val if isinstance(val, list)} if isinstance(val, list) else set()
+
+
+def evenements_d_un_agenda(account: GoogleAccount, session: Session, cal_id: str,
+                          debut: datetime, fin: datetime) -> List[Dict[str, Any]]:
+    """Tous les RDV d'UN agenda Google (ou du virtuel Anniversaires), quels
+    que soient ses réglages d'affichage — pour la fenêtre des séries."""
+    agendas = lister_agendas(account, session)
+    cible = next((c for c in agendas if c["id"] == cal_id), None)
+    if cible is None:
+        raise OverlayError("Agenda introuvable.", 404)
+    reel = next((c for c in agendas if c["id"] == cible.get("virtual_of")), cible)
+    a_virtuel = any(c.get("virtual_of") == reel["id"] for c in agendas)
+    token = _token(account, session)
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+        resp = client.get(
+            f"{CALENDAR_API}/calendars/{quote(reel['id'], safe='')}/events",
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "timeMin": debut.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "timeMax": fin.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "singleEvents": "true", "orderBy": "startTime",
+                "maxResults": str(MAX_EVENEMENTS_PAR_AGENDA),
+            },
+        )
+        if resp.status_code >= 400:
+            raise OverlayError("Google a refusé la lecture de cet agenda.", 502)
+    out = []
+    for ev in resp.json().get("items", []):
+        anniv = ev.get("eventType") == "birthday"
+        if cible.get("virtual_of") and not anniv:
+            continue
+        if not cible.get("virtual_of") and anniv and a_virtuel:
+            continue
+        n = _normaliser(ev, cible, {})
+        if n:
+            out.append(n)
+    return out

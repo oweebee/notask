@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9139';
+const APP_VERSION = '0.9140';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -12296,26 +12296,22 @@ async function calRendreOptions() {
   const tableau = (lignes, avecSuppr) => {
     const t = document.createElement('div');
     t.className = 'cal-opts-table' + (avecSuppr ? ' ext' : '');
-    t.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div><div class="cal-opts-head" title="Inclure aussi les RDV récurrents (séries) dans les échéances">Récurrents</div>' + (avecSuppr ? '<div class="cal-opts-head"></div>' : '');
+    t.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div><div class="cal-opts-head" title="Choisir, série par série, les RDV récurrents comptés en échéances">Récurrents</div>' + (avecSuppr ? '<div class="cal-opts-head"></div>' : '');
     for (const c of lignes) {
       const nom = document.createElement('div');
       nom.className = 'cal-opts-name';
       const sous = c.external ? ` <em>${escapeHtml(c.url_host)}</em>` : (c.virtual_of ? ' <em>(issus de Google Contacts)</em>' : (c.writable ? '' : ' <em>(lecture seule)</em>'));
       nom.innerHTML = `<span class="cal-legend-dot" style="--gcal:${escapeHtml(c.color)};background:${escapeHtml(c.color)}"></span><span>${escapeHtml(c.summary)}${sous}</span>`;
       t.appendChild(nom);
-      for (const champ of ['available', 'in_agenda', 'agenda_recurrents']) {
+      for (const champ of ['available', 'in_agenda']) {
         const cell = document.createElement('label');
         cell.className = 'cal-opts-cell';
-        const coche = champ === 'available' ? c.available !== false : (champ === 'in_agenda' ? c.in_agenda : c.agenda_recurrents !== false);
-        const nomCol = { available: 'Afficher', in_agenda: 'Échéances', agenda_recurrents: 'Récurrents' }[champ];
+        const coche = champ === 'available' ? c.available !== false : c.in_agenda;
+        const nomCol = { available: 'Afficher', in_agenda: 'Échéances' }[champ];
         cell.innerHTML = `<input type="checkbox" data-champ="${champ}"${c.virtual_of ? ' data-virtuel="1"' : ''} value="${escapeHtml(c.id)}"${coche ? ' checked' : ''} aria-label="${nomCol} ${escapeHtml(c.summary)}">`;
         cell.querySelector('input').addEventListener('change', async (e) => {
           try {
-            if (champ === 'agenda_recurrents') {
-              // Liste des agendas EXCLUS, tous tableaux confondus (Google + externes).
-              const exclus = [...box.querySelectorAll('input[data-champ="agenda_recurrents"]')].filter((x) => !x.checked).map((x) => x.value);
-              await api('/google/overlay/recurrents', { method: 'PUT', body: { visible: exclus } });
-            } else if (c.external) {
+            if (c.external) {
               await api('/calendars/external/' + c.ext_id, { method: 'PATCH', body: { [champ]: e.target.checked } });
             } else {
               const ids = [...t.querySelectorAll(`input[data-champ="${champ}"]`)]
@@ -12327,6 +12323,17 @@ async function calRendreOptions() {
         });
         t.appendChild(cell);
       }
+      // Séries récurrentes de cet agenda, une par une (fenêtre dédiée).
+      const cellSeries = document.createElement('div');
+      cellSeries.className = 'cal-opts-cell';
+      const bSeries = document.createElement('button');
+      bSeries.type = 'button';
+      bSeries.className = 'btn ghost sm cal-opts-series-btn';
+      bSeries.textContent = 'Séries…';
+      bSeries.title = 'Choisir les RDV récurrents comptés en échéances';
+      bSeries.addEventListener('click', () => calOuvrirSeries(c));
+      cellSeries.appendChild(bSeries);
+      t.appendChild(cellSeries);
       if (avecSuppr) {
         const sup = document.createElement('button');
         sup.type = 'button';
@@ -12822,6 +12829,52 @@ if ($('#view-calendar')) {
     x0 = null;
     if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) calNaviguer(dx < 0 ? 1 : -1);
   });
+}
+
+/* ---- Fenêtre « Séries » : RDV récurrents d'un agenda, inclus ou non en
+   échéances un par un (GET/PUT /api/google/overlay/series). Même ouverture
+   animée qu'une notask (animerOuvertureDialogue / fermerAvecAnimation). ---- */
+async function calOuvrirSeries(c) {
+  const dlg = $('#dlg-series');
+  $('#series-titre').textContent = `Séries récurrentes — ${c.summary}`;
+  const liste = $('#series-liste');
+  liste.innerHTML = '<p class="aide">Chargement…</p>';
+  dlg.showModal();
+  animerOuvertureDialogue(dlg);
+  let data;
+  try {
+    data = await api('/google/overlay/series?' + new URLSearchParams({ calendar_id: c.id }));
+  } catch (err) {
+    liste.innerHTML = `<p class="aide">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  liste.innerHTML = '';
+  if (!data.series.length) {
+    liste.innerHTML = '<p class="aide">Aucun RDV récurrent dans cet agenda (30 jours passés → 70 jours à venir).</p>';
+    return;
+  }
+  for (const s of data.series) {
+    const l = document.createElement('label');
+    l.className = 'series-ligne';
+    const jour = s.next && /^\d{4}-\d{2}-\d{2}$/.test(s.next);
+    const prochain = s.next ? formatDue(jour ? s.next + 'T00:00:00Z' : s.next, jour) : '';
+    l.innerHTML = `<input type="checkbox"${s.included ? ' checked' : ''}>
+      <span class="series-txt"><span class="series-nom">${escapeHtml(s.summary)}</span>
+      <span class="series-sous">${s.count} occurrence${s.count > 1 ? 's' : ''}${prochain ? ' · prochaine : ' + escapeHtml(prochain) : ''}</span></span>`;
+    const cb = l.querySelector('input');
+    cb.addEventListener('change', async () => {
+      try {
+        await api('/google/overlay/series', { method: 'PUT', body: { calendar_id: c.id, series_id: s.id, included: cb.checked } });
+      } catch (err) { alert(err.message); cb.checked = !cb.checked; return; }
+      calInvaliderGoogle();
+    });
+    liste.appendChild(l);
+  }
+}
+
+if ($('#dlg-series')) {
+  $('#series-fermer').addEventListener('click', () => fermerAvecAnimation($('#dlg-series')));
+  $('#dlg-series').addEventListener('close', () => { calInvaliderGoogle(); loadAgenda(); });
 }
 
 /* ---- Agendas Google : invalidation des caches (réglages changés) ---- */

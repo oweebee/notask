@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9139">
+<link rel="stylesheet" href="/static/style.css?v=2.9140">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -549,6 +549,14 @@
   </div>
 </dialog>
 
+<!-- Séries récurrentes d'un agenda (Calendritasks › Options › Séries…). -->
+<dialog id="dlg-series" class="series-dlg">
+  <h2 id="series-titre">Séries récurrentes</h2>
+  <p class="aide">Cochée = la série compte dans les échéances (colonne de droite, rappels, widget). Rien n'est modifié dans l'agenda d'origine.</p>
+  <div id="series-liste"></div>
+  <div class="dialog-actions"><button class="btn" id="series-fermer" type="button">Fermer</button></div>
+</dialog>
+
 <!-- RDV Google (Calendritasks) — voir calOuvrirRdv() dans app.js. -->
 <dialog id="dlg-gevent" class="gevent-dlg">
   <h2 id="ge-titre-dlg">RDV Google</h2>
@@ -854,6 +862,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9139"></script>
+<script src="/static/app.js?v=0.9140"></script>
 </body>
 </html>
