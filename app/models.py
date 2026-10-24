@@ -322,6 +322,13 @@ class GoogleAccount(SQLModel, table=True):
     # d'agendas affichés, None = ceux cochés côté Google.
     calendars_view_enabled: bool = False
     visible_calendars: Optional[str] = Field(default=None, max_length=20000)
+    # Agendas dont les RDV à venir rejoignent la colonne d'échéances (JSON ;
+    # None = mêmes agendas que visible_calendars).
+    agenda_calendars: Optional[str] = Field(default=None, max_length=20000)
+    # Agendas proposés dans Calendritasks (bouton Options ; JSON ; None = tous).
+    # Seuls ceux-là apparaissent dans la barre d'agendas, où visible_calendars
+    # les affiche ou les masque.
+    available_calendars: Optional[str] = Field(default=None, max_length=20000)
     # Dossier Google Drive où déposer les sauvegardes, choisi par
     # l'utilisateur dans Outils. None => aucune destination configurée, les
     # boutons Drive restent alors inactifs. Le NOM est mémorisé à côté de

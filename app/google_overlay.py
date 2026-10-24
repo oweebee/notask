@@ -47,15 +47,29 @@ def _token(account: GoogleAccount, session: Session) -> str:
     return token
 
 
-def visibles(account: GoogleAccount) -> Optional[List[str]]:
-    """None = jamais réglé (on prend alors les agendas cochés côté Google)."""
-    if not account.visible_calendars:
+def _liste_json(brut: Optional[str]) -> Optional[List[str]]:
+    if not brut:
         return None
     try:
-        val = json.loads(account.visible_calendars)
+        val = json.loads(brut)
     except ValueError:
         return None
     return [str(x) for x in val if isinstance(x, str)] if isinstance(val, list) else None
+
+
+def visibles(account: GoogleAccount) -> Optional[List[str]]:
+    """None = jamais réglé (on prend alors les agendas cochés côté Google)."""
+    return _liste_json(account.visible_calendars)
+
+
+def disponibles(account: GoogleAccount) -> Optional[List[str]]:
+    """None = jamais réglé (tous les agendas proposés)."""
+    return _liste_json(account.available_calendars)
+
+
+def pour_echeances(account: GoogleAccount) -> Optional[List[str]]:
+    """None = jamais réglé (on prend alors les agendas affichés)."""
+    return _liste_json(account.agenda_calendars)
 
 
 def lister_agendas(account: GoogleAccount, session: Session) -> List[Dict[str, Any]]:
@@ -76,6 +90,8 @@ def lister_agendas(account: GoogleAccount, session: Session) -> List[Dict[str, A
         raise OverlayError("Google injoignable pour le moment.", 502)
 
     choix = visibles(account)
+    echeances = pour_echeances(account)
+    dispo = disponibles(account)
     out = []
     for it in items[:MAX_CALENDRIERS]:
         cid = it.get("id")
@@ -90,6 +106,8 @@ def lister_agendas(account: GoogleAccount, session: Session) -> List[Dict[str, A
             "primary": bool(it.get("primary")),
             "visible": (cid in choix) if choix is not None else bool(it.get("selected") or it.get("primary")),
         })
+        out[-1]["in_agenda"] = (cid in echeances) if echeances is not None else out[-1]["visible"]
+        out[-1]["available"] = (cid in dispo) if dispo is not None else True
     out.sort(key=lambda c: (not c["primary"], c["summary"].lower()))
     return out
 
@@ -140,7 +158,10 @@ def _normaliser(ev: Dict[str, Any], cal: Dict[str, Any], couleurs: Dict[str, str
     }
 
 
-def lister_evenements(account: GoogleAccount, session: Session, debut: datetime, fin: datetime) -> Dict[str, Any]:
+def lister_evenements(account: GoogleAccount, session: Session, debut: datetime, fin: datetime,
+                      pour_agenda: bool = False) -> Dict[str, Any]:
+    """pour_agenda : agendas cochés « échéances » (colonne de droite) au
+    lieu des agendas affichés dans Calendritasks."""
     agendas = lister_agendas(account, session)
     token = _token(account, session)
     evenements: List[Dict[str, Any]] = []
@@ -148,7 +169,10 @@ def lister_evenements(account: GoogleAccount, session: Session, debut: datetime,
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         couleurs = _couleurs_evenements(client, token)
         for cal in agendas:
-            if not cal["visible"]:
+            if pour_agenda:
+                if not cal["in_agenda"]:
+                    continue
+            elif not (cal["available"] and cal["visible"]):
                 continue
             try:
                 resp = client.get(

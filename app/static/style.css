@@ -5007,6 +5007,37 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 /* ---- Kanban : colonnes défilables horizontalement si étroit ---- */
 .cal-body.kanban .tasks-columns { grid-template-columns: repeat(5, minmax(220px, 1fr)); overflow-x: auto; }
 
+/* ---- Panneau Options (remplace la vue tant qu'ouvert) ---- */
+.cal-opts-btn {
+  height: 40px; padding: 0 1rem 0 .75rem; flex: none;
+  display: inline-flex; align-items: center; gap: .4rem;
+  border: 1px solid var(--md-outline); border-radius: var(--shape-full);
+  background: transparent; color: var(--md-on-surface);
+  font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer;
+}
+.cal-opts-btn svg { width: 20px; height: 20px; }
+.cal-opts-btn:hover { background: rgba(230, 224, 233, .08); }
+.cal-opts-btn.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+.cal-opts { flex: 1; min-height: 0; overflow-y: auto; padding: .5rem .25rem; max-width: 720px; }
+.cal-opts[hidden], .cal-body[hidden] { display: none; }
+.cal-opts-title { margin: 0 0 .75rem; font-size: 1rem; font-weight: 500; }
+.cal-opts-switch { display: flex; align-items: center; gap: .6rem; margin-bottom: 1rem; cursor: pointer; }
+.cal-opts-table {
+  display: grid; grid-template-columns: minmax(0, 1fr) 6rem 6rem;
+  align-items: center; row-gap: 2px;
+}
+.cal-opts-head { font-size: .75rem; font-weight: 500; color: var(--md-on-surface-variant); padding: .25rem .5rem; text-align: center; }
+.cal-opts-head:first-child { text-align: left; }
+.cal-opts-name { display: flex; align-items: center; gap: .6rem; padding: .5rem; min-width: 0; font-size: .9375rem; }
+.cal-opts-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-opts-name em { color: var(--md-on-surface-variant); font-size: .8125rem; }
+.cal-opts-cell { display: flex; justify-content: center; padding: .5rem; cursor: pointer; }
+.cal-opts-table > :nth-child(6n+4), .cal-opts-table > :nth-child(6n+5), .cal-opts-table > :nth-child(6n+6) { background: var(--md-surface-2); }
+
+/* ---- RDV Google dans la colonne d'échéances de l'accueil ---- */
+.agenda-gcal-dot { flex: none; width: 16.5px; height: 16.5px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); box-sizing: border-box; }
+.agenda-gcal-icon svg { width: 16px; height: 16px; }
+
 /* ---- Fiche RDV Google ---- */
 .ge-row { display: grid; grid-template-columns: 4rem 1fr 9rem; gap: .5rem; align-items: center; margin-bottom: 1rem; }
 .ge-row label { font-size: .875rem; color: var(--md-on-surface-variant); }
@@ -5052,4 +5083,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   .cal-list-day { grid-template-columns: 48px minmax(0, 1fr); gap: .5rem; }
   .cal-row-time { width: 4.5rem; font-size: .75rem; }
   .ge-row { grid-template-columns: 3rem 1fr 7.5rem; }
+  .cal-opts-btn span { display: none; }
+  .cal-opts-btn { padding: 0 .6rem; order: -1; }
+  .cal-opts-table { grid-template-columns: minmax(0, 1fr) 4.5rem 5rem; }
 }

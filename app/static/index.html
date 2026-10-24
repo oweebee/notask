@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9126">
+<link rel="stylesheet" href="/static/style.css?v=2.9127">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -339,8 +339,10 @@
             <button type="button" data-mode="liste">Liste</button>
             <button type="button" data-mode="kanban">Kanban</button>
           </div>
+          <button class="cal-opts-btn" id="cal-opts-btn" type="button" aria-expanded="false" aria-controls="cal-opts"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Options</span></button>
         </div>
         <div class="cal-legend" id="cal-legend" hidden></div>
+        <div class="cal-opts" id="cal-opts" hidden></div>
         <div class="cal-gcal-msg" id="cal-gcal-msg"></div>
         <div class="cal-body" id="cal-body"></div>
       </div>
@@ -661,15 +663,8 @@
       </label>
       <label class="profil-google-case">
         <input type="checkbox" id="profil-google-overlay-on">
-        <span>Agendas — afficher et gérer mes agendas Google dans Calendritasks</span>
+        <span>Agendas — afficher et gérer mes agendas Google dans Calendritasks (choix des agendas : bouton Options de Calendritasks)</span>
       </label>
-    </div>
-    <!-- Agendas Google affichés (voir chargerAgendasOverlay dans app.js et
-         app/google_overlay.py). RDV lus via le serveur, jamais stockés. -->
-    <div class="profil-google-overlay" id="profil-google-overlay" hidden>
-      <p class="profil-google-cal-label">Agendas affichés</p>
-      <p class="aide">Les RDV transitent en clair par le serveur notask (jamais stockés).</p>
-      <div id="profil-google-overlay-list"></div>
     </div>
 
     <!-- Agenda de destination. Masqué tant que le compte n'est pas connecté.
@@ -847,6 +842,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9126"></script>
+<script src="/static/app.js?v=0.9127"></script>
 </body>
 </html>

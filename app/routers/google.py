@@ -494,10 +494,41 @@ def _parse_borne(val: str, nom: str) -> datetime:
     return dt
 
 
+def _maj_liste(user: User, session: Session, ids_bruts, champ: str) -> None:
+    compte = session.exec(select(GoogleAccount).where(GoogleAccount.user_id == user.id)).first()
+    if compte is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
+    ids = [i for i in dict.fromkeys(ids_bruts) if isinstance(i, str) and 0 < len(i) <= 300][:gov.MAX_CALENDRIERS]
+    setattr(compte, champ, json.dumps(ids))
+    session.add(compte)
+    session.commit()
+
+
+@router.put("/overlay/agenda", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_echeances(
+    payload: GoogleOverlayVisibleIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Agendas dont les RDV à venir rejoignent la colonne d'échéances."""
+    _maj_liste(user, session, payload.visible, "agenda_calendars")
+
+
+@router.put("/overlay/available", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_disponibles(
+    payload: GoogleOverlayVisibleIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Agendas proposés dans Calendritasks (barre d'agendas)."""
+    _maj_liste(user, session, payload.visible, "available_calendars")
+
+
 @router.get("/overlay/events")
 def overlay_evenements(
     start: str = Query(..., max_length=40),
     end: str = Query(..., max_length=40),
+    pour: str = Query("calendar", pattern="^(calendar|agenda)$"),
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -510,7 +541,7 @@ def overlay_evenements(
     if fin <= debut or fin - debut > timedelta(days=100):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Période invalide (100 jours max)")
     try:
-        return gov.lister_evenements(compte, session, debut, fin)
+        return gov.lister_evenements(compte, session, debut, fin, pour_agenda=pour == "agenda")
     except gov.OverlayError as err:
         raise _http(err)
 
