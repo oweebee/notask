@@ -330,6 +330,9 @@ class GoogleAccount(SQLModel, table=True):
     # remontent « en retard », sans quoi cocher un agenda ancien inonderait
     # la colonne de retards.
     agenda_depuis: Optional[str] = Field(default=None, max_length=40000)
+    # Agendas (Google, virtuels, externes « ics:<id> ») dont les RDV
+    # RÉCURRENTS ne comptent PAS en échéances (liste JSON ; None = aucun).
+    recurrents_exclus: Optional[str] = Field(default=None, max_length=20000)
     # Agendas proposés dans Calendritasks (bouton Options ; JSON ; None = tous).
     # Seuls ceux-là apparaissent dans la barre d'agendas, où visible_calendars
     # les affiche ou les masque.

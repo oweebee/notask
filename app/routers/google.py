@@ -470,9 +470,13 @@ def overlay_agendas(user: User = Depends(get_current_user), session: Session = D
     if compte is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun compte Google connecté.")
     try:
-        return {"calendars": gov.lister_agendas(compte, session)}
+        cals = gov.lister_agendas(compte, session)
     except gov.OverlayError as err:
         raise _http(err)
+    exclus = set(gov._liste_json(compte.recurrents_exclus) or [])
+    for c in cals:
+        c["agenda_recurrents"] = c["id"] not in exclus
+    return {"calendars": cals}
 
 
 @router.put("/overlay/visible", status_code=status.HTTP_204_NO_CONTENT)
@@ -525,6 +529,17 @@ def overlay_echeances(
     compte.agenda_depuis = json.dumps({i: anciens.get(i, maintenant) for i in (gov.pour_echeances(compte) or [])})
     session.add(compte)
     session.commit()
+
+
+@router.put("/overlay/recurrents", status_code=status.HTTP_204_NO_CONTENT)
+def overlay_recurrents(
+    payload: GoogleOverlayVisibleIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Agendas dont les RDV RÉCURRENTS ne comptent pas en échéances
+    (`visible` = liste des agendas EXCLUS, y compris « ics:<id> »)."""
+    _maj_liste(user, session, payload.visible, "recurrents_exclus")
 
 
 @router.put("/overlay/available", status_code=status.HTTP_204_NO_CONTENT)
@@ -596,6 +611,13 @@ def overlay_evenements(
             except Exception:
                 log.exception("Agenda externe %s illisible", e.id)
                 resultat["errors"].append(f"{e.name} : illisible")
+    # Récurrents exclus des échéances, par agenda (bouton Options).
+    exclus = set(gov._liste_json(compte.recurrents_exclus) or []) if compte is not None else set()
+    for c in resultat["calendars"]:
+        c["agenda_recurrents"] = c["id"] not in exclus
+    if pour == "agenda" and exclus:
+        resultat["events"] = [ev for ev in resultat["events"]
+                              if not (ev.get("recurring_event_id") and ev["calendar_id"] in exclus)]
     # RDV validés depuis notask (case cochée) : marqués, pas retirés — la
     # vue calendrier les montre barrés, la colonne d'échéances les écarte.
     valides = {(v.calendar_id, v.event_id): v.id for v in session.exec(

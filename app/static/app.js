@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9138';
+const APP_VERSION = '0.9139';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -12296,20 +12296,26 @@ async function calRendreOptions() {
   const tableau = (lignes, avecSuppr) => {
     const t = document.createElement('div');
     t.className = 'cal-opts-table' + (avecSuppr ? ' ext' : '');
-    t.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div>' + (avecSuppr ? '<div class="cal-opts-head"></div>' : '');
+    t.innerHTML = '<div class="cal-opts-head">Agenda</div><div class="cal-opts-head" title="Proposé dans la barre d\'agendas de Calendritasks">Afficher</div><div class="cal-opts-head" title="RDV à venir ajoutés aux notasks imminentes / à venir de l\'accueil">Échéances</div><div class="cal-opts-head" title="Inclure aussi les RDV récurrents (séries) dans les échéances">Récurrents</div>' + (avecSuppr ? '<div class="cal-opts-head"></div>' : '');
     for (const c of lignes) {
       const nom = document.createElement('div');
       nom.className = 'cal-opts-name';
       const sous = c.external ? ` <em>${escapeHtml(c.url_host)}</em>` : (c.virtual_of ? ' <em>(issus de Google Contacts)</em>' : (c.writable ? '' : ' <em>(lecture seule)</em>'));
       nom.innerHTML = `<span class="cal-legend-dot" style="--gcal:${escapeHtml(c.color)};background:${escapeHtml(c.color)}"></span><span>${escapeHtml(c.summary)}${sous}</span>`;
       t.appendChild(nom);
-      for (const champ of ['available', 'in_agenda']) {
+      for (const champ of ['available', 'in_agenda', 'agenda_recurrents']) {
         const cell = document.createElement('label');
         cell.className = 'cal-opts-cell';
-        cell.innerHTML = `<input type="checkbox" data-champ="${champ}"${c.virtual_of ? ' data-virtuel="1"' : ''} value="${escapeHtml(c.id)}"${(champ === 'available' ? c.available !== false : c.in_agenda) ? ' checked' : ''} aria-label="${champ === 'available' ? 'Afficher' : 'Échéances'} ${escapeHtml(c.summary)}">`;
+        const coche = champ === 'available' ? c.available !== false : (champ === 'in_agenda' ? c.in_agenda : c.agenda_recurrents !== false);
+        const nomCol = { available: 'Afficher', in_agenda: 'Échéances', agenda_recurrents: 'Récurrents' }[champ];
+        cell.innerHTML = `<input type="checkbox" data-champ="${champ}"${c.virtual_of ? ' data-virtuel="1"' : ''} value="${escapeHtml(c.id)}"${coche ? ' checked' : ''} aria-label="${nomCol} ${escapeHtml(c.summary)}">`;
         cell.querySelector('input').addEventListener('change', async (e) => {
           try {
-            if (c.external) {
+            if (champ === 'agenda_recurrents') {
+              // Liste des agendas EXCLUS, tous tableaux confondus (Google + externes).
+              const exclus = [...box.querySelectorAll('input[data-champ="agenda_recurrents"]')].filter((x) => !x.checked).map((x) => x.value);
+              await api('/google/overlay/recurrents', { method: 'PUT', body: { visible: exclus } });
+            } else if (c.external) {
               await api('/calendars/external/' + c.ext_id, { method: 'PATCH', body: { [champ]: e.target.checked } });
             } else {
               const ids = [...t.querySelectorAll(`input[data-champ="${champ}"]`)]
@@ -12317,7 +12323,7 @@ async function calRendreOptions() {
               await api(champ === 'available' ? '/google/overlay/available' : '/google/overlay/agenda', { method: 'PUT', body: { visible: ids } });
             }
           } catch (err) { alert(err.message); }
-          apresChangement(champ === 'in_agenda');
+          apresChangement(champ !== 'available');
         });
         t.appendChild(cell);
       }

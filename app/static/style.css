@@ -5030,7 +5030,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-title { margin: 0 0 .75rem; font-size: 1rem; font-weight: 500; }
 .cal-opts-switch { display: flex; align-items: center; gap: .6rem; margin-bottom: 1rem; cursor: pointer; }
 .cal-opts-table {
-  display: grid; grid-template-columns: minmax(0, 1fr) 6rem 6rem;
+  display: grid; grid-template-columns: minmax(0, 1fr) 6rem 6rem 6rem;
   align-items: center; row-gap: 2px;
 }
 .cal-opts-head { font-size: .75rem; font-weight: 500; color: var(--md-on-surface-variant); padding: .25rem .5rem; text-align: center; }
@@ -5043,7 +5043,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-sync { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
 .cal-opts-sync-msg { font-size: .8125rem; color: var(--md-on-surface-variant); }
 .cal-opts-sec .aide b { color: var(--md-on-surface); font-weight: 500; }
-.cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 6rem 6rem 44px; }
+.cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 6rem 6rem 6rem 44px; }
 .cal-opts-table.ext > * { background: none !important; }
 .cal-opts-del svg { width: 18px; height: 18px; }
 .cal-opts-add { display: grid; grid-template-columns: 12rem minmax(0, 1fr) 44px auto; gap: .5rem; align-items: center; margin-top: .75rem; }
@@ -5054,7 +5054,7 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-opts-add input[type=color] { width: 40px; height: 36px; padding: 0; border: none; background: none; cursor: pointer; }
 .cal-opts-msg { grid-column: 1 / -1; }
 .cal-opts-msg:empty { display: none; }
-.cal-opts-table > :nth-child(6n+4), .cal-opts-table > :nth-child(6n+5), .cal-opts-table > :nth-child(6n+6) { background: var(--md-surface-2); }
+.cal-opts-table:not(.ext) > :nth-child(8n+5), .cal-opts-table:not(.ext) > :nth-child(8n+6), .cal-opts-table:not(.ext) > :nth-child(8n+7), .cal-opts-table:not(.ext) > :nth-child(8n+8) { background: var(--md-surface-2); }
 
 /* ---- RDV Google dans la colonne d'échéances de l'accueil ---- */
 .agenda-gcal-dot { flex: none; width: 16.5px; height: 16.5px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); box-sizing: border-box; }
@@ -5115,8 +5115,8 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   .ge-row { grid-template-columns: 3rem 1fr 7.5rem; }
   .cal-opts-btn span { display: none; }
   .cal-opts-btn { padding: 0 .6rem; order: -1; }
-  .cal-opts-table { grid-template-columns: minmax(0, 1fr) 4.5rem 5rem; }
-  .cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 4.5rem 5rem 40px; }
+  .cal-opts-table { grid-template-columns: minmax(0, 1fr) 4rem 4.5rem 4.5rem; }
+  .cal-opts-table.ext { grid-template-columns: minmax(0, 1fr) 4rem 4.5rem 4.5rem 40px; }
   .cal-opts-add { grid-template-columns: minmax(0, 1fr) 44px; }
   .cal-opts-add input[name=url] { grid-column: 1 / -1; }
 }
