@@ -118,7 +118,35 @@ def lister_agendas(account: GoogleAccount, session: Session) -> List[Dict[str, A
         out[-1]["available"] = (cid in dispo) if dispo is not None else True
         out[-1]["agenda_since"] = depuis(account).get(cid)
     out.sort(key=lambda c: (not c["primary"], c["summary"].lower()))
+    # Agenda VIRTUEL « Anniversaires » : les événements eventType "birthday"
+    # (générés par Google Contacts) vivent dans l'agenda principal ; on les
+    # sépare pour pouvoir les afficher / masquer / compter en échéances à
+    # part. Réglages dans les mêmes listes JSON ; clé absente = hérite de
+    # l'agenda principal, "!id" = explicitement décoché (voir _drapeau).
+    for parent in [c for c in out if c["primary"]]:
+        vid = parent["id"] + VIRTUEL_ANNIV
+        out.insert(out.index(parent) + 1, {
+            "id": vid, "virtual_of": parent["id"], "summary": "Anniversaires",
+            "color": "#e67c73", "access_role": "reader", "writable": False, "primary": False,
+            "visible": _drapeau(choix, vid, parent["visible"]),
+            "in_agenda": _drapeau(echeances, vid, parent["in_agenda"]),
+            "available": _drapeau(dispo, vid, parent["available"]),
+            "agenda_since": depuis(account).get(vid) or parent["agenda_since"],
+        })
     return out
+
+
+VIRTUEL_ANNIV = "#anniversaires"
+
+
+def _drapeau(liste: Optional[List[str]], vid: str, defaut: bool) -> bool:
+    if liste is None:
+        return defaut
+    if vid in liste:
+        return True
+    if "!" + vid in liste:
+        return False
+    return defaut
 
 
 def _couleurs_evenements(client: httpx.Client, token: str) -> Dict[str, str]:
@@ -181,11 +209,13 @@ def lister_evenements(account: GoogleAccount, session: Session, debut: datetime,
     erreurs: List[str] = []
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         couleurs = _couleurs_evenements(client, token)
+        voulu = (lambda c: c["in_agenda"]) if pour_agenda else (lambda c: c["available"] and c["visible"])
+        virtuels = {c["virtual_of"]: c for c in agendas if c.get("virtual_of")}
         for cal in agendas:
-            if pour_agenda:
-                if not cal["in_agenda"]:
-                    continue
-            elif not (cal["available"] and cal["visible"]):
+            if cal.get("virtual_of"):
+                continue
+            anniv = virtuels.get(cal["id"])
+            if not voulu(cal) and not (anniv and voulu(anniv)):
                 continue
             try:
                 resp = client.get(
@@ -201,7 +231,10 @@ def lister_evenements(account: GoogleAccount, session: Session, debut: datetime,
                 )
                 resp.raise_for_status()
                 for ev in resp.json().get("items", []):
-                    n = _normaliser(ev, cal, couleurs)
+                    cible = anniv if anniv and ev.get("eventType") == "birthday" else cal
+                    if not voulu(cible):
+                        continue
+                    n = _normaliser(ev, cible, couleurs)
                     if n:
                         evenements.append(n)
             except httpx.HTTPError:

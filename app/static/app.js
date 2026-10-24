@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9132';
+const APP_VERSION = '0.9133';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -12181,7 +12181,11 @@ async function calBasculerAgenda(id) {
     if (c0?.external) {
       await api('/calendars/external/' + c0.ext_id, { method: 'PATCH', body: { visible: !c0.visible } });
     } else {
-      const visibles = cal.g.calendars.filter((c) => !c.external && (c.id === id ? !c.visible : c.visible)).map((c) => c.id);
+      const vis = (c) => (c.id === id ? !c.visible : c.visible);
+      // Agenda virtuel (anniversaires) : décoché explicitement par « !id »,
+      // sinon le serveur lui fait hériter de l'agenda principal.
+      const visibles = cal.g.calendars.filter((c) => !c.external)
+        .flatMap((c) => (vis(c) ? [c.id] : (c.virtual_of ? ['!' + c.id] : [])));
       await api('/google/overlay/visible', { method: 'PUT', body: { visible: visibles } });
     }
   } catch (err) { alert(err.message); return; }
@@ -12241,19 +12245,20 @@ async function calRendreOptions() {
     for (const c of lignes) {
       const nom = document.createElement('div');
       nom.className = 'cal-opts-name';
-      const sous = c.external ? ` <em>${escapeHtml(c.url_host)}</em>` : (c.writable ? '' : ' <em>(lecture seule)</em>');
+      const sous = c.external ? ` <em>${escapeHtml(c.url_host)}</em>` : (c.virtual_of ? ' <em>(issus de Google Contacts)</em>' : (c.writable ? '' : ' <em>(lecture seule)</em>'));
       nom.innerHTML = `<span class="cal-legend-dot" style="--gcal:${escapeHtml(c.color)};background:${escapeHtml(c.color)}"></span><span>${escapeHtml(c.summary)}${sous}</span>`;
       t.appendChild(nom);
       for (const champ of ['available', 'in_agenda']) {
         const cell = document.createElement('label');
         cell.className = 'cal-opts-cell';
-        cell.innerHTML = `<input type="checkbox" data-champ="${champ}" value="${escapeHtml(c.id)}"${(champ === 'available' ? c.available !== false : c.in_agenda) ? ' checked' : ''} aria-label="${champ === 'available' ? 'Afficher' : 'Échéances'} ${escapeHtml(c.summary)}">`;
+        cell.innerHTML = `<input type="checkbox" data-champ="${champ}"${c.virtual_of ? ' data-virtuel="1"' : ''} value="${escapeHtml(c.id)}"${(champ === 'available' ? c.available !== false : c.in_agenda) ? ' checked' : ''} aria-label="${champ === 'available' ? 'Afficher' : 'Échéances'} ${escapeHtml(c.summary)}">`;
         cell.querySelector('input').addEventListener('change', async (e) => {
           try {
             if (c.external) {
               await api('/calendars/external/' + c.ext_id, { method: 'PATCH', body: { [champ]: e.target.checked } });
             } else {
-              const ids = [...t.querySelectorAll(`input[data-champ="${champ}"]:checked`)].map((x) => x.value);
+              const ids = [...t.querySelectorAll(`input[data-champ="${champ}"]`)]
+                .flatMap((x) => (x.checked ? [x.value] : (x.dataset.virtuel ? ['!' + x.value] : [])));
               await api(champ === 'available' ? '/google/overlay/available' : '/google/overlay/agenda', { method: 'PUT', body: { visible: ids } });
             }
           } catch (err) { alert(err.message); }
