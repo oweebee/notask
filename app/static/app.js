@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9150';
+const APP_VERSION = '0.9151';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -148,6 +148,10 @@ const ZOOM_KEY = 'notask_zoom';
 function appliquerZoom(pct) {
   const v = Math.min(100, Math.max(70, Math.round(Number(pct) || 100)));
   document.documentElement.style.zoom = v === 100 ? '' : String(v / 100);
+  // Les hauteurs en vh/dvh du CSS se divisent par ce facteur (voir --zoom
+  // dans style.css) : sans lui, à 80 % la page n'occupait que 80 % de la
+  // hauteur de la fenêtre.
+  document.documentElement.style.setProperty('--zoom', String(v / 100));
   return v;
 }
 function chargerZoom() {
