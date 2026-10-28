@@ -5,7 +5,7 @@ une tâche visible dans la vue Tâches. Voir app/routers/tasks.py.
 """
 
 from datetime import timedelta
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlmodel import Session, select
@@ -331,20 +331,14 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
     if note.trashed_at is not None:
         return False
 
-    # Aucune condition sur `is_checklist` ni sur le contenu : la règle vaut
-    # pour TOUTE notask qui porte au moins une case, texte et images compris.
-    #
-    # Ce point a changé en cours de route, décision de l'utilisateur. La
-    # version précédente refusait d'archiver une notask « mixte », au motif
-    # que les cases n'y sont qu'une partie du propos. Il a tranché l'inverse,
-    # et c'est plus simple à expliquer : des cases toutes cochées veulent dire
-    # « c'est fini », quoi qu'il y ait autour. Le mouvement reste réversible
-    # (décocher une case ressort la notask des archives), donc l'erreur, si
-    # c'en est une, ne coûte qu'un clic.
-    #
-    # Une notask SANS aucune case n'est pas concernée : `if not lignes` plus
-    # bas s'en charge. Sans quoi toute notask de texte libre s'archiverait
-    # toute seule, « toutes ses cases » étant cochées par vacuité.
+    # Notask « mixte » (has_extra) sans échéance propre : rien à gérer ici.
+    # Sans ce retour, cocher une case d'une notask mixte archivée à la main
+    # la ferait ressortir des archives (finie=False != archived=True).
+    # Une notask SANS aucune case n'est pas concernée non plus : `if not
+    # lignes` plus bas (sinon « toutes ses cases » cochées par vacuité).
+    if note.has_extra is True and note.due_at is None:
+        return False
+
     lignes = session.exec(
         select(NoteItem).where(
             NoteItem.note_id == note.id,
@@ -364,7 +358,12 @@ def archiver_si_tout_coche(note: Note, session: Session) -> bool:
     # achèvement, au même titre que des lignes toutes cochées. Réversible de
     # la même manière : décocher cette case ressort la notask des archives,
     # exactement comme décocher une ligne.
-    finie_par_lignes = bool(lignes) and all(ligne.checked for ligne in lignes)
+    # 0.9152, décision de l'utilisateur (retour à la règle d'origine) : les
+    # cases toutes cochées n'archivent QUE une notask faite uniquement de
+    # lignes à cocher. Texte, image ou autre en plus (has_extra, calculé par
+    # le client) : elle reste en place.
+    finie_par_lignes = (bool(lignes) and note.has_extra is not True
+                        and all(ligne.checked for ligne in lignes))
     finie_par_echeance = note.due_at is not None and note.done
     finie = finie_par_lignes or finie_par_echeance
 
@@ -536,6 +535,29 @@ def list_trashed_items(
         )
         for item, note in rows
     ]
+
+
+@router.post("/has-extra")
+def set_has_extra(
+    payload: Dict[str, bool],
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Rattrapage de Note.has_extra en lot ({"<id>": bool}), envoyé par le
+    client après déchiffrement. Ne touche NI updated_at NI Google NI
+    l'archivage : simple indicateur, rien ne doit bouger à l'écran."""
+    n = 0
+    for cle, val in payload.items():
+        if not cle.isdigit():
+            continue
+        note = session.get(Note, int(cle))
+        if note is None or note.user_id != user.id or note.has_extra == val:
+            continue
+        note.has_extra = bool(val)
+        session.add(note)
+        n += 1
+    session.commit()
+    return {"updated": n}
 
 
 @router.post("/purge-all")

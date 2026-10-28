@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9151';
+const APP_VERSION = '0.9152';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -3646,6 +3646,21 @@ function noteMatchesSearch(n, q) {
   return foin.includes(needle);
 }
 
+/* Notasks d'avant 0.9152 (has_extra inconnu) ou modifiées ailleurs (widget,
+   MCP) : l'indicateur est recalculé après déchiffrement et corrigé en un
+   seul envoi, sans attendre (rien ne bouge à l'écran). */
+function rattraperHasExtra(notes) {
+  const maj = {};
+  for (const n of notes) {
+    const v = aDuContenuEnPlus(n.content);
+    if (n.has_extra !== v) { maj[n.id] = v; n.has_extra = v; }
+  }
+  if (Object.keys(maj).length) {
+    api('/notes/has-extra', { method: 'POST', body: maj })
+      .catch((err) => log.error('notes', 'Rattrapage has_extra', err));
+  }
+}
+
 async function loadNotes() {
   // Le choix d'affichage des lignes cochées est volontairement éphémère :
   // toute nouvelle liste repart avec l'icône barrée et les lignes masquées.
@@ -3659,6 +3674,7 @@ async function loadNotes() {
   }
   const notes = await api('/notes?' + params);
   await Promise.all(notes.map(decryptNote));
+  rattraperHasExtra(notes);
   let filtered = notes;
   if (sansCategorieActif()) filtered = filtered.filter(noteCorrespondFiltreLabel);
   // Favoris : pas de paramètre côté serveur, la liste des notes non
@@ -6527,6 +6543,7 @@ async function creerNotaskDepuisComposeur() {
       title: await encryptField(title),
       description: await encryptField($('#nc-description').value.trim()),
       content: await encryptField(content),
+      has_extra: aDuContenuEnPlus(content),
       // Toujours faux : une notask n'a plus de forme, elle a un contenu. Le
       // champ reste dans le modèle pour les notasks créées AVANT ce
       // changement, qui l'ont à vrai jusqu'à leur prochain enregistrement
@@ -6612,7 +6629,7 @@ async function creerNotaskDepuisComposeur() {
     if (remplace) {
       await api('/notes/' + created.id, {
         method: 'PATCH',
-        body: { content: await encryptField(contenuFinal) },
+        body: { content: await encryptField(contenuFinal), has_extra: aDuContenuEnPlus(contenuFinal) },
       });
     }
 
@@ -6702,6 +6719,7 @@ async function creerNotaskEclair() {
       title: await encryptField(titre),
       description: await encryptField(''),
       content: await encryptField(''),
+      has_extra: false,
       is_checklist: false,
       items: [],
       color: couleurParDefautDepuisLabels([]),
@@ -8651,6 +8669,14 @@ function audioBlockHtml(attId) {
    pre-wrap, un \n y est visible). */
 const NOTE_LINE_MARK = /\n?(?<!(?<!\\)(?:\\\\)*\\)\[ligne:(\w+)\]/g;
 
+/* Vrai si le corps (EN CLAIR) contient autre chose que des lignes à cocher :
+   texte, image, note vocale… Envoyé au serveur en clair (has_extra, simple
+   oui/non, accord de l'utilisateur) : lui seul décide de l'archivage
+   automatique (archiver_si_tout_coche) et ne peut pas lire le contenu. */
+function aDuContenuEnPlus(clair) {
+  return String(clair || '').replace(NOTE_LINE_MARK, '').trim() !== '';
+}
+
 /* Squelette d'une ligne à cocher insérée dans le texte.
 
    contenteditable="false" sur l'enveloppe, "true" sur le seul texte : la
@@ -10086,6 +10112,7 @@ async function saveNoteSimpleDialog() {
        l'échéance. Envoyer l'un sans l'autre laisserait soit des marqueurs
        sans ligne, soit des lignes sans place dans le texte. */
     body.content = await encryptField(contenuClair);
+    body.has_extra = aDuContenuEnPlus(contenuClair);
     body.items = await Promise.all(lignesMixtes.map((l) => serialiserLigne(l, { avecId: true })));
 
     const maj = await api('/notes/' + n.id, { method: 'PATCH', body });
@@ -10099,7 +10126,7 @@ async function saveNoteSimpleDialog() {
       const corrige = resoudreLignesTmp(contenuClair, lignesMixtes, maj.items || []);
       if (corrige !== null) {
         await api('/notes/' + n.id, {
-          method: 'PATCH', body: { content: await encryptField(corrige) },
+          method: 'PATCH', body: { content: await encryptField(corrige), has_extra: aDuContenuEnPlus(corrige) },
         });
       }
     }
@@ -14358,6 +14385,7 @@ $('#import-file').addEventListener('change', async () => {
           title: await encryptField(n.title || ''),
           description: await encryptField(n.description || ''),
           content: await encryptField(n.content || ''),
+          has_extra: aDuContenuEnPlus(n.content || ''),
           color: n.color || 'default',
           pinned: !!n.pinned,
           archived: !!n.archived,
@@ -14445,7 +14473,7 @@ $('#import-file').addEventListener('change', async () => {
         // d'avoir créé la notask et envoyé ses fichiers.
         if (aChange) {
           await api('/notes/' + cree.id, {
-            method: 'PATCH', body: { content: await encryptField(contenu) },
+            method: 'PATCH', body: { content: await encryptField(contenu), has_extra: aDuContenuEnPlus(contenu) },
           });
         }
 

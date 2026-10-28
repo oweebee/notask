@@ -528,6 +528,11 @@ class NoteBase(SQLModel):
     # plus : le contenu part et revient en clair comme n'importe quel autre,
     # et reste lisible dès qu'on ouvre la notask.
     masked: bool = False
+    # Vrai si le corps contient autre chose que des lignes à cocher (texte,
+    # image, note vocale…). Calculé par le CLIENT (le contenu est chiffré) ;
+    # seul ce oui/non est en clair. None = inconnu (notask d'avant 0.9152) :
+    # traité comme une liste pure. Voir archiver_si_tout_coche.
+    has_extra: Optional[bool] = None
     # Ancienne préférence persistante de masquage des lignes cochées. Gardée
     # pour compatibilité des données ; l'interface les masque désormais par
     # défaut et la réapparition est volontairement temporaire.
@@ -761,6 +766,7 @@ class NoteUpdate(SQLModel):
     label_ids: Optional[List[int]] = None
     icon: Optional[str] = None
     masked: Optional[bool] = None
+    has_extra: Optional[bool] = None
     hide_checked: Optional[bool] = None
     # Nouvelle position manuelle (glisser-déposer) ; voir Note.position.
     position: Optional[float] = None
