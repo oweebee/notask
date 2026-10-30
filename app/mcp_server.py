@@ -7,7 +7,7 @@ ATTENTION : données titre/description/contenu/lignes = chiffrées côté client
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -217,8 +217,11 @@ def update_item(
     item_id: int,
     checked: Optional[bool] = None,
     text: Optional[str] = None,
+    due_at: Optional[str] = None,
 ) -> str:
-    """Coche/décoche ou modifie le texte d'un item."""
+    """Coche/décoche, modifie le texte ou l'échéance d'un item.
+    due_at : ISO 8601. Avec fuseau (ex. 2026-12-07T08:45:00+01:00) → converti
+    en UTC ; sans fuseau → pris comme UTC (convention de stockage). "" = retire."""
     with Session(engine) as session:
         item = session.get(NoteItem, item_id)
         if not item or item.note_id != note_id:
@@ -231,10 +234,28 @@ def update_item(
             item.checked_at = utcnow() if checked else None
         if text is not None:
             item.text = text
+        if due_at is not None:
+            if due_at:
+                d = datetime.fromisoformat(due_at)
+                if d.tzinfo is not None:
+                    d = d.astimezone(timezone.utc).replace(tzinfo=None)
+                item.due_at = d
+            else:
+                item.due_at = None
+                item.due_end_at = None
+                item.recur = None
+                item.calendar_title = None
         session.add(item)
         note.updated_at = utcnow()
         session.add(note)
         session.commit()
+        if due_at is not None:
+            try:
+                from app import google_calendar as gcal
+                session.refresh(item)
+                gcal.sync_item(item, note, session)
+            except Exception:  # noqa: BLE001 — Google indisponible : la date reste changée
+                pass
         return json.dumps({"item_id": item_id, "updated": True})
 
 
