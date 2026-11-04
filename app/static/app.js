@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9153';
+const APP_VERSION = '0.9154';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -2747,7 +2747,6 @@ function enterApp() {
   show('screen-app');
   renderWho(state.user.username);
   $('#tab-admin').hidden = !state.user.is_admin;
-  $('#admin-sep').hidden = !state.user.is_admin;
 
   // Icônes du menu latéral et logo
   $('#brand-logo').innerHTML = ICONS.spoon + ICONS.spoonBlue;
