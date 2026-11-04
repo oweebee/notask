@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9154';
+const APP_VERSION = '0.9155';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -6714,6 +6714,9 @@ async function creerNotaskEclair() {
   eclairEnCours = true;
   try {
     const maintenant = new Date().toISOString();
+    // Catégorie cochée à gauche : la PREMIÈRE sélectionnée (ordre du Set =
+    // ordre de sélection). « Sans catégorie » (id 0) ignoré.
+    const eclairLabels = labelFiltersReels().slice(0, 1);
     const body = {
       title: await encryptField(titre),
       description: await encryptField(''),
@@ -6721,13 +6724,13 @@ async function creerNotaskEclair() {
       has_extra: false,
       is_checklist: false,
       items: [],
-      color: couleurParDefautDepuisLabels([]),
+      color: couleurParDefautDepuisLabels(eclairLabels),
       due_at: maintenant,
       due_end_at: null,
       all_day: false,
       recur: null,
       calendar_title: titre,
-      label_ids: [],
+      label_ids: eclairLabels,
       masked: false,
     };
     await api('/notes', { method: 'POST', body });
