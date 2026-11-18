@@ -3361,8 +3361,8 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .note-code-block {
   font-family: "Px437 IBM VGA", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* 16px : taille native de la grille 8x16, seule à rendre la police nette
-     (voir @font-face en tête de fichier). */
-  font-size: 1.125rem;
+     (voir @font-face en tête de fichier). 0.9163 : 18px → 16px (−2, demande). */
+  font-size: 1rem;
   line-height: 1.5;
   background: rgba(230,224,233,.10);
   padding: .5rem .625rem;
