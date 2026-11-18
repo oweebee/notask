@@ -5238,3 +5238,40 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
   flex: none; width: max-content;
 }
 .cal-seg:not(.seg-suite) { overflow: visible; }
+
+/* 0.9161 — Animations organiques des nouveautés (même famille que
+   dlg-gelatine / ligne-gelatine / cal-glisse). */
+@keyframes nc-gelatine {
+  0%   { transform: scale(.96, .2); opacity: 0; }
+  25%  { transform: scale(1.02, 1.06); opacity: 1; }
+  45%  { transform: scale(.99, .96); }
+  62%  { transform: scale(1.006, 1.025); }
+  80%  { transform: scale(.998, .99); }
+  100% { transform: none; opacity: 1; }
+}
+.note-composer.nc-apparait { animation: nc-gelatine .6s cubic-bezier(.3, .9, .4, 1); transform-origin: top center; }
+@keyframes nc-lanceur-gelatine {
+  0%   { transform: scale(.9, .6); opacity: 0; }
+  35%  { transform: scale(1.03, 1.12); opacity: 1; }
+  60%  { transform: scale(.99, .94); }
+  80%  { transform: scale(1.005, 1.03); }
+  100% { transform: none; opacity: 1; }
+}
+#nc-launcher-bar.nc-lanceur-apparait { animation: nc-lanceur-gelatine .45s cubic-bezier(.3, .9, .4, 1); transform-origin: center; }
+/* Interrupteur : curseur qui dépasse et revient (ressort). */
+.cal-switch-track::after { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background-color .2s; }
+.cal-switch:active .cal-switch-track::after { width: 16px; }
+.cal-switch input:checked + .cal-switch-track::after { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background-color .2s, width .2s; }
+.cal-switch:active input:checked + .cal-switch-track::after { transform: translateX(12px); }
+/* Grille qui s'étire / se resserre avec rebond. */
+@keyframes cal-tout-etire {
+  0%   { transform: scaleY(.94); opacity: .6; }
+  40%  { transform: scaleY(1.015); opacity: 1; }
+  65%  { transform: scaleY(.995); }
+  85%  { transform: scaleY(1.003); }
+  100% { transform: none; }
+}
+#cal-body.cal-tout-anim { animation: cal-tout-etire .5s cubic-bezier(.3, .9, .4, 1); transform-origin: top center; }
+/* Recherche : liseré qui s'allume en douceur. */
+.deep-search-toolbar input[type=search] { transition: border-color .25s ease, box-shadow .25s ease; }
+.search-toolbar.deep-search-toolbar input[type=search]:focus { box-shadow: 0 0 0 3px rgba(var(--spoon-bleu-rgb), .18); }

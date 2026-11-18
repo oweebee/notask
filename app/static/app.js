@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9160';
+const APP_VERSION = '0.9162';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -533,6 +533,17 @@ const LABEL_FILTER_KEY = 'notask_label_filter';
      l'ordre d'AFFICHAGE du tiroir (state.labels, pas l'ordre d'ajout dans
      labelIds) qui a une couleur propre — un libellé sans couleur (l.color
      vide) est sauté, pas traité comme un blocage. */
+/* Couleur de la PREMIÈRE catégorie (dans l'ordre donné = ordre de
+   sélection) qui en porte une ; aucune catégorie → jaune. */
+function couleurPremiereCategorie(labelIds) {
+  if (!labelIds || !labelIds.length) return 'yellow';
+  for (const id of labelIds) {
+    const l = state.labels.find((x) => x.id === id);
+    if (l && l.color) return l.color;
+  }
+  return 'default';
+}
+
 function couleurParDefautDepuisLabels(labelIds) {
   if (!labelIds || !labelIds.length) return 'yellow';
   for (const l of state.labels) {
@@ -5918,9 +5929,20 @@ function resetComposer() {
   msg($('#composer-msg'), '');
 }
 
+/* Rejoue une animation CSS ponctuelle (classe retirée à la fin). */
+function rejouerAnim(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // reflow : relance l'animation même si déjà jouée
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+
 function composerExpand() {
   if (composerExpanded) return;
   composerExpanded = true;
+  // 0.9161 : dépliage gélatine depuis la barre « Créer une Notask ».
+  if (!window.NOTASK_QUICK_CAPTURE) requestAnimationFrame(() => rejouerAnim($('.note-composer'), 'nc-apparait'));
   /* Les libellés filtrés à gauche (state.labelFilters, voir
      renderLabelsDrawer — multi-sélection confirmée, union/OU) s'appliquent
      d'office à la notask qu'on démarre — sans ça, retrouver une notask
@@ -6011,6 +6033,8 @@ function renderComposer() {
   $('.note-composer').classList.toggle('nc-replie', !composerExpanded);
   const lanceur = $('#nc-launcher-bar');
   if (lanceur) {
+    // Retour à la barre : petit rebond gélatine (0.9161).
+    if (!composerExpanded && lanceur.hidden) requestAnimationFrame(() => rejouerAnim(lanceur, 'nc-lanceur-apparait'));
     lanceur.hidden = composerExpanded;
     if (!composerExpanded) {
       $('#nc-launcher').placeholder = composerVide() ? 'Créer une Notask' : 'Créer une Notask (brouillon en cours…)';
@@ -6063,9 +6087,16 @@ function appliquerCouleurComposeur() {
   //   carte au milieu des autres ;
   // - aucune couleur, composeur replié : rien, donc le jaune d'appel de la
   //   feuille de style reprend la main.
+  // 0.9162 (demande utilisateur) : déplié SANS couleur choisie → reste
+  // jaune, sauf si des catégories sont posées : couleur de la PREMIÈRE
+  // (ordre de sélection), celle avec laquelle la notask sera créée.
   let teinte = '';
+  let eff = composerColor;
   if (composerColor !== 'default') teinte = LABEL_COLOR_HEX[composerColor] || '';
-  else if (composerExpanded) teinte = 'var(--md-surface-2)';
+  else if (composerExpanded && composerLabelIds.length) {
+    eff = couleurPremiereCategorie(composerLabelIds);
+    teinte = eff === 'default' ? 'var(--md-surface-2)' : (LABEL_COLOR_HEX[eff] || '');
+  }
 
   for (const bloc of $$('.nc-card, .nc-toolbar-block')) {
     bloc.style.background = teinte;
@@ -6077,7 +6108,7 @@ function appliquerCouleurComposeur() {
     // jaune par défaut gardait le texte clair de l'appli, donc illisible.
     bloc.classList.toggle(
       'composeur-clair',
-      composerColor === 'white' || (composerColor === 'default' && !teinte)
+      eff === 'white' || (eff === 'default' && !teinte) || (eff === 'yellow' && !composerLabelIds.length)
     );
   }
 }
@@ -6091,7 +6122,7 @@ function renderComposerLabelChips() {
   renderLabelChipsInto(
     '#nc-labels', '#nc-labels-picker',
     () => composerLabelIds,
-    (v) => { composerLabelIds = v; },
+    (v) => { composerLabelIds = v; appliquerCouleurComposeur(); },
     renderComposerLabelChips,
   );
 }
@@ -6593,7 +6624,7 @@ async function creerNotaskDepuisComposeur() {
       // correspondant. Logique inchangée.
       items: await Promise.all(lignesMixtes.map((l) => serialiserLigne(l))),
       icon: state.composerIcon,
-      color: composerColor === 'default' ? couleurParDefautDepuisLabels(composerLabelIds) : composerColor,
+      color: composerColor === 'default' ? couleurPremiereCategorie(composerLabelIds) : composerColor,
       due_at: $('#nc-due').value || null,
       // Fin de plage : n'a de sens qu'avec un début (voir due_end_at dans
       // app/models.py, remis à None côté serveur si due_at est absent).
@@ -13007,6 +13038,7 @@ if ($('#view-calendar')) {
   // l'utilisateur d'un poste à l'autre (chargé dans loadLabels).
   $('#cal-tout').addEventListener('change', (e) => {
     calAppliquerToutAfficher(e.target.checked);
+    rejouerAnim($('#cal-body'), 'cal-tout-anim');
     api('/settings', { method: 'PATCH', body: { cal_tout_afficher: e.target.checked } })
       .catch((err) => log.error('calendrier', 'Enregistrement « Tout afficher »', err));
   });
