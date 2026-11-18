@@ -17,7 +17,7 @@
      texte au chargement. -->
 <link rel="preload" href="/static/fonts/Px437_IBM_VGA_8x16.ttf" as="font" type="font/ttf" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=2.9157">
+<link rel="stylesheet" href="/static/style.css?v=2.9160">
 
 <!-- PWA : installabilité (manifest) + couleurs de barre système, cohérentes
      avec --md-surface en CSS (#141218). apple-touch-icon pointe vers un
@@ -339,6 +339,13 @@
           <button class="cal-icon-btn cal-nav" id="cal-prev" type="button" aria-label="Période précédente"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <button class="cal-icon-btn cal-nav" id="cal-next" type="button" aria-label="Période suivante"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <h2 class="cal-title" id="cal-title"></h2>
+          <!-- 0.9159 : Mois — toutes les notasks de chaque jour (sinon « +N »).
+               Réglage serveur `cal_tout_afficher` (suit l'utilisateur). -->
+          <label class="cal-switch" title="Afficher toutes les notasks de chaque jour">
+            <input type="checkbox" id="cal-tout" role="switch">
+            <span class="cal-switch-track" aria-hidden="true"></span>
+            <span>Tout afficher</span>
+          </label>
           <button class="cal-today-btn cal-nav" id="cal-today" type="button">Aujourd'hui</button>
           <button class="cal-add-btn" id="cal-add" type="button" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>RDV</span></button>
           <div class="cal-segmented" id="cal-modes" role="group" aria-label="Affichage">
@@ -865,6 +872,6 @@
   </div>
 </dialog>
 
-<script src="/static/app.js?v=0.9157"></script>
+<script src="/static/app.js?v=0.9160"></script>
 </body>
 </html>

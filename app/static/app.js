@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9157';
+const APP_VERSION = '0.9160';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -4021,6 +4021,7 @@ async function loadLabels() {
     api('/settings').catch(() => ({})),
   ]);
   state.labels = labels;
+  calAppliquerToutAfficher(!!(reglages && reglages.cal_tout_afficher));
   // Voir state.sansCategorie : fusion des réglages serveur (s'ils existent)
   // avec les valeurs par défaut — jamais de valeur absente/indéfinie à
   // consommer plus loin (renderLabelsDrawer, commitLabelOrder, etc).
@@ -5927,7 +5928,7 @@ function composerExpand() {
      ré-étiqueter à la main après coup. TOUS les libellés filtrés sont
      repris, pas juste un. Rien ne s'applique si aucun filtre n'est actif
      (composerLabelIds reste tel que resetComposer() l'a laissé). */
-  if (labelFiltersReels().length) {
+  if (labelFiltersReels().length && !composerLabelIds.length) {
     composerLabelIds = labelFiltersReels();
     renderComposerLabelChips();
   }
@@ -5952,6 +5953,31 @@ $('#nc-launcher')?.addEventListener('focus', () => {
   composerExpand();
   $('#nc-title').focus();
 });
+
+/* 0.9158 : clic ou focus HORS du composeur → retour à la barre « Créer une
+   Notask ». Composeur vide : remise à zéro complète. Brouillon en cours :
+   simplement replié, rien n'est perdu (réouvert tel quel au clic). Les
+   popups (.cal-popup : date, icône) et dialogues ouverts depuis le
+   composeur ne comptent pas comme « ailleurs ». Jamais sur /quick. */
+function composerVide() {
+  const c = $('#nc-content');
+  return !$('#nc-title').value.trim() && !$('#nc-description').value.trim()
+    && !c.textContent.trim() && !c.querySelector('img, audio, .note-ligne')
+    && !composerPendingFiles.length && !$('#nc-due').value;
+}
+function composerReplier() {
+  if (!composerExpanded || window.NOTASK_QUICK_CAPTURE) return;
+  if (composerVide()) { resetComposer(); return; }
+  composerExpanded = false;
+  appliquerCouleurComposeur();
+  renderComposer();
+}
+function horsComposeur(el) {
+  return el instanceof Element && el.isConnected
+    && !el.closest('.note-composer, #nc-launcher-bar, .cal-popup, dialog[open]');
+}
+document.addEventListener('pointerdown', (e) => { if (horsComposeur(e.target)) composerReplier(); }, true);
+document.addEventListener('focusin', (e) => { if (horsComposeur(e.target)) composerReplier(); });
 
 renderIconBtn($('#nc-icon-btn'), null);
 $('#nc-icon-btn').addEventListener('click', () => {
@@ -5984,7 +6010,12 @@ function renderComposer() {
   // Replié : seule la barre « Créer une Notask » (hors /quick, voir CSS).
   $('.note-composer').classList.toggle('nc-replie', !composerExpanded);
   const lanceur = $('#nc-launcher-bar');
-  if (lanceur) lanceur.hidden = composerExpanded;
+  if (lanceur) {
+    lanceur.hidden = composerExpanded;
+    if (!composerExpanded) {
+      $('#nc-launcher').placeholder = composerVide() ? 'Créer une Notask' : 'Créer une Notask (brouillon en cours…)';
+    }
+  }
 }
 
 $('#nc-toggle-mask').addEventListener('click', () => {
@@ -6681,7 +6712,8 @@ document.addEventListener('mousedown', (e) => {
   // Un clic dans une fenêtre modale ou un popover flottant (palette,
   // sélecteur d'icône, calendrier…) n'est pas un "ailleurs" : ces éléments
   // appartiennent à un geste en cours, pas à un abandon du composeur.
-  if (e.target.closest('dialog, .cal-popup, .icon-popup')) return;
+  // #nc-launcher-bar : rouvrir un brouillon replié ne doit pas le créer.
+  if (e.target.closest('dialog, .cal-popup, .icon-popup, #nc-launcher-bar')) return;
   creerNotaskDepuisComposeur();
 });
 
@@ -12456,9 +12488,40 @@ function calRendreMois(box, p, index) {
   grille.className = 'cal-grid';
   grille.style.setProperty('--cal-semaines', p.nb / 7);
   grille.innerHTML = CAL_JOURS.map((j) => `<div class="cal-dow">${j}</div>`).join('');
+  /* 0.9160 : entrées sur PLUSIEURS jours = barre continue. Par semaine, voies
+     sans chevauchement ; chaque case reçoit un segment par voie (ou un vide
+     de même hauteur pour garder l'alignement), titre au début de la barre
+     (ou en début de semaine si elle vient d'avant), puis les puces simples. */
+  const voiesSemaine = [];
+  for (let s = 0; s < p.nb / 7; s++) {
+    const cles = Array.from({ length: 7 }, (_, j) => calCle(calPlus(p.debut, s * 7 + j)));
+    const vues = new Set();
+    const barres = [];
+    for (const k of cles) {
+      for (const e of index[k] || []) {
+        if (e.k1 === e.k2 || vues.has(e.uid)) continue;
+        vues.add(e.uid);
+        const a = Math.max(0, cles.indexOf(e.k1) === -1 ? 0 : cles.indexOf(e.k1));
+        const b = e.k2 > cles[6] ? 6 : cles.indexOf(e.k2);
+        barres.push({ e, a, b });
+      }
+    }
+    barres.sort((x, y) => (x.a - y.a) || ((y.b - y.a) - (x.b - x.a)));
+    const fins = [];
+    const parJour = Array.from({ length: 7 }, () => []);
+    for (const br of barres) {
+      let v = fins.findIndex((fin) => fin < br.a);
+      if (v === -1) { v = fins.length; fins.push(-1); }
+      fins[v] = br.b;
+      for (let j = br.a; j <= br.b; j++) parJour[j][v] = { e: br.e, debut: j === br.a, fin: j === br.b };
+    }
+    voiesSemaine.push({ nb: fins.length, parJour });
+  }
   for (let i = 0; i < p.nb; i++) {
     const d = calPlus(p.debut, i);
     const k = calCle(d);
+    const sem = voiesSemaine[Math.floor(i / 7)];
+    const segs = sem.parJour[i % 7];
     const cell = document.createElement('div');
     cell.className = 'cal-day'
       + (d.getMonth() !== cal.ref.getMonth() ? ' hors-mois' : '')
@@ -12475,7 +12538,29 @@ function calRendreMois(box, p, index) {
     cell.appendChild(num);
     const chips = document.createElement('div');
     chips.className = 'cal-chips';
-    (index[k] || []).forEach((e) => chips.appendChild(calPuce(e)));
+    for (let v = 0; v < sem.nb; v++) {
+      const s = segs[v];
+      if (!s) {
+        const vide = document.createElement('div');
+        vide.className = 'cal-chip cal-seg-vide';
+        vide.setAttribute('aria-hidden', 'true');
+        chips.appendChild(vide);
+        continue;
+      }
+      const el = calPuce(s.e, s.debut);
+      el.classList.add('cal-seg');
+      if (s.e.hex) el.style.background = `color-mix(in srgb, ${s.e.hex} ${Math.round(ATTENUATION_PASTILLE * 100)}%, var(--md-surface-2))`;
+      if (!s.debut) el.classList.add('seg-suite');
+      else {
+        let j = i % 7;
+        while (j < 6 && sem.parJour[j + 1][v]?.e === s.e) j++;
+        el.style.setProperty('--seg-jours', j - (i % 7) + 1);
+      }
+      if (!s.fin) el.classList.add('seg-continue');
+      if (s.debut && s.e.k1 < k) el.classList.add('coupe-avant');
+      chips.appendChild(el);
+    }
+    (index[k] || []).filter((e) => e.k1 === e.k2).forEach((e) => chips.appendChild(calPuce(e)));
     cell.appendChild(chips);
     const choisir = () => { cal.jour = cal.jour === k ? null : k; renderCalendar(); };
     cell.addEventListener('click', choisir);
@@ -12489,11 +12574,22 @@ function calRendreMois(box, p, index) {
 }
 
 /* Autant de puces que la hauteur réelle de la case en permet, reste en +N. */
+function calAppliquerToutAfficher(v) {
+  state.calToutAfficher = !!v;
+  const vue = $('#view-calendar');
+  if (!vue) return;
+  vue.classList.toggle('cal-tout', state.calToutAfficher);
+  $('#cal-tout').checked = state.calToutAfficher;
+  calAjusterPuces();
+}
+
 function calAjusterPuces() {
   for (const zone of $$('#cal-body .cal-grid .cal-chips')) {
     const puces = [...zone.querySelectorAll('.cal-chip')];
     zone.querySelector('.cal-more')?.remove();
     puces.forEach((x) => { x.hidden = false; });
+    // « Tout afficher » (0.9159) : aucune puce masquée, la grille s'allonge.
+    if (state.calToutAfficher) continue;
     if (zone.scrollHeight <= zone.clientHeight + 1) continue;
     const plus = document.createElement('div');
     plus.className = 'cal-more';
@@ -12907,6 +13003,13 @@ async function calSupprimerRdv(serie) {
 // Garde : quick.html ne porte pas cette vue (code racine exécuté aussi sur /quick).
 if ($('#view-calendar')) {
   $('#cal-prev').addEventListener('click', () => calNaviguer(-1));
+  // Interrupteur « Tout afficher » (vue Mois) — réglage serveur, suit
+  // l'utilisateur d'un poste à l'autre (chargé dans loadLabels).
+  $('#cal-tout').addEventListener('change', (e) => {
+    calAppliquerToutAfficher(e.target.checked);
+    api('/settings', { method: 'PATCH', body: { cal_tout_afficher: e.target.checked } })
+      .catch((err) => log.error('calendrier', 'Enregistrement « Tout afficher »', err));
+  });
   $('#cal-next').addEventListener('click', () => calNaviguer(1));
   $('#cal-today').addEventListener('click', () => {
     state.calOptsOuvert = false;
