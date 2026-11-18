@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9156';
+const APP_VERSION = '0.9157';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -5948,6 +5948,10 @@ function composerExpand() {
 $('#nc-title').addEventListener('focus', composerExpand);
 $('#nc-description').addEventListener('focus', composerExpand);
 $('#nc-content').addEventListener('focus', composerExpand);
+$('#nc-launcher')?.addEventListener('focus', () => {
+  composerExpand();
+  $('#nc-title').focus();
+});
 
 renderIconBtn($('#nc-icon-btn'), null);
 $('#nc-icon-btn').addEventListener('click', () => {
@@ -5977,6 +5981,10 @@ function renderComposer() {
   $('#nc-labels').hidden = !composerExpanded;
   if (!composerExpanded) $('#nc-labels-picker').hidden = true;
   $('#nc-cancel').hidden = !composerExpanded;
+  // Replié : seule la barre « Créer une Notask » (hors /quick, voir CSS).
+  $('.note-composer').classList.toggle('nc-replie', !composerExpanded);
+  const lanceur = $('#nc-launcher-bar');
+  if (lanceur) lanceur.hidden = composerExpanded;
 }
 
 $('#nc-toggle-mask').addEventListener('click', () => {

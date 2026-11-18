@@ -1608,6 +1608,16 @@ main { padding: 1.5rem 1.5rem 3rem; width: 75%; margin: 0 auto; }
   color: var(--md-on-surface);
 }
 .nc-card { padding: 1rem 1.25rem; }
+/* 0.9157 : composeur replié = barre « Créer une Notask » seule (page
+   principale ; /quick garde le composeur complet). */
+body:not(.quick-capture) .note-composer.nc-replie { display: none; }
+#nc-launcher-bar[hidden] { display: none; }
+#nc-launcher {
+  background: color-mix(in srgb, var(--spoon-jaune) 85%, #000);
+  color: #16151a; cursor: text; padding-right: 1rem;
+}
+#nc-launcher::placeholder { color: #16151a; font-weight: 500; }
+#nc-launcher:focus { outline: none; }
 .nc-toolbar-block { padding: .625rem 1rem; }
 .composer-head { display: flex; align-items: center; gap: .625rem; }
 .composer-head .title-in { flex: 1; }
