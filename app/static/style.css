@@ -5288,3 +5288,6 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
    rester continues (5px = padding+liseré ; 9px = +espace entre cases). */
 .cal-grid .cal-seg.seg-suite, .cal-grid .cal-seg.coupe-avant { margin-left: -5px; }
 .cal-grid .cal-seg.seg-continue { margin-right: -9px; }
+/* 0.9166 — Jour en cours : voile jaune notask discret. */
+.cal-grid .cal-day.today { background: color-mix(in srgb, var(--spoon-jaune) 10%, var(--md-surface-3)); border-color: rgba(var(--spoon-jaune-rgb), .35); }
+.cal-grid .cal-day.today:hover { background: color-mix(in srgb, var(--spoon-jaune) 14%, var(--md-surface-4)); }
