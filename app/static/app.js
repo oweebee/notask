@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9163';
+const APP_VERSION = '0.9165';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -12580,7 +12580,7 @@ function calRendreMois(box, p, index) {
       }
       const el = calPuce(s.e, s.debut);
       el.classList.add('cal-seg');
-      if (s.e.hex) el.style.background = `color-mix(in srgb, ${s.e.hex} ${Math.round(ATTENUATION_PASTILLE * 100)}%, var(--md-surface-2))`;
+      if (s.e.hex) el.style.background = `color-mix(in srgb, ${s.e.hex} ${Math.round(ATTENUATION_PASTILLE * 100)}%, var(--md-surface-3))`;
       if (!s.debut) el.classList.add('seg-suite');
       else {
         let j = i % 7;

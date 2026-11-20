@@ -5213,8 +5213,11 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 .cal-switch input:checked + .cal-switch-track::after { transform: translateX(16px); background: var(--md-on-primary); }
 .cal-switch input:focus-visible + .cal-switch-track { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 #view-calendar.cal-tout[data-mode="mois"] .cal-body { overflow-y: auto; }
+/* 0.9164 : toutes les semaines à la MÊME hauteur, celle de la case la plus
+   chargée. Grille à hauteur indéfinie (flex:none) → les pistes 1fr prennent
+   toutes la taille de la plus grande contribution. */
 #view-calendar.cal-tout[data-mode="mois"] .cal-grid {
-  flex: none; grid-template-rows: auto repeat(var(--cal-semaines, 5), minmax(96px, auto)) !important;
+  flex: none; grid-template-rows: auto repeat(var(--cal-semaines, 5), minmax(96px, 1fr)) !important;
 }
 #view-calendar.cal-tout[data-mode="mois"] .cal-day { overflow: visible; max-height: none; }
 #view-calendar.cal-tout[data-mode="mois"] .cal-chips { flex: none; overflow: visible; }
@@ -5275,3 +5278,13 @@ body.quick-capture #nc-content { flex: 1; min-height: 30vh; }
 /* Recherche : liseré qui s'allume en douceur. */
 .deep-search-toolbar input[type=search] { transition: border-color .25s ease, box-shadow .25s ease; }
 .search-toolbar.deep-search-toolbar input[type=search]:focus { box-shadow: 0 0 0 3px rgba(var(--spoon-bleu-rgb), .18); }
+
+/* 0.9165 — Cases de jours mieux détachées du fond de la carte
+   (surface-2 sur surface-1 : écart quasi nul). Un cran plus clair + liseré. */
+.cal-grid .cal-day { background: var(--md-surface-3); border: 1px solid var(--md-outline-variant); }
+.cal-grid .cal-day:hover { background: var(--md-surface-4); }
+.cal-grid .cal-day.hors-mois { background: transparent; border-style: dashed; }
+/* Le liseré (1px) s'ajoute au padding : barres multi-jours recalées pour
+   rester continues (5px = padding+liseré ; 9px = +espace entre cases). */
+.cal-grid .cal-seg.seg-suite, .cal-grid .cal-seg.coupe-avant { margin-left: -5px; }
+.cal-grid .cal-seg.seg-continue { margin-right: -9px; }
