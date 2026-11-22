@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9166';
+const APP_VERSION = '0.9167';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -11706,11 +11706,14 @@ function iconeSource(g) {
   return `<img class="icone-source" src="${src}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createRange().createContextualFragment(ICONS.calendar))">`;
 }
 
-function creerLigneAgendaGoogle(g) {
+function creerLigneAgendaGoogle(g, bucket) {
   const btn = document.createElement('div');
   btn.tabIndex = 0;
   btn.setAttribute('role', 'button');
   btn.className = 'agenda-item agenda-gcal';
+  // 0.9167 : en retard → rouge, en cours (aujourd'hui) → vert, comme les
+  // notasks (.agenda-item.late / .today, fond !important sur l'inline).
+  if (bucket === 'late' || bucket === 'today') btn.classList.add(bucket);
   btn.style.background = hexToRgba(g.color, ATTENUATION_PASTILLE);
   const due = g.all_day
     ? formatDueRange(g.start + 'T00:00:00Z', g.end !== g.start ? g.end + 'T00:00:00Z' : null, true, true)
@@ -11796,7 +11799,7 @@ function renderAgenda(items, gItems = []) {
   // Notasks et RDV Google mêlés, par ordre chronologique dans chaque groupe.
   const lignes = {};
   for (const t of items) (lignes[t.bucket] ||= []).push({ quand: new Date(t.due_at), faire: () => creerLigneAgenda(t, loadAgenda) });
-  for (const x of gItems) (lignes[x.bucket] ||= []).push({ quand: x.quand, faire: () => creerLigneAgendaGoogle(x.g) });
+  for (const x of gItems) (lignes[x.bucket] ||= []).push({ quand: x.quand, faire: () => creerLigneAgendaGoogle(x.g, x.bucket) });
   for (const b of ordre) {
     if (!lignes[b] || !lignes[b].length) continue;
     lignes[b].sort((x, y) => x.quand - y.quand);
