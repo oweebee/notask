@@ -11,7 +11,7 @@
    accident. Doit rester synchronisé avec le fichier VERSION à la racine
    (source de vérité côté dépôt) et avec la version de l'API dans
    app/main.py. */
-const APP_VERSION = '0.9167';
+const APP_VERSION = '0.9168';
 
 const BUILD_VERSION = APP_VERSION;
 console.log('%c[notask] build ' + BUILD_VERSION, 'background:#6750a4;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;');
@@ -8537,6 +8537,16 @@ function richToText(root) {
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName.toLowerCase();
     const inner = () => Array.from(node.childNodes).map(walk).join('');
+    /* Bloc tapé (Chrome : Entrée → <div>…</div>, ligne vide = <div><br></div>) :
+       un <br> FINAL dans un bloc est invisible (simple support de ligne), il ne
+       doit pas produire de \n — sinon chaque ligne vide en donnait deux. */
+    const innerBloc = () => {
+      const k = Array.from(node.childNodes);
+      let d = k.length - 1;
+      while (d >= 0 && k[d].nodeType === Node.TEXT_NODE && k[d].textContent === '') d--;
+      if (d >= 0 && k[d].nodeType === Node.ELEMENT_NODE && k[d].tagName === 'BR') k.splice(d, 1);
+      return k.map(walk).join('');
+    };
     switch (tag) {
       case 'br': return '\n';
       // Enveloppe vide (reliquat d'un marqueur jamais rempli) : rien, sinon
@@ -8644,9 +8654,9 @@ function richToText(root) {
           const texte = zoneTexte ? zoneTexte.textContent.trim() : '';
           return node.dataset.ligne && texte ? `\n[ligne:${node.dataset.ligne}]` : '';
         }
-        return '\n' + inner();
+        return '\n' + innerBloc();
       }
-      case 'p': return '\n' + inner();
+      case 'p': return '\n' + innerBloc();
       default: return inner();
     }
   }
